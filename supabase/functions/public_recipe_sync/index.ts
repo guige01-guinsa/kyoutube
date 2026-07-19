@@ -18,6 +18,30 @@ function getEnv(name: string): string {
   return Deno.env.get(name) ?? "";
 }
 
+function buildCookRcpApiUrl(start: number, end: number): string {
+  const apiBaseUrl = getEnv("FOOD_API_BASE_URL").trim();
+  const apiKey = getEnv("FOOD_API_KEY").trim();
+  const apiUrlTemplate = getEnv("FOOD_API_URL_TEMPLATE").trim();
+
+  if (apiUrlTemplate.length > 0) {
+    return apiUrlTemplate
+      .replaceAll("{API_KEY}", apiKey)
+      .replaceAll("{SVC_NO}", "COOKRCP01")
+      .replaceAll("{START}", String(start))
+      .replaceAll("{END}", String(end));
+  }
+
+  if (apiBaseUrl.includes("{API_KEY}") || apiBaseUrl.includes("{START}") || apiBaseUrl.includes("{END}")) {
+    return apiBaseUrl
+      .replaceAll("{API_KEY}", apiKey)
+      .replaceAll("{SVC_NO}", "COOKRCP01")
+      .replaceAll("{START}", String(start))
+      .replaceAll("{END}", String(end));
+  }
+
+  return `${apiBaseUrl.replace(/\/$/, "")}/${apiKey}/COOKRCP01/json/${start}/${end}`;
+}
+
 function splitIngredients(text: string): string[] {
   return text
     .split(/[,\n]/g)
@@ -75,17 +99,71 @@ async function loadFromPublicApi(size: number): Promise<PublicRecipeRow[]> {
     return [
       {
         source_id: "fallback-001",
-        title: "간장계란밥",
-        summary: "공공 API 키 미설정 상태의 기본 샘플",
-        ingredients: ["밥 1공기", "달걀 1개", "간장 1큰술"],
-        steps: ["달걀 프라이를 굽는다", "밥 위에 올리고 간장을 넣어 비빈다"],
+        title: "고등어조림",
+        summary: "공공 API 키 미설정 상태의 조림 검색 샘플",
+        ingredients: ["고등어", "무", "고추장", "간장"],
+        steps: ["양념장을 만든다", "고등어와 무를 넣고 조린다"],
+        calories: 410,
+        image_url: null
+      },
+      {
+        source_id: "fallback-002",
+        title: "생선조림",
+        summary: "양념 국물로 자작하게 조리는 생선 요리",
+        ingredients: ["생선", "간장", "마늘", "대파"],
+        steps: ["생선 손질", "양념과 함께 중약불로 조린다"],
+        calories: 360,
+        image_url: null
+      },
+      {
+        source_id: "fallback-003",
+        title: "명태 조림",
+        summary: "말린 명태를 감칠맛 있게 조린 밥반찬",
+        ingredients: ["명태", "고춧가루", "간장", "올리고당"],
+        steps: ["명태를 불린다", "양념을 넣고 조림 농도로 졸인다"],
+        calories: 330,
+        image_url: null
+      },
+      {
+        source_id: "fallback-004",
+        title: "조림 된장",
+        summary: "된장 기반으로 짭짤하게 조려낸 소스 스타일",
+        ingredients: ["된장", "양파", "다진 마늘", "물"],
+        steps: ["된장을 푼다", "재료를 넣고 걸쭉해질 때까지 조린다"],
+        calories: 210,
+        image_url: null
+      },
+      {
+        source_id: "fallback-005",
+        title: "감자탕",
+        summary: "감자가 들어간 얼큰한 국물 요리",
+        ingredients: ["감자", "돼지등뼈", "우거지"],
+        steps: ["뼈를 삶아 잡내를 제거한다", "감자와 함께 푹 끓인다"],
         calories: 520,
+        image_url: null
+      },
+      {
+        source_id: "fallback-006",
+        title: "감자볶음밥",
+        summary: "잘게 썬 감자를 넣은 고소한 볶음밥",
+        ingredients: ["감자", "밥", "달걀", "간장"],
+        steps: ["감자를 볶는다", "밥을 넣고 볶아 마무리한다"],
+        calories: 460,
+        image_url: null
+      },
+      {
+        source_id: "fallback-007",
+        title: "튀긴감자요리",
+        summary: "바삭하게 튀긴 감자 스낵",
+        ingredients: ["감자", "식용유", "소금"],
+        steps: ["감자를 채 썬다", "노릇하게 튀긴다"],
+        calories: 430,
         image_url: null
       }
     ];
   }
 
-  const url = `${apiBaseUrl.replace(/\/$/, "")}/${apiKey}/COOKRCP01/json/1/${size}`;
+  const url = buildCookRcpApiUrl(1, size);
   const response = await fetch(url);
 
   if (!response.ok) {
@@ -93,7 +171,9 @@ async function loadFromPublicApi(size: number): Promise<PublicRecipeRow[]> {
   }
 
   const payload = await response.json();
-  const rows = Array.isArray(payload?.COOKRCP01?.row) ? payload.COOKRCP01.row : [];
+  const rows = Array.isArray(payload?.COOKRCP01?.row)
+    ? payload.COOKRCP01.row
+    : (Array.isArray(payload?.row) ? payload.row : []);
 
   return rows
     .map((item: Record<string, unknown>) => mapRecord(item))

@@ -23,6 +23,11 @@ class CreateCreatorRecipePage extends ConsumerStatefulWidget {
 
 class _CreateCreatorRecipePageState
     extends ConsumerState<CreateCreatorRecipePage> {
+  static const int _maxTitleLength = 120;
+  static const int _maxSummaryLength = 240;
+  static const int _maxTipsLength = 500;
+  static const int _maxYoutubeUrlLength = 200;
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _summaryController = TextEditingController();
@@ -46,6 +51,7 @@ class _CreateCreatorRecipePageState
     if (recipe != null) {
       _titleController.text = recipe.title;
       _summaryController.text = recipe.summary ?? '';
+      _tipsController.text = recipe.tips ?? '';
       _ingredientsController.text = recipe.ingredients.join('\n');
       _stepsController.text = recipe.steps.join('\n');
       _youtubeUrlController.text = recipe.youtubeUrl ?? '';
@@ -76,6 +82,30 @@ class _CreateCreatorRecipePageState
     if (normalized.endsWith('.png')) return 'png';
     if (normalized.endsWith('.webp')) return 'webp';
     return 'jpg';
+  }
+
+  String? _validateYoutubeUrl(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(text);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      return '유효한 YouTube 링크를 입력해 주세요.';
+    }
+
+    final host = uri.host.toLowerCase();
+    final isAllowedHost = host == 'youtube.com' ||
+        host.endsWith('.youtube.com') ||
+        host == 'youtu.be' ||
+        host.endsWith('.youtu.be');
+
+    if (!isAllowedHost) {
+      return 'YouTube 링크만 입력해 주세요.';
+    }
+
+    return null;
   }
 
   Future<void> _pickImage() async {
@@ -206,9 +236,13 @@ class _CreateCreatorRecipePageState
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(labelText: '제목'),
+                maxLength: _maxTitleLength,
                 validator: (String? value) {
                   if ((value ?? '').trim().isEmpty) {
                     return '제목을 입력해 주세요.';
+                  }
+                  if ((value ?? '').trim().length > _maxTitleLength) {
+                    return '제목은 $_maxTitleLength자 이하로 입력해 주세요.';
                   }
                   return null;
                 },
@@ -218,6 +252,7 @@ class _CreateCreatorRecipePageState
                 controller: _summaryController,
                 decoration: const InputDecoration(labelText: '요약'),
                 maxLines: 2,
+                maxLength: _maxSummaryLength,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -254,12 +289,15 @@ class _CreateCreatorRecipePageState
                 controller: _tipsController,
                 decoration: const InputDecoration(labelText: '팁'),
                 maxLines: 2,
+                maxLength: _maxTipsLength,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _youtubeUrlController,
                 decoration: const InputDecoration(labelText: 'YouTube 링크'),
                 keyboardType: TextInputType.url,
+                maxLength: _maxYoutubeUrlLength,
+                validator: _validateYoutubeUrl,
               ),
               const SizedBox(height: 16),
               Text('대표 이미지', style: Theme.of(context).textTheme.titleMedium),

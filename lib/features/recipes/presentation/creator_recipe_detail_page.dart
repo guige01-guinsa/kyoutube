@@ -176,6 +176,12 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
               ...recipe.steps.asMap().entries.map(
                     (entry) => Text('${entry.key + 1}. ${entry.value}'),
                   ),
+              if ((recipe.tips ?? '').trim().isNotEmpty) ...<Widget>[
+                const SizedBox(height: 20),
+                Text('팁', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(recipe.tips!),
+              ],
               if ((recipe.youtubeUrl ?? '').isNotEmpty) ...<Widget>[
                 const SizedBox(height: 20),
                 Text('YouTube', style: Theme.of(context).textTheme.titleMedium),

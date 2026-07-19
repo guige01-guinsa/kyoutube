@@ -5,8 +5,11 @@ class Recipe {
     required this.ingredients,
     required this.steps,
     this.summary,
+    this.tips,
     this.imageUrl,
     this.youtubeUrl,
+    this.notes,
+    this.visibility,
   });
 
   final String id;
@@ -14,6 +17,9 @@ class Recipe {
   final List<String> ingredients;
   final List<String> steps;
   final String? summary;
+  final String? tips;
   final String? imageUrl;
   final String? youtubeUrl;
+  final String? notes;
+  final String? visibility;
 }

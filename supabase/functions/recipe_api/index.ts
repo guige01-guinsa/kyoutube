@@ -11,6 +11,19 @@ type RecipePayload = {
   is_published: boolean;
 };
 
+type PublicRecipeRow = {
+  id: string;
+  source_id: string | null;
+  title: string;
+  summary: string | null;
+  ingredients: unknown[];
+  steps: unknown[];
+  calories: number | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 const FUNCTION_NAME = "recipe_api";
 
 const CORS_HEADERS = {
@@ -59,6 +72,137 @@ function getEnv(name: string): string {
   return Deno.env.get(name) ?? "";
 }
 
+function buildCookRcpApiUrl(start: number, end: number): string {
+  const apiBaseUrl = getEnv("FOOD_API_BASE_URL").trim();
+  const apiKey = getEnv("FOOD_API_KEY").trim();
+  const apiUrlTemplate = getEnv("FOOD_API_URL_TEMPLATE").trim();
+
+  if (apiBaseUrl.length === 0 || apiKey.length === 0) {
+    throw new Error("FOOD_API_BASE_URL or FOOD_API_KEY is missing");
+  }
+
+  if (apiUrlTemplate.length > 0) {
+    return apiUrlTemplate
+      .replaceAll("{API_KEY}", apiKey)
+      .replaceAll("{SVC_NO}", "COOKRCP01")
+      .replaceAll("{START}", String(start))
+      .replaceAll("{END}", String(end));
+  }
+
+  if (apiBaseUrl.includes("{API_KEY}") || apiBaseUrl.includes("{START}") || apiBaseUrl.includes("{END}")) {
+    return apiBaseUrl
+      .replaceAll("{API_KEY}", apiKey)
+      .replaceAll("{SVC_NO}", "COOKRCP01")
+      .replaceAll("{START}", String(start))
+      .replaceAll("{END}", String(end));
+  }
+
+  return `${apiBaseUrl.replace(/\/$/, "")}/${apiKey}/COOKRCP01/json/${start}/${end}`;
+}
+
+function splitIngredients(text: string): string[] {
+  return text
+    .split(/[\n,]/g)
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function pickSteps(record: Record<string, unknown>): string[] {
+  const steps: string[] = [];
+
+  for (let i = 1; i <= 20; i += 1) {
+    const key = `MANUAL${String(i).padStart(2, "0")}`;
+    const value = String(record[key] ?? "").trim();
+    if (value.length > 0) {
+      steps.push(value);
+    }
+  }
+
+  return steps;
+}
+
+function mapPublicApiRecord(record: Record<string, unknown>): PublicRecipeRow | null {
+  const sourceId = String(record.RCP_SEQ ?? record.id ?? "").trim();
+  const title = String(record.RCP_NM ?? record.RCP_NM_KO ?? record.title ?? "").trim();
+  if (sourceId.length === 0 || title.length === 0) {
+    return null;
+  }
+
+  const summary = String(record.HASH_TAG ?? record.RCP_PAT2 ?? record.summary ?? "").trim();
+  const ingredients = splitIngredients(String(record.RCP_PARTS_DTLS ?? record.ingredients ?? ""));
+  const steps = pickSteps(record);
+  const caloriesRaw = String(record.INFO_ENG ?? record.calories ?? "").trim();
+  const calories = caloriesRaw.length > 0 ? Number(caloriesRaw) : null;
+  const imageUrl = String(record.ATT_FILE_NO_MAIN ?? record.image_url ?? "").trim();
+  const now = new Date().toISOString();
+
+  return {
+    id: sourceId,
+    source_id: sourceId,
+    title,
+    summary: summary.length > 0 ? summary : null,
+    ingredients,
+    steps,
+    calories: Number.isFinite(calories) ? calories : null,
+    image_url: imageUrl.length > 0 ? imageUrl : null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+async function fetchCookRcpRows(start: number, end: number): Promise<PublicRecipeRow[]> {
+  const timeoutMsRaw = Number(getEnv("FOOD_API_TIMEOUT_MS") || "12000");
+  const timeoutMs = Number.isFinite(timeoutMsRaw)
+    ? Math.max(3000, Math.min(timeoutMsRaw, 30000))
+    : 12000;
+
+  const response = await fetch(buildCookRcpApiUrl(start, end), {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    throw new Error(`COOKRCP01 request failed: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const rows = Array.isArray(payload?.COOKRCP01?.row)
+    ? payload.COOKRCP01.row
+    : (Array.isArray(payload?.row) ? payload.row : []);
+
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  return rows
+    .map((item: Record<string, unknown>) => mapPublicApiRecord(item))
+    .filter((item: PublicRecipeRow | null): item is PublicRecipeRow => item !== null);
+}
+
+async function fetchPublicRecipeBySourceId(sourceId: string): Promise<PublicRecipeRow | null> {
+  const pageSize = 300;
+  const maxPages = 40;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const start = page * pageSize + 1;
+    const end = start + pageSize - 1;
+    const rows = await fetchCookRcpRows(start, end);
+
+    if (rows.length === 0) {
+      break;
+    }
+
+    const match = rows.find((row) => row.source_id === sourceId);
+    if (match) {
+      return match;
+    }
+
+    if (rows.length < pageSize) {
+      break;
+    }
+  }
+
+  return null;
+}
+
 function getSupabaseConfig(): {
   supabaseUrl: string;
   serviceRoleKey: string;
@@ -99,9 +243,9 @@ function parseType(method: string, url: URL): { type?: string; error?: Response 
     };
   }
 
-  if (type !== "public" && type !== "creator") {
+  if (type !== "public" && type !== "creator" && type !== "kitchen") {
     return {
-      error: errorResponse(400, "type must be one of: public, creator")
+      error: errorResponse(400, "type must be one of: public, creator, kitchen")
     };
   }
 
@@ -132,6 +276,125 @@ function parsePagination(url: URL): { limit: number; offset: number; error?: Res
   }
 
   return { limit, offset };
+}
+
+function parseSearchMode(url: URL): "keyword" | "ai" {
+  const rawMode = (url.searchParams.get("search_mode") ?? "").trim().toLowerCase();
+  return rawMode === "ai" ? "ai" : "keyword";
+}
+
+function tokenizeSearch(search: string): string[] {
+  return search
+    .trim()
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0)
+    .slice(0, 8);
+}
+
+function toStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value.length > 0);
+}
+
+function buildSearchText(row: PublicRecipeRow): {
+  title: string;
+  summary: string;
+  ingredients: string;
+  steps: string;
+  all: string;
+} {
+  const title = (row.title ?? "").toLowerCase();
+  const summary = (row.summary ?? "").toLowerCase();
+  const ingredients = toStringList(row.ingredients).join(" ").toLowerCase();
+  const steps = toStringList(row.steps).join(" ").toLowerCase();
+
+  return {
+    title,
+    summary,
+    ingredients,
+    steps,
+    all: `${title} ${summary} ${ingredients} ${steps}`.trim(),
+  };
+}
+
+function expandAiToken(token: string): string[] {
+  const dictionary: Record<string, string[]> = {
+    "찌개": ["탕", "국", "전골", "스튜"],
+    "조림": ["졸임", "조려", "braised", "브레이즈", "자작"],
+    "졸임": ["조림", "조려", "braised", "브레이즈", "자작"],
+    "조려": ["조림", "졸임", "braised", "브레이즈", "자작"],
+    "볶음": ["볶음밥", "볶다", "stir fry"],
+    "샐러드": ["salad", "채소", "vegetable"],
+    "치킨": ["닭", "닭가슴살", "chicken"],
+    "돼지": ["삼겹살", "목살", "pork"],
+    "소고기": ["한우", "불고기", "beef"],
+    "다이어트": ["저칼로리", "단백질", "담백"],
+    "매운": ["매콤", "얼큰", "spicy"],
+    "간단": ["초간단", "빠른", "quick"],
+  };
+
+  const extras = dictionary[token] ?? [];
+  return [token, ...extras.map((item) => item.toLowerCase())];
+}
+
+function matchesKeywordSearch(row: PublicRecipeRow, tokens: string[]): boolean {
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const text = buildSearchText(row);
+  return tokens.every((token) => text.all.includes(token));
+}
+
+function scoreAiSearch(row: PublicRecipeRow, tokens: string[]): number {
+  if (tokens.length === 0) {
+    return 0;
+  }
+
+  const text = buildSearchText(row);
+  let score = 0;
+  let matchedGroups = 0;
+
+  for (const token of tokens) {
+    const candidates = expandAiToken(token);
+    let matched = false;
+
+    for (const word of candidates) {
+      if (text.title.includes(word)) {
+        score += 4;
+        matched = true;
+      }
+      if (text.summary.includes(word)) {
+        score += 3;
+        matched = true;
+      }
+      if (text.ingredients.includes(word)) {
+        score += 3;
+        matched = true;
+      }
+      if (text.steps.includes(word)) {
+        score += 2;
+        matched = true;
+      }
+    }
+
+    if (matched) {
+      matchedGroups += 1;
+    }
+  }
+
+  if (matchedGroups == 0) {
+    return 0;
+  }
+
+  return score + matchedGroups;
 }
 
 function getBearerToken(req: Request): string | null {
@@ -257,27 +520,74 @@ async function listPublicRecipes(url: URL): Promise<Response> {
   }
 
   const search = (url.searchParams.get("search") ?? "").trim();
-  const params = new URLSearchParams();
-  params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-  params.set("order", "created_at.desc");
-  params.set("limit", String(limit));
-  params.set("offset", String(offset));
+  const searchMode = parseSearchMode(url);
+  const tokens = tokenizeSearch(search);
+  const effectiveLimit = tokens.length === 0 ? limit : Math.min(limit, 5);
 
-  if (search.length > 0) {
-    params.set("title", `ilike.*${search}*`);
+  if (tokens.length === 0) {
+    const params = new URLSearchParams();
+    params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
+    params.set("order", "created_at.desc");
+    params.set("limit", String(effectiveLimit));
+    params.set("offset", String(offset));
+
+    const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
+      method: "GET"
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      return errorResponse(500, "Failed to fetch public recipes", details);
+    }
+
+    const data = await response.json();
+    return okResponse(data, 200);
   }
 
-  const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
-    method: "GET"
-  });
+  const externalRows: PublicRecipeRow[] = [];
+  const pageSize = 300;
+  const maxPages = 40;
 
-  if (!response.ok) {
-    const details = await response.text();
-    return errorResponse(500, "Failed to fetch public recipes", details);
+  try {
+    for (let page = 0; page < maxPages; page += 1) {
+      const start = page * pageSize + 1;
+      const end = start + pageSize - 1;
+      const rows = await fetchCookRcpRows(start, end);
+
+      if (rows.length === 0) {
+        break;
+      }
+
+      externalRows.push(...rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+    }
+  } catch (error) {
+    return errorResponse(502, "Failed to fetch COOKRCP01 recipes", String(error));
   }
 
-  const data = await response.json();
-  return okResponse(data, 200);
+  if (searchMode === "keyword") {
+    const matched = externalRows.filter((row) => matchesKeywordSearch(row, tokens));
+    return okResponse(matched.slice(offset, offset + effectiveLimit), 200);
+  }
+
+  const ranked = externalRows
+    .map((row) => ({
+      row,
+      score: scoreAiSearch(row, tokens),
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => {
+      if (a.score == b.score) {
+        return String(b.row.created_at).localeCompare(String(a.row.created_at));
+      }
+      return b.score - a.score;
+    })
+    .map((item) => item.row);
+
+  return okResponse(ranked.slice(offset, offset + effectiveLimit), 200);
 }
 
 async function getPublicRecipeDetail(id: string): Promise<Response> {
@@ -296,11 +606,39 @@ async function getPublicRecipeDetail(id: string): Promise<Response> {
   }
 
   const rows = await response.json();
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return errorResponse(404, "Public recipe not found", { id });
+  if (Array.isArray(rows) && rows.length > 0) {
+    return okResponse(rows[0], 200);
   }
 
-  return okResponse(rows[0], 200);
+  const sourceParams = new URLSearchParams();
+  sourceParams.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
+  sourceParams.set("source_id", `eq.${id}`);
+  sourceParams.set("limit", "1");
+
+  const sourceResponse = await restRequest(`/rest/v1/recipes_public?${sourceParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!sourceResponse.ok) {
+    const details = await sourceResponse.text();
+    return errorResponse(500, "Failed to fetch recipe detail", details);
+  }
+
+  const sourceRows = await sourceResponse.json();
+  if (Array.isArray(sourceRows) && sourceRows.length > 0) {
+    return okResponse(sourceRows[0], 200);
+  }
+
+  try {
+    const external = await fetchPublicRecipeBySourceId(id);
+    if (external) {
+      return okResponse(external, 200);
+    }
+  } catch (error) {
+    return errorResponse(502, "Failed to fetch COOKRCP01 recipe detail", String(error));
+  }
+
+  return errorResponse(404, "Public recipe not found", { id });
 }
 
 async function listCreatorRecipes(url: URL, userId: string): Promise<Response> {
@@ -542,6 +880,715 @@ async function deleteCreatorRecipe(id: string, userId: string): Promise<Response
   return okResponse({ deleted: rows[0] }, 200);
 }
 
+function normalizeIngredientName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+async function restCount(path: string): Promise<number> {
+  const response = await restRequest(path, {
+    method: "GET",
+    headers: {
+      Prefer: "count=exact"
+    }
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Count query failed: ${details}`);
+  }
+
+  const range = response.headers.get("content-range") ?? response.headers.get("Content-Range") ?? "";
+  const match = range.match(/\/(\d+)$/);
+  if (match) {
+    return Number(match[1]);
+  }
+
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows.length : 0;
+}
+
+async function buildKitchenSummary(userId: string): Promise<Record<string, number>> {
+  const now = new Date();
+  const in3Days = new Date(now);
+  in3Days.setDate(now.getDate() + 3);
+
+  const today = now.toISOString().slice(0, 10);
+  const soon = in3Days.toISOString().slice(0, 10);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const ingredientCount = await restCount(`/rest/v1/kitchen_ingredients?select=id&owner_id=eq.${userId}`);
+  const expiringSoonCount = await restCount(
+    `/rest/v1/kitchen_ingredients?select=id&owner_id=eq.${userId}&expires_on=gte.${today}&expires_on=lte.${soon}`
+  );
+  const activeShoppingListCount = await restCount(
+    `/rest/v1/kitchen_shopping_lists?select=id&owner_id=eq.${userId}&status=eq.active`
+  );
+
+  let openShoppingItemCount = 0;
+  const activeListResponse = await restRequest(
+    `/rest/v1/kitchen_shopping_lists?select=id&owner_id=eq.${userId}&status=eq.active&limit=200`,
+    { method: "GET" }
+  );
+  if (!activeListResponse.ok) {
+    const details = await activeListResponse.text();
+    throw new Error(`Failed to fetch active shopping lists: ${details}`);
+  }
+
+  const activeLists = await activeListResponse.json();
+  const activeIds = Array.isArray(activeLists)
+    ? activeLists
+      .map((row: Record<string, unknown>) => String(row.id ?? "").trim())
+      .filter((value: string) => value.length > 0)
+    : [];
+
+  if (activeIds.length > 0) {
+    const listFilter = activeIds.join(",");
+    openShoppingItemCount = await restCount(
+      `/rest/v1/kitchen_shopping_items?select=id&owner_id=eq.${userId}&is_checked=eq.false&list_id=in.(${listFilter})`
+    );
+  }
+
+  const recentCookCount7d = await restCount(
+    `/rest/v1/kitchen_cook_sessions?select=id&owner_id=eq.${userId}&created_at=gte.${encodeURIComponent(sevenDaysAgo)}`
+  );
+
+  return {
+    ingredient_count: ingredientCount,
+    expiring_soon_count: expiringSoonCount,
+    active_shopping_list_count: activeShoppingListCount,
+    open_shopping_item_count: openShoppingItemCount,
+    recent_cook_count_7d: recentCookCount7d,
+  };
+}
+
+async function listKitchenIngredients(url: URL, userId: string): Promise<Response> {
+  const { limit, offset, error } = parsePagination(url);
+  if (error) {
+    return error;
+  }
+
+  const query = (url.searchParams.get("q") ?? "").trim();
+  const params = new URLSearchParams();
+  params.set("select", "id,owner_id,name,normalized_name,quantity,unit,storage_location,expires_on,note,created_at,updated_at");
+  params.set("owner_id", `eq.${userId}`);
+  params.set("order", "expires_on.asc.nullslast,updated_at.desc");
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+
+  if (query.length > 0) {
+    params.set("or", `(name.ilike.*${query}*,normalized_name.ilike.*${query.toLowerCase()}*)`);
+  }
+
+  const response = await restRequest(`/rest/v1/kitchen_ingredients?${params.toString()}`, {
+    method: "GET"
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to fetch kitchen ingredients", details);
+  }
+
+  return okResponse(await response.json(), 200);
+}
+
+async function listKitchenShoppingLists(url: URL, userId: string): Promise<Response> {
+  const { limit, offset, error } = parsePagination(url);
+  if (error) {
+    return error;
+  }
+
+  const status = (url.searchParams.get("status") ?? "active").trim().toLowerCase();
+  if (status.length > 0 && status !== "active" && status !== "completed" && status !== "archived" && status !== "all") {
+    return errorResponse(400, "Unsupported shopping list status", { status });
+  }
+
+  const listParams = new URLSearchParams();
+  listParams.set("select", "id,owner_id,status,title,source_recipe_id,created_at,updated_at");
+  listParams.set("owner_id", `eq.${userId}`);
+  if (status !== "all") {
+    listParams.set("status", `eq.${status}`);
+  }
+  listParams.set("order", "created_at.desc");
+  listParams.set("limit", String(limit));
+  listParams.set("offset", String(offset));
+
+  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!listResponse.ok) {
+    const details = await listResponse.text();
+    return errorResponse(500, "Failed to fetch shopping lists", details);
+  }
+
+  const listsRaw = await listResponse.json();
+  const lists = Array.isArray(listsRaw) ? listsRaw as Array<Record<string, unknown>> : [];
+
+  if (lists.length === 0) {
+    return okResponse([], 200);
+  }
+
+  const listIds = lists
+    .map((row) => String(row.id ?? "").trim())
+    .filter((value) => value.length > 0);
+
+  if (listIds.length === 0) {
+    return okResponse([], 200);
+  }
+
+  const itemParams = new URLSearchParams();
+  itemParams.set("select", "id,list_id,owner_id,name,normalized_name,quantity,unit,is_checked,created_at,updated_at");
+  itemParams.set("owner_id", `eq.${userId}`);
+  itemParams.set("list_id", `in.(${listIds.join(",")})`);
+  itemParams.set("order", "created_at.asc");
+
+  const itemResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!itemResponse.ok) {
+    const details = await itemResponse.text();
+    return errorResponse(500, "Failed to fetch shopping items", details);
+  }
+
+  const itemsRaw = await itemResponse.json();
+  const items = Array.isArray(itemsRaw) ? itemsRaw as Array<Record<string, unknown>> : [];
+  const itemMap = new Map<string, Array<Record<string, unknown>>>();
+
+  for (const item of items) {
+    const listId = String(item.list_id ?? "").trim();
+    if (listId.length === 0) {
+      continue;
+    }
+
+    if (!itemMap.has(listId)) {
+      itemMap.set(listId, []);
+    }
+
+    itemMap.get(listId)!.push(item);
+  }
+
+  const merged = lists.map((list) => {
+    const listId = String(list.id ?? "").trim();
+    const listItems = itemMap.get(listId) ?? [];
+    const openItemCount = listItems.filter((row) => row.is_checked !== true).length;
+
+    return {
+      ...list,
+      items: listItems,
+      open_item_count: openItemCount,
+      item_count: listItems.length,
+    };
+  });
+
+  return okResponse(merged, 200);
+}
+
+async function createKitchenIngredient(req: Request, userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (name.length === 0) {
+    return errorResponse(400, "name is required");
+  }
+
+  const payload = {
+    owner_id: userId,
+    name,
+    normalized_name: normalizeIngredientName(name),
+    quantity: typeof body?.quantity === "number" ? body.quantity : null,
+    unit: typeof body?.unit === "string" ? body.unit.trim() || null : null,
+    storage_location: typeof body?.storage_location === "string" ? body.storage_location.trim() || null : null,
+    expires_on: typeof body?.expires_on === "string" ? body.expires_on : null,
+    note: typeof body?.note === "string" ? body.note.trim() || null : null,
+  };
+
+  const response = await restRequest("/rest/v1/kitchen_ingredients", {
+    method: "POST",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to create kitchen ingredient", details);
+  }
+
+  const rows = await response.json();
+  return okResponse(Array.isArray(rows) ? rows[0] : rows, 201);
+}
+
+async function patchKitchenIngredient(req: Request, id: string, userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  const payload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (typeof body?.name === "string" && body.name.trim().length > 0) {
+    payload.name = body.name.trim();
+    payload.normalized_name = normalizeIngredientName(body.name.trim());
+  }
+  if (typeof body?.quantity === "number" || body?.quantity === null) {
+    payload.quantity = body.quantity;
+  }
+  if (typeof body?.unit === "string" || body?.unit === null) {
+    payload.unit = typeof body.unit === "string" ? body.unit.trim() || null : null;
+  }
+  if (typeof body?.storage_location === "string" || body?.storage_location === null) {
+    payload.storage_location = typeof body.storage_location === "string"
+      ? body.storage_location.trim() || null
+      : null;
+  }
+  if (typeof body?.expires_on === "string" || body?.expires_on === null) {
+    payload.expires_on = body.expires_on;
+  }
+  if (typeof body?.note === "string" || body?.note === null) {
+    payload.note = typeof body.note === "string" ? body.note.trim() || null : null;
+  }
+
+  const params = new URLSearchParams();
+  params.set("id", `eq.${id}`);
+  params.set("owner_id", `eq.${userId}`);
+
+  const response = await restRequest(`/rest/v1/kitchen_ingredients?${params.toString()}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to update kitchen ingredient", details);
+  }
+
+  const rows = await response.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return errorResponse(404, "Kitchen ingredient not found", { id });
+  }
+
+  return okResponse(rows[0], 200);
+}
+
+async function deleteKitchenIngredient(id: string, userId: string): Promise<Response> {
+  const params = new URLSearchParams();
+  params.set("id", `eq.${id}`);
+  params.set("owner_id", `eq.${userId}`);
+
+  const response = await restRequest(`/rest/v1/kitchen_ingredients?${params.toString()}`, {
+    method: "DELETE",
+    headers: {
+      Prefer: "return=representation"
+    }
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to delete kitchen ingredient", details);
+  }
+
+  const rows = await response.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return errorResponse(404, "Kitchen ingredient not found", { id });
+  }
+
+  return okResponse({ deleted: rows[0] }, 200);
+}
+
+async function createShoppingFromRecipe(req: Request, userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  const recipeType = typeof body?.recipe_type === "string" ? body.recipe_type.trim() : "";
+  const recipeId = typeof body?.recipe_id === "string" ? body.recipe_id.trim() : "";
+  const recipeTitle = typeof body?.recipe_title === "string" ? body.recipe_title.trim() : "";
+  const requiredIngredients = Array.isArray(body?.required_ingredients)
+    ? body.required_ingredients.map((value: unknown) => String(value ?? "").trim()).filter((value: string) => value.length > 0)
+    : [];
+
+  if (recipeType.length === 0 || recipeId.length === 0 || requiredIngredients.length === 0) {
+    return errorResponse(400, "recipe_type, recipe_id, required_ingredients are required");
+  }
+
+  const ingredientParams = new URLSearchParams();
+  ingredientParams.set("select", "normalized_name");
+  ingredientParams.set("owner_id", `eq.${userId}`);
+  const ingredientResponse = await restRequest(`/rest/v1/kitchen_ingredients?${ingredientParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!ingredientResponse.ok) {
+    const details = await ingredientResponse.text();
+    return errorResponse(500, "Failed to load kitchen ingredients", details);
+  }
+
+  const ownedRows = await ingredientResponse.json();
+  const ownedSet = new Set(
+    (Array.isArray(ownedRows) ? ownedRows : [])
+      .map((row: Record<string, unknown>) => String(row.normalized_name ?? "").trim())
+      .filter((value: string) => value.length > 0)
+  );
+
+  const deduped = new Map<string, string>();
+  for (const ingredient of requiredIngredients) {
+    const normalized = normalizeIngredientName(ingredient);
+    if (normalized.length > 0 && !deduped.has(normalized)) {
+      deduped.set(normalized, ingredient);
+    }
+  }
+
+  const missing = [...deduped.entries()]
+    .filter(([normalized]) => !ownedSet.has(normalized))
+    .map(([normalized, original]) => ({ normalized, original }));
+
+  const listResponse = await restRequest("/rest/v1/kitchen_shopping_lists", {
+    method: "POST",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      owner_id: userId,
+      status: "active",
+      title: recipeTitle.length > 0 ? `${recipeTitle} 장보기` : "AI generated shopping list",
+      source_recipe_id: `${recipeType}:${recipeId}`,
+    })
+  });
+
+  if (!listResponse.ok) {
+    const details = await listResponse.text();
+    return errorResponse(500, "Failed to create shopping list", details);
+  }
+
+  const listRows = await listResponse.json();
+  if (!Array.isArray(listRows) || listRows.length === 0) {
+    return errorResponse(500, "Shopping list creation returned empty response");
+  }
+
+  const createdList = listRows[0] as Record<string, unknown>;
+  let createdItems: unknown[] = [];
+
+  if (missing.length > 0) {
+    const itemPayload = missing.map((item) => ({
+      list_id: createdList.id,
+      owner_id: userId,
+      name: item.original,
+      normalized_name: item.normalized,
+      quantity: null,
+      unit: null,
+      is_checked: false,
+    }));
+
+    const itemResponse = await restRequest("/rest/v1/kitchen_shopping_items", {
+      method: "POST",
+      headers: {
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify(itemPayload)
+    });
+
+    if (!itemResponse.ok) {
+      const details = await itemResponse.text();
+      return errorResponse(500, "Failed to create shopping items", details);
+    }
+
+    const itemRows = await itemResponse.json();
+    createdItems = Array.isArray(itemRows) ? itemRows : [];
+  }
+
+  return okResponse({
+    shopping_list: createdList,
+    items: createdItems,
+    missing_count: missing.length,
+  }, 201);
+}
+
+async function patchShoppingItem(req: Request, id: string, userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  if (typeof body?.is_checked !== "boolean") {
+    return errorResponse(400, "is_checked(boolean) is required");
+  }
+
+  const params = new URLSearchParams();
+  params.set("id", `eq.${id}`);
+  params.set("owner_id", `eq.${userId}`);
+
+  const response = await restRequest(`/rest/v1/kitchen_shopping_items?${params.toString()}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      is_checked: body.is_checked,
+      updated_at: new Date().toISOString(),
+    })
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to update shopping item", details);
+  }
+
+  const rows = await response.json();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return errorResponse(404, "Shopping item not found", { id });
+  }
+
+  return okResponse(rows[0], 200);
+}
+
+async function completeShoppingList(id: string, userId: string): Promise<Response> {
+  const listParams = new URLSearchParams();
+  listParams.set("select", "id,status");
+  listParams.set("id", `eq.${id}`);
+  listParams.set("owner_id", `eq.${userId}`);
+  listParams.set("limit", "1");
+
+  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!listResponse.ok) {
+    const details = await listResponse.text();
+    return errorResponse(500, "Failed to load shopping list", details);
+  }
+
+  const listRows = await listResponse.json();
+  if (!Array.isArray(listRows) || listRows.length === 0) {
+    return errorResponse(404, "Shopping list not found", { id });
+  }
+
+  const itemParams = new URLSearchParams();
+  itemParams.set("select", "id,name,normalized_name,quantity,unit");
+  itemParams.set("owner_id", `eq.${userId}`);
+  itemParams.set("list_id", `eq.${id}`);
+  itemParams.set("is_checked", "eq.true");
+
+  const checkedResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!checkedResponse.ok) {
+    const details = await checkedResponse.text();
+    return errorResponse(500, "Failed to load shopping items", details);
+  }
+
+  const checkedItems = await checkedResponse.json();
+  const checkedRows = Array.isArray(checkedItems) ? checkedItems as Array<Record<string, unknown>> : [];
+
+  for (const item of checkedRows) {
+    const normalizedName = String(item.normalized_name ?? "").trim();
+    const name = String(item.name ?? "").trim();
+    if (normalizedName.length === 0 || name.length === 0) {
+      continue;
+    }
+
+    const ingredientParams = new URLSearchParams();
+    ingredientParams.set("select", "id,quantity");
+    ingredientParams.set("owner_id", `eq.${userId}`);
+    ingredientParams.set("normalized_name", `eq.${normalizedName}`);
+    ingredientParams.set("limit", "1");
+
+    const existingResponse = await restRequest(`/rest/v1/kitchen_ingredients?${ingredientParams.toString()}`, {
+      method: "GET"
+    });
+
+    if (!existingResponse.ok) {
+      continue;
+    }
+
+    const existingRows = await existingResponse.json();
+    const itemQuantity = typeof item.quantity === "number" ? item.quantity : null;
+
+    if (Array.isArray(existingRows) && existingRows.length > 0) {
+      const existing = existingRows[0] as Record<string, unknown>;
+      const existingQuantity = typeof existing.quantity === "number" ? existing.quantity : null;
+      const mergedQuantity = itemQuantity !== null && existingQuantity !== null
+        ? existingQuantity + itemQuantity
+        : existingQuantity ?? itemQuantity;
+
+      const updateParams = new URLSearchParams();
+      updateParams.set("id", `eq.${String(existing.id)}`);
+      updateParams.set("owner_id", `eq.${userId}`);
+
+      await restRequest(`/rest/v1/kitchen_ingredients?${updateParams.toString()}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          quantity: mergedQuantity,
+          unit: typeof item.unit === "string" ? item.unit : null,
+          updated_at: new Date().toISOString(),
+        })
+      });
+    } else {
+      await restRequest("/rest/v1/kitchen_ingredients", {
+        method: "POST",
+        body: JSON.stringify({
+          owner_id: userId,
+          name,
+          normalized_name: normalizedName,
+          quantity: itemQuantity,
+          unit: typeof item.unit === "string" ? item.unit : null,
+        })
+      });
+    }
+  }
+
+  const completeParams = new URLSearchParams();
+  completeParams.set("id", `eq.${id}`);
+  completeParams.set("owner_id", `eq.${userId}`);
+  const completeResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${completeParams.toString()}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      status: "completed",
+      updated_at: new Date().toISOString(),
+    })
+  });
+
+  if (!completeResponse.ok) {
+    const details = await completeResponse.text();
+    return errorResponse(500, "Failed to complete shopping list", details);
+  }
+
+  const summary = await buildKitchenSummary(userId);
+  return okResponse({ completed_list_id: id, summary }, 200);
+}
+
+async function listKitchenCookSessions(url: URL, userId: string): Promise<Response> {
+  const { limit, offset, error } = parsePagination(url);
+  if (error) {
+    return error;
+  }
+
+  const params = new URLSearchParams();
+  params.set("select", "id,owner_id,recipe_type,recipe_ref_id,recipe_title,consumed_ingredients,missing_ingredients,rating,liked,note,created_at");
+  params.set("owner_id", `eq.${userId}`);
+  params.set("order", "created_at.desc");
+  params.set("limit", String(limit));
+  params.set("offset", String(offset));
+
+  const response = await restRequest(`/rest/v1/kitchen_cook_sessions?${params.toString()}`, {
+    method: "GET"
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to fetch kitchen cook sessions", details);
+  }
+
+  return okResponse(await response.json(), 200);
+}
+
+async function completeCook(req: Request, userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  const recipeType = typeof body?.recipe_type === "string" ? body.recipe_type.trim() : "";
+  const recipeRefId = typeof body?.recipe_id === "string" ? body.recipe_id.trim() : "";
+  const recipeTitle = typeof body?.recipe_title === "string" ? body.recipe_title.trim() : "";
+
+  if (recipeType.length === 0 || recipeRefId.length === 0 || recipeTitle.length === 0) {
+    return errorResponse(400, "recipe_type, recipe_id, recipe_title are required");
+  }
+
+  const payload = {
+    owner_id: userId,
+    recipe_type: recipeType,
+    recipe_ref_id: recipeRefId,
+    recipe_title: recipeTitle,
+    consumed_ingredients: Array.isArray(body?.consumed_ingredients) ? body.consumed_ingredients : [],
+    missing_ingredients: Array.isArray(body?.missing_ingredients) ? body.missing_ingredients : [],
+    rating: typeof body?.rating === "number" ? body.rating : null,
+    liked: typeof body?.liked === "boolean" ? body.liked : null,
+    note: typeof body?.note === "string" ? body.note.trim() || null : null,
+  };
+
+  const response = await restRequest("/rest/v1/kitchen_cook_sessions", {
+    method: "POST",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to complete cook session", details);
+  }
+
+  const rows = await response.json();
+  const summary = await buildKitchenSummary(userId);
+  return okResponse({
+    session: Array.isArray(rows) ? rows[0] : rows,
+    summary,
+  }, 201);
+}
+
+async function handleKitchenRequest(req: Request, url: URL, userId: string): Promise<Response> {
+  const view = (url.searchParams.get("view") ?? "").trim().toLowerCase();
+  const action = (url.searchParams.get("action") ?? "").trim().toLowerCase();
+  const id = (url.searchParams.get("id") ?? "").trim();
+
+  if (req.method === "GET") {
+    if (view === "" || view === "summary") {
+      return okResponse(await buildKitchenSummary(userId), 200);
+    }
+    if (view === "ingredients") {
+      return await listKitchenIngredients(url, userId);
+    }
+    if (view === "shopping-lists") {
+      return await listKitchenShoppingLists(url, userId);
+    }
+    if (view === "cook-sessions") {
+      return await listKitchenCookSessions(url, userId);
+    }
+    return errorResponse(400, "Unsupported kitchen GET view", { view });
+  }
+
+  if (req.method === "POST") {
+    if (view === "ingredients") {
+      return await createKitchenIngredient(req, userId);
+    }
+    if (action === "create-shopping-from-recipe") {
+      return await createShoppingFromRecipe(req, userId);
+    }
+    if (action === "complete-shopping-list") {
+      if (id.length === 0) {
+        return errorResponse(400, "id query parameter is required for complete-shopping-list");
+      }
+      return await completeShoppingList(id, userId);
+    }
+    if (action === "complete-cook") {
+      return await completeCook(req, userId);
+    }
+    return errorResponse(400, "Unsupported kitchen POST action/view", { action, view });
+  }
+
+  if (req.method === "PATCH") {
+    if (id.length === 0) {
+      return errorResponse(400, "id query parameter is required for kitchen PATCH");
+    }
+    if (view === "ingredients") {
+      return await patchKitchenIngredient(req, id, userId);
+    }
+    if (view === "shopping-item") {
+      return await patchShoppingItem(req, id, userId);
+    }
+    return errorResponse(400, "Unsupported kitchen PATCH view", { view });
+  }
+
+  if (req.method === "DELETE") {
+    if (view === "ingredients") {
+      if (id.length === 0) {
+        return errorResponse(400, "id query parameter is required for ingredient delete");
+      }
+      return await deleteKitchenIngredient(id, userId);
+    }
+    return errorResponse(400, "Unsupported kitchen DELETE view", { view });
+  }
+
+  return errorResponse(405, "Method not allowed", { method: req.method });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -567,6 +1614,14 @@ serve(async (req) => {
     const type = typeResult.type;
 
     if (req.method === "GET") {
+      if (type === "kitchen") {
+        const auth = await getAuthenticatedUserId(req);
+        if (auth.error || !auth.userId) {
+          return auth.error ?? errorResponse(401, "Unauthorized");
+        }
+        return await handleKitchenRequest(req, url, auth.userId);
+      }
+
       if (type === "public") {
         return id ? await getPublicRecipeDetail(id) : await listPublicRecipes(url);
       }
@@ -581,13 +1636,17 @@ serve(async (req) => {
           : await listCreatorRecipes(url, auth.userId);
     }
 
-    if (type !== "creator") {
-      return errorResponse(400, `${req.method} endpoints require type=creator`);
-    }
-
     const auth = await getAuthenticatedUserId(req);
     if (auth.error || !auth.userId) {
       return auth.error ?? errorResponse(401, "Unauthorized");
+    }
+
+    if (type === "kitchen") {
+      return await handleKitchenRequest(req, url, auth.userId);
+    }
+
+    if (type !== "creator") {
+      return errorResponse(400, `${req.method} endpoints require type=creator or type=kitchen`);
     }
 
     if (req.method === "POST") {
