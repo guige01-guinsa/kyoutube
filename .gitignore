@@ -43,6 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+
+# Firebase local config files
+/android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
+
+# Supabase function local environment
+/supabase/functions/.env
 
 # Android release signing
 /android/key.properties
