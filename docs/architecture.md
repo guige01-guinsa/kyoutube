@@ -16,3 +16,5 @@
 - Mobile app uses anon key only.
 - Service role key remains server-only.
 - All write paths go through RLS-safe tables/functions.
+- Diagnostics and shareable operational reports must redact tokens, keys, and bearer credentials.
+- User-input validation should reject obviously invalid or oversized content before it reaches backend writes.

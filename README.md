@@ -30,6 +30,32 @@ Invoke-RestMethod \
 	-Body '{"size":30}'
 ```
 
+### COOKRCP01 real API setup (식품안전나라)
+공공 레시피는 COOKRCP01 인증키를 설정하면 실제 식품안전나라 데이터에서 동기화됩니다.
+
+1) Edge Function 환경 변수 설정
+```powershell
+supabase secrets set FOOD_API_KEY="<COOKRCP01_API_KEY>"
+supabase secrets set FOOD_API_BASE_URL="https://openapi.foodsafetykorea.go.kr/api"
+supabase secrets set FOOD_API_URL_TEMPLATE="https://openapi.foodsafetykorea.go.kr/api/{API_KEY}/COOKRCP01/json/{START}/{END}"
+```
+
+2) 함수 실행
+```powershell
+Invoke-RestMethod \
+	-Method Post \
+	-Uri http://127.0.0.1:54321/functions/v1/public_recipe_sync \
+	-Headers @{ Authorization = "Bearer <ANON_KEY_FROM_SUPABASE_START>"; apikey = "<ANON_KEY_FROM_SUPABASE_START>"; "Content-Type" = "application/json" } \
+	-Body '{"size":200}'
+```
+
+3) 동기화 개수 확인
+```powershell
+$service = "<SERVICE_ROLE_KEY_FROM_SUPABASE_START>"
+$headers = @{ apikey = $service; Authorization = "Bearer $service"; Prefer = "count=exact" }
+(Invoke-WebRequest -Uri "http://127.0.0.1:54321/rest/v1/recipes_public?select=id&limit=1" -Headers $headers).Headers["Content-Range"]
+```
+
 ### Recipe API function examples
 GET list public:
 ```powershell
@@ -93,6 +119,25 @@ flutter run \
 - 홈 우측 상단 로그인 아이콘으로 이메일 로그인/회원가입 화면에 진입합니다.
 - 로그인 후 홈 우측 상단 `내 레시피` 아이콘으로 creator 목록 화면에 진입합니다.
 
+## Firebase setup
+1. Firebase Console에서 프로젝트를 만들고 Cloud Messaging을 사용할 Android 앱 `com.kyoutube.app`을 등록합니다.
+2. `google-services.json`을 다운로드해 `android/app/google-services.json`에 배치합니다.
+3. iOS도 사용할 경우 Firebase Console에서 iOS 앱을 추가하고 `GoogleService-Info.plist`를 다운로드합니다.
+4. `GoogleService-Info.plist`를 `ios/Runner` 아래에 복사한 뒤 Xcode에서 Runner target 리소스로 추가합니다.
+5. Android 13 이상 알림 표시를 위해 앱 최초 실행 시 알림 권한을 허용합니다.
+
+Android quick check:
+```powershell
+Test-Path android/app/google-services.json
+```
+
+iOS quick check:
+```powershell
+Test-Path ios/Runner/GoogleService-Info.plist
+```
+
+현재 앱은 시작 시 `Firebase.initializeApp()`을 호출합니다. 설정 파일이 없으면 Firebase 초기화 단계에서 바로 실패하도록 해 두었습니다.
+
 ### Non-admin Flutter install (Windows)
 ```powershell
 $meta = Invoke-RestMethod 'https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json'
@@ -118,17 +163,21 @@ setx PATH "$env:PATH;$HOME\\tools\\flutter\\bin"
 - docs/: architecture and cost guardrails
 
 ## Android release prep
-- Release signing is configured to use `android/key.properties` when present.
-- If `android/key.properties` does not exist, release builds fall back to the debug signing key for local verification only.
+- Release signing requires `android/key.properties` by default.
+- If release signing values are missing, `release` build fails to prevent accidental non-production signing.
+- For local verification only, you can allow debug signing explicitly with `-PallowDebugSigningForRelease=true`.
 - Copy `android/key.properties.example` to `android/key.properties` and fill in your real keystore values before Play release preparation.
 
 Example release commands:
 ```powershell
 flutter build appbundle \
+	-PallowDebugSigningForRelease=true \
 	--dart-define=APP_ENV=production \
 	--dart-define=SUPABASE_URL_PRODUCTION=https://<your-project-ref>.supabase.co \
 	--dart-define=SUPABASE_ANON_KEY_PRODUCTION=<YOUR_PRODUCTION_ANON_KEY>
 ```
+
+Production submission should run without `-PallowDebugSigningForRelease=true`.
 
 Before store submission, update these Android items:
 - `applicationId` in `android/app/build.gradle.kts` if you want a different final Play identifier than `com.kyoutube.app`
