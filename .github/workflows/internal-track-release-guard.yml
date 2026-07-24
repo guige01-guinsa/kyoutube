@@ -1,0 +1,114 @@
+name: Internal Track Release Guard
+
+on:
+  workflow_dispatch:
+    inputs:
+      localVerification:
+        description: "Allow debug-signing override (must remain false in CI)"
+        type: boolean
+        required: false
+        default: false
+      skipPublicRecipeSyncSmoke:
+        description: "Skip public_recipe_sync x-worker-secret smoke check"
+        type: boolean
+        required: false
+        default: false
+      publicRecipeSyncSmokeSize:
+        description: "public_recipe_sync smoke size (1-200)"
+        type: number
+        required: false
+        default: 1
+
+jobs:
+  release_guard:
+    runs-on: windows-latest
+    env:
+      SUPABASE_URL_PRODUCTION: ${{ secrets.SUPABASE_URL_PRODUCTION }}
+      SUPABASE_ANON_KEY_PRODUCTION: ${{ secrets.SUPABASE_ANON_KEY_PRODUCTION }}
+      PUBLIC_RECIPE_SYNC_FUNCTION_URL: ${{ secrets.PUBLIC_RECIPE_SYNC_FUNCTION_URL }}
+      PUBLIC_RECIPE_SYNC_WORKER_SECRET: ${{ secrets.PUBLIC_RECIPE_SYNC_WORKER_SECRET }}
+      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+      ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+      ANDROID_GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Guardrail A - Block LocalVerification in CI
+        shell: pwsh
+        run: |
+          if ("${{ inputs.localVerification }}" -eq "true") {
+            throw "CI pipeline guard: localVerification must be false."
+          }
+
+      - name: Guardrail B - Validate required secrets
+        shell: pwsh
+        run: |
+          $required = @(
+            "SUPABASE_URL_PRODUCTION",
+            "SUPABASE_ANON_KEY_PRODUCTION",
+            "PUBLIC_RECIPE_SYNC_FUNCTION_URL",
+            "PUBLIC_RECIPE_SYNC_WORKER_SECRET",
+            "ANDROID_KEY_PROPERTIES",
+            "ANDROID_UPLOAD_KEYSTORE_BASE64",
+            "ANDROID_GOOGLE_SERVICES_JSON"
+          )
+
+          foreach ($name in $required) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ([string]::IsNullOrWhiteSpace($value)) {
+              throw "CI pipeline guard: required secret '$name' is missing."
+            }
+          }
+
+      - name: Prepare signing and firebase files
+        shell: pwsh
+        run: |
+          Set-Content -Path android/key.properties -Value $env:ANDROID_KEY_PROPERTIES -NoNewline
+          Set-Content -Path android/app/google-services.json -Value $env:ANDROID_GOOGLE_SERVICES_JSON -NoNewline
+
+          $keystoreBytes = [System.Convert]::FromBase64String($env:ANDROID_UPLOAD_KEYSTORE_BASE64)
+          [System.IO.File]::WriteAllBytes("android/upload-keystore.jks", $keystoreBytes)
+
+      - name: Run release guard validation script
+        shell: pwsh
+        run: |
+          $flutterPath = (Get-Command flutter).Source
+          $args = @(
+            "-ExecutionPolicy", "Bypass",
+            "-File", "tools/release/run-internal-track-validation.ps1",
+            "-FlutterPath", $flutterPath,
+            "-SupabaseUrlProduction", $env:SUPABASE_URL_PRODUCTION,
+            "-SupabaseAnonKeyProduction", $env:SUPABASE_ANON_KEY_PRODUCTION,
+            "-PublicRecipeSyncFunctionUrl", $env:PUBLIC_RECIPE_SYNC_FUNCTION_URL,
+            "-PublicRecipeSyncWorkerSecret", $env:PUBLIC_RECIPE_SYNC_WORKER_SECRET,
+            "-PublicRecipeSyncSmokeSize", "${{ inputs.publicRecipeSyncSmokeSize }}"
+          )
+
+          if ("${{ inputs.skipPublicRecipeSyncSmoke }}" -eq "true") {
+            $args += "-SkipPublicRecipeSyncSmoke"
+          }
+
+          if ("${{ inputs.localVerification }}" -eq "true") {
+            $args += "-LocalVerification"
+          }
+
+          powershell @args
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: build/app/outputs/bundle/release/app-release.aab
