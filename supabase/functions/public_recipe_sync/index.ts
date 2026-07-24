@@ -10,12 +10,57 @@ type PublicRecipeRow = {
   image_url: string | null;
 };
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-worker-secret",
+  "Access-Control-Allow-Methods": "POST,OPTIONS"
+};
+
 const JSON_HEADERS = {
-  "Content-Type": "application/json"
+  "Content-Type": "application/json",
+  ...CORS_HEADERS
 };
 
 function getEnv(name: string): string {
   return Deno.env.get(name) ?? "";
+}
+
+function requireWorkerSecret(req: Request): { ok: true } | { ok: false; response: Response } {
+  const expected = getEnv("PUBLIC_RECIPE_SYNC_WORKER_SECRET").trim();
+  if (expected.length === 0) {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({
+          status: "error",
+          message: "PUBLIC_RECIPE_SYNC_WORKER_SECRET is not configured"
+        }),
+        {
+          status: 500,
+          headers: JSON_HEADERS
+        }
+      )
+    };
+  }
+
+  const actual = (req.headers.get("x-worker-secret") ?? "").trim();
+  if (actual !== expected) {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({
+          status: "error",
+          message: "Invalid worker secret"
+        }),
+        {
+          status: 401,
+          headers: JSON_HEADERS
+        }
+      )
+    };
+  }
+
+  return { ok: true };
 }
 
 function buildCookRcpApiUrl(start: number, end: number): string {
@@ -217,13 +262,7 @@ async function upsertRecipes(rows: PublicRecipeRow[]): Promise<number> {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        ...JSON_HEADERS,
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
-      }
-    });
+    return new Response("ok", { headers: CORS_HEADERS });
   }
 
   if (req.method !== "POST") {
@@ -231,6 +270,11 @@ serve(async (req) => {
       status: 405,
       headers: JSON_HEADERS
     });
+  }
+
+  const secretCheck = requireWorkerSecret(req);
+  if (!secretCheck.ok) {
+    return secretCheck.response;
   }
 
   try {
