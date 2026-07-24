@@ -82,6 +82,10 @@ jobs:
           $keystoreBytes = [System.Convert]::FromBase64String($env:ANDROID_UPLOAD_KEYSTORE_BASE64)
           [System.IO.File]::WriteAllBytes("android/upload-keystore.jks", $keystoreBytes)
 
+      - name: Configure Gradle for Windows runner
+        shell: pwsh
+        run: Add-Content -Path android/gradle.properties -Value "`nkotlin.incremental=false"
+
       - name: Run release guard validation script
         shell: pwsh
         run: |
