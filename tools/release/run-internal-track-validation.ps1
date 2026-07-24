@@ -72,38 +72,36 @@ function Invoke-HttpPostJson {
         [string]$Body = "{}"
     )
 
+    $client = [System.Net.Http.HttpClient]::new()
+    $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $Uri)
+    $response = $null
+
     try {
-        $response = Invoke-WebRequest -Uri $Uri -Method Post -Headers $Headers -ContentType "application/json" -Body $Body -ErrorAction Stop
+        $request.Content = [System.Net.Http.StringContent]::new(
+            $Body,
+            [System.Text.Encoding]::UTF8,
+            "application/json"
+        )
+
+        foreach ($name in $Headers.Keys) {
+            [void]$request.Headers.TryAddWithoutValidation($name, [string]$Headers[$name])
+        }
+
+        $response = $client.SendAsync($request).GetAwaiter().GetResult()
+        $content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+
         return @{
             StatusCode = [int]$response.StatusCode
-            Body = [string]$response.Content
-        }
-    }
-    catch {
-        $httpResponse = $_.Exception.Response
-        if ($null -eq $httpResponse) {
-            throw
-        }
-
-        $statusCode = [int]$httpResponse.StatusCode
-        $content = ""
-
-        try {
-            $stream = $httpResponse.GetResponseStream()
-            if ($null -ne $stream) {
-                $reader = New-Object System.IO.StreamReader($stream)
-                $content = $reader.ReadToEnd()
-                $reader.Close()
-            }
-        }
-        catch {
-            $content = ""
-        }
-
-        return @{
-            StatusCode = $statusCode
             Body = $content
         }
+    }
+    finally {
+        if ($null -ne $response) {
+            $response.Dispose()
+        }
+
+        $request.Dispose()
+        $client.Dispose()
     }
 }
 
