@@ -26,6 +26,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+Add-Type -AssemblyName System.Net.Http
+
 function Get-IsCiEnvironment {
     $signals = @(
         $env:CI,
