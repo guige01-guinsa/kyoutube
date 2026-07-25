@@ -12,6 +12,9 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
+  static const String _oauthRedirectTo =
+      'io.supabase.kyoutube://login-callback';
+
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -25,6 +28,54 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isSubmitting = true;
+      _message = null;
+    });
+
+    final auth = ref.read(authClientProvider);
+
+    try {
+      final launched = await auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: _oauthRedirectTo,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = launched
+            ? 'Google 로그인 창을 열었습니다. 인증 후 앱으로 돌아오세요.'
+            : 'Google 로그인 창을 열지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      });
+    } on AuthException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = error.message;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -132,6 +183,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ? '처리 중...'
                                 : (_isSignUp ? '회원가입' : '로그인')),
                           ),
+                          if (!_isSignUp) ...<Widget>[
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  _isSubmitting ? null : _signInWithGoogle,
+                              icon: const Icon(Icons.login),
+                              label: const Text('Google로 로그인'),
+                            ),
+                          ],
                           TextButton(
                             onPressed: _isSubmitting
                                 ? null
