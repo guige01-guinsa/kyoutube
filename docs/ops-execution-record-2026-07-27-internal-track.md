@@ -9,7 +9,7 @@
 
 ## Install evidence
 - Installed from Play internal track: NO
-- Install timestamp (KST): 2026-07-27 23:38:21 +09:00
+- Install timestamp (KST): 2026-07-27 23:43:30 +09:00
 - `versionName`: versionName=0.1.0
 - `versionCode`: versionCode=1 minSdk=24 targetSdk=36
 
