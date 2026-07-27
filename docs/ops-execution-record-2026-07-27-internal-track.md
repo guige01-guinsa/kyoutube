@@ -46,6 +46,10 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - Connected-device evidence capture executed successfully on `SM-G977N` via `tools/release/capture-internal-track-smoke-evidence.ps1`.
 - Install source check result was `Installed from Play internal track: NO` (installer package not resolved to `com.android.vending`), so Play internal install proof remains pending.
 - Re-check after opening Play detail page and rerunning capture at `2026-07-27 20:52:39 +09:00` still shows `installer=null`.
+- Forced reinstall attempt sequence executed: uninstall app -> open `market://details?id=com.kyoutube.app` -> Play UI dump/screenshot capture.
+- After uninstall, Play UI showed no install CTA and text evidence included `항목을 찾을 수 없습니다.` / `다시 시도`.
+- Canonical web URL probe (`https://play.google.com/apps/testing/com.kyoutube.app`) opened Samsung Internet (not Play app), requiring external tester enrollment/link context.
+- Device app was restored from local artifact (`.artifacts/app-release-apks/universal.apk`) to avoid leaving tester device empty; installer remains `null`.
 
 ## Sign-off
 - Operator: `GitHub Copilot (automated evidence prep)`
@@ -64,3 +68,7 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - resolve-activity: priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
 com.kyoutube.app/.MainActivity
 - UI dump: docs\evidence\internal-track-2026-07-27\kyoutube_ui.xml
+- Play uninstall state screenshot: docs\evidence\internal-track-2026-07-27\play_after_uninstall.png
+- Play uninstall state UI dump: docs\evidence\internal-track-2026-07-27\play_after_uninstall.xml
+- Canonical testing URL screenshot: docs\evidence\internal-track-2026-07-27\play_testing_url.png
+- Canonical testing URL UI dump: docs\evidence\internal-track-2026-07-27\play_testing_url.xml
