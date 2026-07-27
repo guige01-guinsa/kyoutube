@@ -43,6 +43,8 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - CI blocker status: resolved for the stabilized ubuntu workflow path.
 - Local quality gates after remediation: `flutter analyze` PASS, `flutter test` PASS (+16).
 - Worker secret rotation rollout run #30259412692 completed successfully.
+- Automated evidence capture attempt (`tools/release/capture-internal-track-smoke-evidence.ps1`) was executed and failed with: `No connected Android device found. Connect a tester device first.`
+- External execution blocker (current): no ADB-connected internal tester device in this session.
 
 ## Sign-off
 - Operator: `GitHub Copilot (automated evidence prep)`
@@ -53,3 +55,8 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 ## Record close status
 - This record is finalized for automation scope.
 - External close conditions remain: Play internal install + tester smoke + screenshots.
+
+## Immediate resume commands (when tester device is connected)
+1. `adb devices`
+2. `powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-smoke-evidence.ps1`
+3. Attach generated artifacts under `docs/evidence/internal-track-2026-07-27` and update pass/fail smoke checklist values.
