@@ -131,6 +131,13 @@
 - To avoid leaving the test device empty, app was restored from local artifact `.artifacts/app-release-apks/universal.apk`.
 - Final installer state remains `installer=null`; therefore Play internal-track install proof (`com.android.vending`) is still not met.
 
+### 3.6 Post-blocker retry (tokenless URL only)
+- Re-attempted after explicit operator request:
+  - Opened `https://play.google.com/apps/testing/com.kyoutube.app` again and captured `play_testing_retry.xml`.
+  - Forced Play handling with `com.android.vending/com.google.android.finsky.activities.MainActivity` and captured `play_testing_vending_main.xml` + screenshot.
+- Outcome: UI dumps showed only address-bar level text (`play.google.com`) with no tester enrollment/install CTA.
+- Conclusion unchanged: without a tokenized invite URL (or already-enrolled tester context), installer source cannot transition to `com.android.vending` in this environment.
+
 ## 4) Local quality/security re-check (post-remediation)
 - `flutter analyze`: PASS (`No issues found`)
 - `flutter test`: PASS (`+16`)
