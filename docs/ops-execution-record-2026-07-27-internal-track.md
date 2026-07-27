@@ -9,7 +9,7 @@
 
 ## Install evidence
 - Installed from Play internal track: NO
-- Install timestamp (KST): 2026-07-27 20:48:27 +09:00
+- Install timestamp (KST): 2026-07-27 20:52:39 +09:00
 - `versionName`: versionName=0.1.0
 - `versionCode`: versionCode=1 minSdk=24 targetSdk=36
 
@@ -45,6 +45,7 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - Worker secret rotation rollout run #30259412692 completed successfully.
 - Connected-device evidence capture executed successfully on `SM-G977N` via `tools/release/capture-internal-track-smoke-evidence.ps1`.
 - Install source check result was `Installed from Play internal track: NO` (installer package not resolved to `com.android.vending`), so Play internal install proof remains pending.
+- Re-check after opening Play detail page and rerunning capture at `2026-07-27 20:52:39 +09:00` still shows `installer=null`.
 
 ## Sign-off
 - Operator: `GitHub Copilot (automated evidence prep)`
