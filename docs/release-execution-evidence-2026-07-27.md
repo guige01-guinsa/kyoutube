@@ -121,6 +121,16 @@
 - Device/version evidence written to `docs/ops-execution-record-2026-07-27-internal-track.md`.
 - Current gate status: install source check is still `Installed from Play internal track: NO`, so final release closure remains pending Play internal-track installation proof and reviewer sign-off.
 
+### 3.5 Final automation attempts and blocker evidence
+- Automation attempted a forced reinstall path on connected device:
+  1) `adb uninstall com.kyoutube.app`
+  2) open `market://details?id=com.kyoutube.app`
+  3) collect Play UI dump/screenshot evidence
+- Result after uninstall: Play UI text included `항목을 찾을 수 없습니다.` and `다시 시도` (no install CTA detected).
+- Additional probe to canonical URL `https://play.google.com/apps/testing/com.kyoutube.app` opened Samsung Internet web context, not Play app install flow.
+- To avoid leaving the test device empty, app was restored from local artifact `.artifacts/app-release-apks/universal.apk`.
+- Final installer state remains `installer=null`; therefore Play internal-track install proof (`com.android.vending`) is still not met.
+
 ## 4) Local quality/security re-check (post-remediation)
 - `flutter analyze`: PASS (`No issues found`)
 - `flutter test`: PASS (`+16`)
