@@ -2,7 +2,7 @@
 
 ## Build / Distribution
 - Source runbook: `docs/internal-track-release-checklist.md`
-- CI strict run URL: `https://github.com/guige01-guinsa/kyoutube/actions/runs/30261177761`
+- CI strict run URL: `https://github.com/guige01-guinsa/kyoutube/actions/runs/30261625170`
 - Internal testing release URL: `PENDING_EXTERNAL_PLAY_CONSOLE`
 - Tester account: `PENDING_EXTERNAL_TESTER_ASSIGNMENT`
 - Device model / OS: `PENDING_EXTERNAL_DEVICE`
@@ -38,6 +38,8 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - CI strict rerun #30260782913 stayed in long-running in-progress state and cancellation was requested.
 - CI strict rerun #30261074832 stayed in long-running in-progress state and cancellation was requested.
 - CI strict rerun #30261177761 completed with conclusion `cancelled` after repeated setup stall.
+- CI strict rerun #30261573553 was canceled to validate latest workflow patch revision.
+- CI strict rerun #30261625170 (ubuntu-latest + flutterVersion=3.44.8 + pwsh invocation) is currently in progress.
 - External blocker: repeated GitHub Actions Windows `Setup Flutter` step stall prevents strict run completion.
 - Local quality gates after remediation: `flutter analyze` PASS, `flutter test` PASS (+16).
 - Worker secret rotation rollout run #30259412692 completed successfully.
