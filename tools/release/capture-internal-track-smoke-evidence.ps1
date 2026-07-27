@@ -40,11 +40,22 @@ function Set-MarkdownLine {
         [string]$Value
     )
 
-    return [regex]::Replace(
+    $updated = [regex]::Replace(
         $Text,
         "(?m)^- $([regex]::Escape($Label)):\s*.*$",
         "- $($Label): $Value"
     )
+
+    $plainLabel = $Label.Replace([string][char]96, "")
+    if ($plainLabel -ne $Label) {
+        $updated = [regex]::Replace(
+            $updated,
+            "(?m)^- $([regex]::Escape($plainLabel)):\s*.*$",
+            "- $($plainLabel): $Value"
+        )
+    }
+
+    return $updated
 }
 
 Assert-CommandExists -Name "adb"
@@ -90,6 +101,7 @@ adb pull $screen3Device $screen3Host | Out-Null
 
 $uiDumpDevice = "/sdcard/kyoutube_ui.xml"
 $uiDumpHost = Join-Path $EvidenceDir "kyoutube_ui.xml"
+$uiDumpHostNormalized = $uiDumpHost -replace "\\", "/"
 adb shell uiautomator dump $uiDumpDevice | Out-Null
 adb pull $uiDumpDevice $uiDumpHost | Out-Null
 
@@ -103,18 +115,27 @@ if ($installerPackage -and $installerPackage.Line -match "com.android.vending") 
     $installedFromPlay = "YES"
 }
 
-$content = Set-MarkdownLine -Text $content -Label '`Installed from Play internal track`' -Value "`$installedFromPlay`"
-$content = Set-MarkdownLine -Text $content -Label '`Install timestamp (KST)`' -Value "`$timestamp`"
-$content = Set-MarkdownLine -Text $content -Label '`versionName`' -Value "`$versionNameLine`"
-$content = Set-MarkdownLine -Text $content -Label '`versionCode`' -Value "`$versionCodeLine`"
-$content = Set-MarkdownLine -Text $content -Label '`Device model / OS`' -Value "`$deviceModel / Android $deviceOs`"
-$content = Set-MarkdownLine -Text $content -Label '`Screenshot 1 (Play install success)`' -Value "`$screen1Host`"
-$content = Set-MarkdownLine -Text $content -Label '`Screenshot 2 (ops dashboard counters)`' -Value "`$screen2Host`"
-$content = Set-MarkdownLine -Text $content -Label '`Screenshot 3 (YouTube import result)`' -Value "`$screen3Host`"
+$fmtInstalledFromPlay = $installedFromPlay
+$fmtTimestamp = $timestamp
+$fmtVersionName = $versionNameLine
+$fmtVersionCode = $versionCodeLine
+$fmtDevice = "$deviceModel / Android $deviceOs"
+$fmtScreen1 = $screen1Host
+$fmtScreen2 = $screen2Host
+$fmtScreen3 = $screen3Host
+
+$content = Set-MarkdownLine -Text $content -Label "Installed from Play internal track" -Value $fmtInstalledFromPlay
+$content = Set-MarkdownLine -Text $content -Label "Install timestamp (KST)" -Value $fmtTimestamp
+$content = Set-MarkdownLine -Text $content -Label "versionName" -Value $fmtVersionName
+$content = Set-MarkdownLine -Text $content -Label "versionCode" -Value $fmtVersionCode
+$content = Set-MarkdownLine -Text $content -Label "Device model / OS" -Value $fmtDevice
+$content = Set-MarkdownLine -Text $content -Label "Screenshot 1 (Play install success)" -Value $fmtScreen1
+$content = Set-MarkdownLine -Text $content -Label "Screenshot 2 (ops dashboard counters)" -Value $fmtScreen2
+$content = Set-MarkdownLine -Text $content -Label "Screenshot 3 (YouTube import result)" -Value $fmtScreen3
 
 if ($content -notmatch "Installer evidence") {
     $installerLine = if ($installerPackage) { $installerPackage.Line.Trim() } else { "<not-found>" }
-    $content += "`r`n`r`n## Installer evidence`r`n- installerPackageName: $installerLine`r`n- resolve-activity: $installer`r`n- UI dump: $uiDumpHost`r`n"
+    $content += "`r`n`r`n## Installer evidence`r`n- installerPackageName: $installerLine`r`n- resolve-activity: $installer`r`n- UI dump: $uiDumpHostNormalized`r`n"
 }
 
 Set-Content -Path $OutputFile -Value $content -NoNewline
