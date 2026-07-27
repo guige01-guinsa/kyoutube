@@ -39,8 +39,8 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - CI strict rerun #30261074832 stayed in long-running in-progress state and cancellation was requested.
 - CI strict rerun #30261177761 completed with conclusion `cancelled` after repeated setup stall.
 - CI strict rerun #30261573553 was canceled to validate latest workflow patch revision.
-- CI strict rerun #30261625170 (ubuntu-latest + flutterVersion=3.44.8 + pwsh invocation) is currently in progress.
-- External blocker: repeated GitHub Actions Windows `Setup Flutter` step stall prevents strict run completion.
+- CI strict rerun #30261625170 (ubuntu-latest + flutterVersion=3.44.8 + pwsh invocation) completed with conclusion `success`.
+- CI blocker status: resolved for the stabilized ubuntu workflow path.
 - Local quality gates after remediation: `flutter analyze` PASS, `flutter test` PASS (+16).
 - Worker secret rotation rollout run #30259412692 completed successfully.
 
@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - Operator: `GitHub Copilot (automated evidence prep)`
 - Reviewer: `PENDING_EXTERNAL_REVIEWER`
 - Decision: `HOLD_PENDING_EXTERNAL_INTERNAL_TEST`
-- Decision rationale: strict CI runs cannot currently complete past Setup Flutter on hosted Windows runners; workflow stabilization patch prepared for next CI validation cycle.
+- Decision rationale: strict CI validation is now passing; remaining closure items are external (Play internal install + tester smoke + screenshots).
 
 ## Record close status
 - This record is finalized for automation scope.
