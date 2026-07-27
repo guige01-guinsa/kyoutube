@@ -9,7 +9,7 @@
 
 ## Install evidence
 - Installed from Play internal track: NO
-- Install timestamp (KST): 2026-07-27 20:52:39 +09:00
+- Install timestamp (KST): 2026-07-27 23:38:21 +09:00
 - `versionName`: versionName=0.1.0
 - `versionCode`: versionCode=1 minSdk=24 targetSdk=36
 
@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 - Install source check result was `Installed from Play internal track: NO` (installer package not resolved to `com.android.vending`), so Play internal install proof remains pending.
 - Re-check after opening Play detail page and rerunning capture at `2026-07-27 20:52:39 +09:00` still shows `installer=null`.
 - Forced reinstall attempt sequence executed: uninstall app -> open `market://details?id=com.kyoutube.app` -> Play UI dump/screenshot capture.
-- After uninstall, Play UI showed no install CTA and text evidence included `항목을 찾을 수 없습니다.` / `다시 시도`.
+- After uninstall, Play UI showed no install CTA and text evidence included `??��??찾을 ???�습?�다.` / `?�시 ?�도`.
 - Canonical web URL probe (`https://play.google.com/apps/testing/com.kyoutube.app`) opened Samsung Internet (not Play app), requiring external tester enrollment/link context.
 - Device app was restored from local artifact (`.artifacts/app-release-apks/universal.apk`) to avoid leaving tester device empty; installer remains `null`.
 - Additional retry executed after permission confirmation:
