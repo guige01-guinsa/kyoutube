@@ -52,6 +52,16 @@
   - Windows-only Gradle tuning step is gated with `if: runner.os == 'Windows'`.
 - Note: these changes are local workspace edits and require branch push + workflow run to validate in GitHub-hosted CI.
 
+### 1.6 Workflow stabilization validation run
+- Branch: `fix/public-recipe-sync-worker-guard` (commit includes cross-platform `pwsh` invocation)
+- Dispatch inputs used:
+  - `runnerLabel=ubuntu-latest`
+  - `flutterVersion=3.44.8`
+  - `localVerification=false`
+  - `skipPublicRecipeSyncSmoke=false`
+- Validation run URL: `https://github.com/guige01-guinsa/kyoutube/actions/runs/30261625170`
+- Current status at capture time: `in_progress` (`Setup Flutter`)
+
 ## 2) YouTube/Google OAuth key rotation + old key revoke evidence
 
 ### 2.1 Completed automatically in this session
