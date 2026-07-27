@@ -35,13 +35,12 @@
 - Rerun #4 URL: `https://github.com/guige01-guinsa/kyoutube/actions/runs/30261177761`
 - Rerun #4 final result: `completed / cancelled` (updated_at `2026-07-27T11:17:33Z`)
 - API snapshot evidence:
-  - `status=in_progress`
-  - `run_started_at=2026-07-27T11:08:27Z`
-- Note: this is an external GitHub Actions runtime wait condition; final pass/fail can only be confirmed when the run exits from `in_progress`.
+  - `status=completed`
+  - `conclusion=cancelled`
 
-### 1.4 External blocker conclusion (current)
-- Three consecutive strict reruns after remediation are stalling at `Setup Flutter` on GitHub-hosted Windows runners.
-- Because the workflow run does not reach step 9 (`Run release guard validation script`), final strict pass/fail is currently blocked by external CI runtime behavior rather than repository code changes.
+### 1.4 External blocker conclusion (historical)
+- Three consecutive strict reruns after remediation stalled at `Setup Flutter` on GitHub-hosted Windows runners.
+- This blocker was mitigated by workflow stabilization changes plus ubuntu-runner validation (section 1.6).
 
 ### 1.5 Workflow stabilization changes prepared
 - File updated: `.github/workflows/internal-track-release-guard.yml`
@@ -60,7 +59,11 @@
   - `localVerification=false`
   - `skipPublicRecipeSyncSmoke=false`
 - Validation run URL: `https://github.com/guige01-guinsa/kyoutube/actions/runs/30261625170`
-- Current status at capture time: `in_progress` (`Setup Flutter`)
+- Final status: `completed / success` (updated_at `2026-07-27T11:28:03Z`)
+- Key step outcomes:
+  - `Setup Flutter`: success
+  - `Run release guard validation script`: success
+  - `Upload AAB artifact`: success
 
 ## 2) YouTube/Google OAuth key rotation + old key revoke evidence
 
