@@ -59,6 +59,7 @@ powershell -ExecutionPolicy Bypass -File tools/release/capture-internal-track-sm
 
 ## Installer evidence
 - installerPackageName: <not-found>
+- pm list packages -i result: installer=null
 - resolve-activity: priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
 com.kyoutube.app/.MainActivity
 - UI dump: docs\evidence\internal-track-2026-07-27\kyoutube_ui.xml
