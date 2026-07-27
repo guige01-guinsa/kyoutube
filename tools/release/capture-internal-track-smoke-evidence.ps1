@@ -3,7 +3,10 @@ param(
     [string]$PackageName = "com.kyoutube.app",
 
     [Parameter(Mandatory = $false)]
-    [string]$OutputFile = "docs/ops-execution-record-2026-07-27-internal-track.md"
+    [string]$OutputFile = "docs/ops-execution-record-2026-07-27-internal-track.md",
+
+    [Parameter(Mandatory = $false)]
+    [string]$EvidenceDir = "docs/evidence/internal-track-2026-07-27"
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +33,20 @@ function Get-AdbValue {
     return $line.Line.Trim()
 }
 
+function Set-MarkdownLine {
+    param(
+        [string]$Text,
+        [string]$Label,
+        [string]$Value
+    )
+
+    return [regex]::Replace(
+        $Text,
+        "(?m)^- $([regex]::Escape($Label)):\s*.*$",
+        "- $($Label): $Value"
+    )
+}
+
 Assert-CommandExists -Name "adb"
 
 $devices = adb devices | Select-String -Pattern "\tdevice$"
@@ -37,21 +54,73 @@ if ($devices.Count -eq 0) {
     throw "No connected Android device found. Connect a tester device first."
 }
 
+$packageCheck = adb shell pm list packages | Select-String -Pattern $PackageName
+if ($null -eq $packageCheck) {
+    throw "Package '$PackageName' is not installed on connected device."
+}
+
+$deviceModel = (adb shell getprop ro.product.model).Trim()
+$deviceOs = (adb shell getprop ro.build.version.release).Trim()
+$installer = (adb shell cmd package resolve-activity --brief $PackageName 2>$null | Out-String).Trim()
+$installerPackage = (adb shell dumpsys package $PackageName | Select-String -Pattern "installerPackageName=" | Select-Object -First 1)
+
 $versionNameLine = Get-AdbValue -Package $PackageName -Pattern "versionName="
 $versionCodeLine = Get-AdbValue -Package $PackageName -Pattern "versionCode="
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss K"
+
+if (-not (Test-Path $EvidenceDir)) {
+    New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
+}
+
+$screen1Device = "/sdcard/kyoutube_install.png"
+$screen2Device = "/sdcard/kyoutube_ops.png"
+$screen3Device = "/sdcard/kyoutube_import.png"
+
+$screen1Host = Join-Path $EvidenceDir "kyoutube_install.png"
+$screen2Host = Join-Path $EvidenceDir "kyoutube_ops.png"
+$screen3Host = Join-Path $EvidenceDir "kyoutube_import.png"
+
+adb shell screencap -p $screen1Device | Out-Null
+adb shell screencap -p $screen2Device | Out-Null
+adb shell screencap -p $screen3Device | Out-Null
+
+adb pull $screen1Device $screen1Host | Out-Null
+adb pull $screen2Device $screen2Host | Out-Null
+adb pull $screen3Device $screen3Host | Out-Null
+
+$uiDumpDevice = "/sdcard/kyoutube_ui.xml"
+$uiDumpHost = Join-Path $EvidenceDir "kyoutube_ui.xml"
+adb shell uiautomator dump $uiDumpDevice | Out-Null
+adb pull $uiDumpDevice $uiDumpHost | Out-Null
 
 if (-not (Test-Path $OutputFile)) {
     throw "Output record file not found: $OutputFile"
 }
 
 $content = Get-Content $OutputFile -Raw
-$content = $content -replace "<timestamp>", $timestamp
-$content = [regex]::Replace($content, "(?m)^- `versionName`:\s*.*$", "- `versionName`: $versionNameLine")
-$content = [regex]::Replace($content, "(?m)^- `versionCode`:\s*.*$", "- `versionCode`: $versionCodeLine")
+$installedFromPlay = "NO"
+if ($installerPackage -and $installerPackage.Line -match "com.android.vending") {
+    $installedFromPlay = "YES"
+}
+
+$content = Set-MarkdownLine -Text $content -Label '`Installed from Play internal track`' -Value "`$installedFromPlay`"
+$content = Set-MarkdownLine -Text $content -Label '`Install timestamp (KST)`' -Value "`$timestamp`"
+$content = Set-MarkdownLine -Text $content -Label '`versionName`' -Value "`$versionNameLine`"
+$content = Set-MarkdownLine -Text $content -Label '`versionCode`' -Value "`$versionCodeLine`"
+$content = Set-MarkdownLine -Text $content -Label '`Device model / OS`' -Value "`$deviceModel / Android $deviceOs`"
+$content = Set-MarkdownLine -Text $content -Label '`Screenshot 1 (Play install success)`' -Value "`$screen1Host`"
+$content = Set-MarkdownLine -Text $content -Label '`Screenshot 2 (ops dashboard counters)`' -Value "`$screen2Host`"
+$content = Set-MarkdownLine -Text $content -Label '`Screenshot 3 (YouTube import result)`' -Value "`$screen3Host`"
+
+if ($content -notmatch "Installer evidence") {
+    $installerLine = if ($installerPackage) { $installerPackage.Line.Trim() } else { "<not-found>" }
+    $content += "`r`n`r`n## Installer evidence`r`n- installerPackageName: $installerLine`r`n- resolve-activity: $installer`r`n- UI dump: $uiDumpHost`r`n"
+}
 
 Set-Content -Path $OutputFile -Value $content -NoNewline
 
 Write-Host "Captured install evidence into $OutputFile"
 Write-Host "versionName => $versionNameLine"
 Write-Host "versionCode => $versionCodeLine"
+Write-Host "installedFromPlay => $installedFromPlay"
+Write-Host "evidenceDir => $EvidenceDir"

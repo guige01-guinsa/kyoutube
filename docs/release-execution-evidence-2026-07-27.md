@@ -111,6 +111,11 @@
 ### 3.3 Final gate
 - Release can be marked complete only after sections 2.3 and 3.2 artifacts are attached.
 
+### 3.4 Execution status in this session
+- Attempted to execute automated capture with `tools/release/capture-internal-track-smoke-evidence.ps1`.
+- Result: blocked (`No connected Android device found. Connect a tester device first.`)
+- Implication: CI strict validation is complete, but tester-install and in-device smoke evidence must be completed on a connected tester device.
+
 ## 4) Local quality/security re-check (post-remediation)
 - `flutter analyze`: PASS (`No issues found`)
 - `flutter test`: PASS (`+16`)
