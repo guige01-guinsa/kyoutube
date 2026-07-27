@@ -11,9 +11,12 @@ AI cooking platform MVP with Flutter + Supabase.
 1. Install Flutter SDK and add it to PATH.
 2. Run: flutter create . --project-name k_youtube --platforms=android,ios
 3. Run: flutter pub get
-4. Start local Supabase stack.
-5. Provide runtime keys with dart-define.
-6. Run app.
+4. Copy `.env.local.example` to `.env.local` and fill in the local values.
+5. Run `tools\dev\check-dev-env.ps1`.
+6. Start local Supabase stack.
+7. Run `tools\dev\run-local.ps1`.
+
+See [docs/development-environment.md](docs/development-environment.md) for the standard setup.
 
 ### Local Supabase
 ```powershell
@@ -26,7 +29,7 @@ npx supabase@latest db reset
 Invoke-RestMethod \
 	-Method Post \
 	-Uri http://127.0.0.1:54321/functions/v1/public_recipe_sync \
-	-Headers @{ Authorization = "Bearer <ANON_KEY_FROM_SUPABASE_START>"; apikey = "<ANON_KEY_FROM_SUPABASE_START>"; "Content-Type" = "application/json" } \
+	-Headers @{ "x-worker-secret" = "<PUBLIC_RECIPE_SYNC_WORKER_SECRET>"; "Content-Type" = "application/json" } \
 	-Body '{"size":30}'
 ```
 
@@ -38,6 +41,7 @@ Invoke-RestMethod \
 supabase secrets set FOOD_API_KEY="<COOKRCP01_API_KEY>"
 supabase secrets set FOOD_API_BASE_URL="https://openapi.foodsafetykorea.go.kr/api"
 supabase secrets set FOOD_API_URL_TEMPLATE="https://openapi.foodsafetykorea.go.kr/api/{API_KEY}/COOKRCP01/json/{START}/{END}"
+supabase secrets set PUBLIC_RECIPE_SYNC_WORKER_SECRET="<RANDOM_LONG_SECRET>"
 ```
 
 2) 함수 실행
@@ -45,7 +49,7 @@ supabase secrets set FOOD_API_URL_TEMPLATE="https://openapi.foodsafetykorea.go.k
 Invoke-RestMethod \
 	-Method Post \
 	-Uri http://127.0.0.1:54321/functions/v1/public_recipe_sync \
-	-Headers @{ Authorization = "Bearer <ANON_KEY_FROM_SUPABASE_START>"; apikey = "<ANON_KEY_FROM_SUPABASE_START>"; "Content-Type" = "application/json" } \
+	-Headers @{ "x-worker-secret" = "<PUBLIC_RECIPE_SYNC_WORKER_SECRET>"; "Content-Type" = "application/json" } \
 	-Body '{"size":200}'
 ```
 
@@ -107,6 +111,17 @@ flutter run \
 	--dart-define=SUPABASE_ANON_KEY_LOCAL=<ANON_KEY_FROM_SUPABASE_START>
 ```
 
+Real-device local check (Android, USB):
+```powershell
+adb reverse tcp:54321 tcp:54321
+adb reverse --list
+npx supabase@latest status
+```
+
+Expected:
+- `adb reverse --list` includes `tcp:54321 tcp:54321`
+- Supabase API URL is `http://127.0.0.1:54321`
+
 Production example:
 ```powershell
 flutter run \
@@ -120,7 +135,7 @@ flutter run \
 - 로그인 후 홈 우측 상단 `내 레시피` 아이콘으로 creator 목록 화면에 진입합니다.
 
 ## Firebase setup
-1. Firebase Console에서 프로젝트를 만들고 Cloud Messaging을 사용할 Android 앱 `com.kyoutube.app`을 등록합니다.
+1. Firebase Console에서 프로젝트를 만들고 Cloud Messaging을 사용할 Android 앱 `com.kyoutube.kyoutube`을 등록합니다.
 2. `google-services.json`을 다운로드해 `android/app/google-services.json`에 배치합니다.
 3. iOS도 사용할 경우 Firebase Console에서 iOS 앱을 추가하고 `GoogleService-Info.plist`를 다운로드합니다.
 4. `GoogleService-Info.plist`를 `ios/Runner` 아래에 복사한 뒤 Xcode에서 Runner target 리소스로 추가합니다.
@@ -180,7 +195,7 @@ flutter build appbundle \
 Production submission should run without `-PallowDebugSigningForRelease=true`.
 
 Before store submission, update these Android items:
-- `applicationId` in `android/app/build.gradle.kts` if you want a different final Play identifier than `com.kyoutube.app`
+- `applicationId` in `android/app/build.gradle.kts` if you want a different final Play identifier than `com.kyoutube.kyoutube`
 - `namespace` in `android/app/build.gradle.kts` if you change the package id
 - `package` path for `MainActivity.kt` if you change the package id
 - `app_name` in `android/app/src/main/res/values/strings.xml`
