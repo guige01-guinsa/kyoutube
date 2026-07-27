@@ -112,9 +112,14 @@
 - Release can be marked complete only after sections 2.3 and 3.2 artifacts are attached.
 
 ### 3.4 Execution status in this session
-- Attempted to execute automated capture with `tools/release/capture-internal-track-smoke-evidence.ps1`.
-- Result: blocked (`No connected Android device found. Connect a tester device first.`)
-- Implication: CI strict validation is complete, but tester-install and in-device smoke evidence must be completed on a connected tester device.
+- Executed automated capture with `tools/release/capture-internal-track-smoke-evidence.ps1` after device connection was established.
+- Captured artifacts:
+  - `docs/evidence/internal-track-2026-07-27/kyoutube_install.png`
+  - `docs/evidence/internal-track-2026-07-27/kyoutube_ops.png`
+  - `docs/evidence/internal-track-2026-07-27/kyoutube_import.png`
+  - `docs/evidence/internal-track-2026-07-27/kyoutube_ui.xml`
+- Device/version evidence written to `docs/ops-execution-record-2026-07-27-internal-track.md`.
+- Current gate status: install source check is still `Installed from Play internal track: NO`, so final release closure remains pending Play internal-track installation proof and reviewer sign-off.
 
 ## 4) Local quality/security re-check (post-remediation)
 - `flutter analyze`: PASS (`No issues found`)
