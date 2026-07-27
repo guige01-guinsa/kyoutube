@@ -107,7 +107,6 @@ jobs:
         run: |
           $flutterPath = (Get-Command flutter).Source
           $args = @(
-            "-ExecutionPolicy", "Bypass",
             "-File", "tools/release/run-internal-track-validation.ps1",
             "-FlutterPath", $flutterPath,
             "-SupabaseUrlProduction", $env:SUPABASE_URL_PRODUCTION,
@@ -117,6 +116,10 @@ jobs:
             "-PublicRecipeSyncSmokeSize", "${{ inputs.publicRecipeSyncSmokeSize }}"
           )
 
+          if ($IsWindows) {
+            $args = @("-ExecutionPolicy", "Bypass") + $args
+          }
+
           if ("${{ inputs.skipPublicRecipeSyncSmoke }}" -eq "true") {
             $args += "-SkipPublicRecipeSyncSmoke"
           }
@@ -125,7 +128,8 @@ jobs:
             $args += "-LocalVerification"
           }
 
-          powershell @args
+          $pwshPath = (Get-Command pwsh).Source
+          & $pwshPath @args
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
