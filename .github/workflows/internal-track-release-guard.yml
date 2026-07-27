@@ -18,10 +18,23 @@ on:
         type: number
         required: false
         default: 1
+      runnerLabel:
+        description: "Runner label for release guard experiment"
+        type: choice
+        required: false
+        default: windows-latest
+        options:
+          - windows-latest
+          - ubuntu-latest
+      flutterVersion:
+        description: "Pinned Flutter SDK version"
+        type: string
+        required: false
+        default: "3.44.8"
 
 jobs:
   release_guard:
-    runs-on: windows-latest
+    runs-on: ${{ inputs.runnerLabel }}
     env:
       SUPABASE_URL_PRODUCTION: ${{ secrets.SUPABASE_URL_PRODUCTION }}
       SUPABASE_ANON_KEY_PRODUCTION: ${{ secrets.SUPABASE_ANON_KEY_PRODUCTION }}
@@ -43,8 +56,10 @@ jobs:
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
+        timeout-minutes: 15
         with:
-          channel: stable
+          flutter-version: ${{ inputs.flutterVersion }}
+          cache: true
 
       - name: Guardrail A - Block LocalVerification in CI
         shell: pwsh
@@ -83,6 +98,7 @@ jobs:
           [System.IO.File]::WriteAllBytes("android/upload-keystore.jks", $keystoreBytes)
 
       - name: Configure Gradle for Windows runner
+        if: runner.os == 'Windows'
         shell: pwsh
         run: Add-Content -Path android/gradle.properties -Value "`nkotlin.incremental=false"
 
