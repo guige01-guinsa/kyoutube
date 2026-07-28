@@ -1,6 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 class Env {
   static const String appEnv =
-      String.fromEnvironment('APP_ENV', defaultValue: 'local');
+      String.fromEnvironment(
+        'APP_ENV',
+        defaultValue: kReleaseMode ? 'production' : 'unset',
+      );
 
   static const String _supabaseUrl =
       String.fromEnvironment('SUPABASE_URL', defaultValue: '');
@@ -57,6 +62,12 @@ class Env {
   }
 
   static void validate() {
+    if (appEnv == 'unset') {
+      throw StateError(
+        'APP_ENV is required. Pass one of local, staging, production via --dart-define=APP_ENV=... .',
+      );
+    }
+
     if (appEnv != 'local' && appEnv != 'staging' && appEnv != 'production') {
       throw StateError(
         'APP_ENV must be one of: local, staging, production.',
