@@ -33,10 +33,11 @@ Last update: 2026-07-19
 - Required docs updated.
 
 ## Now executing
-- Phase 2 / Feature Track / Step 1: Subscriber recipe MVP
+- Phase 2 / Operations & Policy Track / Step 1: Play Console internal track upload
 
 ## Progress update
 - Completed: Feature Track Step 1 (Subscriber recipe MVP)
-- Completed: Operations & policy Step 1 (Internal track release validation)
-- In progress: Operations & policy Step 2/3 (Firebase production config, policy package, and Play Data safety completion)
-- Blocker observed on latest strict release build: Windows policy blocked Flutter `gen_snapshot.EXE`; internal-track AAB upload must wait for allowlist or CI-host build.
+- Completed: Operations & policy Step 1 (Internal track release validation – signed AAB built, ~56 MB)
+- In progress: Operations & policy Step 1 upload (AAB ready, pending Play Console upload)
+- Pending: Operations & policy Step 2/3 (Firebase production config, policy package, and Play Data safety completion)
+- Next action: upload `build/app/outputs/bundle/release/app-release.aab` → see `docs/play-console-upload-guide.md`

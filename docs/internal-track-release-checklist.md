@@ -1,50 +1,50 @@
 # Internal Track Release Checklist
 
-Last update: 2026-07-19
+Last update: 2026-07-28
 
 ## Scope
 - Phase 2 / Operations & Policy Track / Step 1
 - Goal: produce a signed AAB and upload to Google Play internal testing
 
 ## Current status (workspace scan)
-- `android/key.properties`: present
-- upload keystore file: verify against `storeFile` path in `android/key.properties`
-- `android/app/google-services.json`: present
-- `ios/Runner/GoogleService-Info.plist`: missing
-- Strict release build result: blocked by Windows application control policy (`gen_snapshot.exe` execution blocked during release AOT)
+- `android/key.properties`: present ✅
+- upload keystore file: present ✅
+- `android/app/google-services.json`: present ✅
+- `ios/Runner/GoogleService-Info.plist`: missing (iOS not in current scope)
+- Strict release build result: ✅ AAB built successfully (~56 MB)
+- AAB location: `build/app/outputs/bundle/release/app-release.aab`
+- **Next action: upload AAB to Play Console internal testing track** → see `docs/play-console-upload-guide.md`
 
 ## Step-by-step
-1. Create release signing config
+1. ✅ Create release signing config
 - Copy `android/key.properties.example` to `android/key.properties`.
 - Fill all values: `storeFile`, `storePassword`, `keyAlias`, `keyPassword`.
 - Place the keystore file at the `storeFile` location.
 
-2. Add Firebase Android config
+2. ✅ Add Firebase Android config
 - Download `google-services.json` from Firebase Console for package `com.kyoutube.app`.
 - Place it at `android/app/google-services.json`.
 
-3. Add Firebase iOS config
+3. Add Firebase iOS config (skip if iOS is out of scope)
 - Download `GoogleService-Info.plist` from Firebase Console for the iOS app.
 - Place it at `ios/Runner/GoogleService-Info.plist`.
 - Open Runner in Xcode and ensure the plist is added to the Runner target resources.
 
-4. Build production-like signed AAB
+4. ✅ Build production-like signed AAB
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/release/run-internal-track-validation.ps1 \
-  -SupabaseUrlProduction "https://<your-project-ref>.supabase.co" \
+powershell -ExecutionPolicy Bypass -File tools/release/run-internal-track-validation.ps1 `
+  -SupabaseUrlProduction "https://<your-project-ref>.supabase.co" `
   -SupabaseAnonKeyProduction "<YOUR_PRODUCTION_ANON_KEY>"
 ```
 
-If build fails with `gen_snapshot.EXE` blocked on Windows:
-- Ask IT/security to allowlist: `C:\Users\ADMIN\tools\flutter\bin\cache\artifacts\engine\android-arm-release\windows-x64\gen_snapshot.EXE`
-- Re-run step 4 after policy update.
-- Alternative: run the same command on a trusted CI agent or another workstation without the block policy.
+AAB output: `build/app/outputs/bundle/release/app-release.aab` (~56 MB)
 
-5. Upload to Play Console Internal testing
+5. ⬜ **Upload to Play Console Internal testing**  ← current step
+- Follow the detailed guide in `docs/play-console-upload-guide.md`.
 - Upload `build/app/outputs/bundle/release/app-release.aab`.
-- Confirm track processing succeeds and tester install is available.
+- Confirm track processing succeeds and tester opt-in link is available.
 
-6. Smoke test on internal build
+6. ⬜ Smoke test on internal build
 - Login
 - Public recipe browse/detail
 - Copy to my recipe
