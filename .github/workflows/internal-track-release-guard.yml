@@ -68,6 +68,13 @@ jobs:
             throw "CI pipeline guard: localVerification must be false."
           }
 
+      - name: Guardrail A2 - Allow only main branch dispatch
+        shell: pwsh
+        run: |
+          if ("${{ github.ref_name }}" -ne "main") {
+            throw "CI pipeline guard: run this workflow from main only. Current ref: ${{ github.ref_name }}"
+          }
+
       - name: Guardrail B - Validate required secrets
         shell: pwsh
         run: |
