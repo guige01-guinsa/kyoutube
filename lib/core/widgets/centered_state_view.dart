@@ -22,56 +22,70 @@ class CenteredStateView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(
-                    icon,
-                    size: 56,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final hasBoundedHeight = constraints.hasBoundedHeight;
+        final minHeight = hasBoundedHeight
+            ? (constraints.maxHeight - 48).clamp(0.0, double.infinity)
+            : 0.0;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: hasBoundedHeight
+                ? BoxConstraints(minHeight: minHeight)
+                : const BoxConstraints(),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          icon,
+                          size: 56,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                  ),
-                  if (actionLabel != null && onAction != null) ...<Widget>[
-                    const SizedBox(height: 20),
-                    FilledButton(
-                      onPressed: onAction,
-                      child: Text(actionLabel!),
+                        const SizedBox(height: 16),
+                        Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          message,
+                          textAlign: TextAlign.center,
+                        ),
+                        if (actionLabel != null && onAction != null) ...<Widget>[
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: onAction,
+                            child: Text(actionLabel!),
+                          ),
+                        ],
+                        if (secondaryActionLabel != null &&
+                            onSecondaryAction != null) ...<Widget>[
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: onSecondaryAction,
+                            child: Text(secondaryActionLabel!),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                  if (secondaryActionLabel != null &&
-                      onSecondaryAction != null) ...<Widget>[
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: onSecondaryAction,
-                      child: Text(secondaryActionLabel!),
-                    ),
-                  ],
-                ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

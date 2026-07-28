@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/auth/presentation/login_page.dart';
+import '../../features/cooking/presentation/quick_cook_page.dart';
 import '../../features/home/presentation/home_page.dart';
+import '../../features/auth/presentation/login_page.dart';
+import '../../features/onboarding/presentation/onboarding_page.dart';
 import '../../features/recipes/presentation/create_creator_recipe_page.dart';
 import '../../features/recipes/presentation/bookmarked_recipes_page.dart';
 import '../../features/recipes/presentation/creator_recipe_detail_page.dart';
@@ -11,6 +13,7 @@ import '../../features/recipes/presentation/recipe_detail_page.dart';
 import '../../features/recipes/presentation/subscriber_recipe_detail_page.dart';
 import '../../features/recipes/presentation/subscriber_recipes_page.dart';
 import '../../features/kitchen/presentation/kitchen_page.dart';
+import '../../core/ops/presentation/ops_dashboard_page.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -18,13 +21,24 @@ class AppRouter {
     routes: <RouteBase>[
       GoRoute(
         path: '/',
-        builder: (BuildContext context, GoRouterState state) =>
-            const HomePage(),
+        builder: (BuildContext context, GoRouterState state) {
+          final source = state.uri.queryParameters['source'] ?? 'public';
+          return HomePage(initialSearchSource: source);
+        },
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (BuildContext context, GoRouterState state) {
+          final returnTo = state.uri.queryParameters['returnTo'] ?? '/';
+          return OnboardingPage(returnTo: returnTo);
+        },
       ),
       GoRoute(
         path: '/login',
-        builder: (BuildContext context, GoRouterState state) =>
-            const LoginPage(),
+        builder: (BuildContext context, GoRouterState state) {
+          final returnTo = state.uri.queryParameters['returnTo'] ?? '/';
+          return LoginPage(returnTo: returnTo);
+        },
       ),
       GoRoute(
         path: '/bookmarks',
@@ -36,6 +50,14 @@ class AppRouter {
         builder: (BuildContext context, GoRouterState state) {
           final id = state.pathParameters['id'] ?? '';
           return RecipeDetailPage(recipeId: id);
+        },
+      ),
+      GoRoute(
+        path: '/quick-cook/:id',
+        builder: (BuildContext context, GoRouterState state) {
+          final id = state.pathParameters['id'] ?? '';
+          final source = state.uri.queryParameters['source'] ?? 'public';
+          return QuickCookPage(recipeId: id, sourceType: source);
         },
       ),
       GoRoute(
@@ -69,10 +91,13 @@ class AppRouter {
       ),
       GoRoute(
         path: '/kitchen',
-        builder: (BuildContext context, GoRouterState state) {
-          final tab = state.uri.queryParameters['tab'] ?? 'ingredients';
-          return KitchenPage(initialTab: tab);
-        },
+        builder: (BuildContext context, GoRouterState state) =>
+            const KitchenPage(),
+      ),
+      GoRoute(
+        path: '/ops',
+        builder: (BuildContext context, GoRouterState state) =>
+            const OpsDashboardPage(),
       ),
     ],
   );

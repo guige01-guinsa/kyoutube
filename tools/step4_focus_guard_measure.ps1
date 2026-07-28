@@ -11,16 +11,16 @@ adb shell cmd statusbar collapse | Out-Null
 adb shell settings put system screen_off_timeout 1800000 | Out-Null
 
 for ($i = 1; $i -le 2; $i++) {
-  adb shell am force-stop com.kyoutube.kyoutube | Out-Null
-  adb shell am start -n com.kyoutube.kyoutube/com.kyoutube.kyoutube.MainActivity | Out-Null
+  adb shell am force-stop com.kyoutube.app | Out-Null
+  adb shell am start -n com.kyoutube.app/com.kyoutube.app.MainActivity | Out-Null
 
   $focus = (adb shell dumpsys window | Select-String 'mCurrentFocus').ToString()
-  if ($focus -notmatch 'com.kyoutube.kyoutube') {
+  if ($focus -notmatch 'com.kyoutube.app') {
     adb shell cmd statusbar collapse | Out-Null
-    adb shell am start -n com.kyoutube.kyoutube/com.kyoutube.kyoutube.MainActivity | Out-Null
+    adb shell am start -n com.kyoutube.app/com.kyoutube.app.MainActivity | Out-Null
   }
 
-  adb shell dumpsys gfxinfo com.kyoutube.kyoutube reset | Out-Null
+  adb shell dumpsys gfxinfo com.kyoutube.app reset | Out-Null
 
   adb shell input tap 720 520
   adb shell input keyevent 67
@@ -36,13 +36,13 @@ for ($i = 1; $i -le 2; $i++) {
   adb shell input keyevent 4
 
   $focus2 = (adb shell dumpsys window | Select-String 'mCurrentFocus').ToString()
-  if ($focus2 -notmatch 'com.kyoutube.kyoutube') {
+  if ($focus2 -notmatch 'com.kyoutube.app') {
     adb shell cmd statusbar collapse | Out-Null
-    adb shell am start -n com.kyoutube.kyoutube/com.kyoutube.kyoutube.MainActivity | Out-Null
+    adb shell am start -n com.kyoutube.app/com.kyoutube.app.MainActivity | Out-Null
   }
 
   $outFile = Join-Path $env:TEMP "step4_focus_guard_run_$i.txt"
-  adb shell dumpsys gfxinfo com.kyoutube.kyoutube > $outFile
+  adb shell dumpsys gfxinfo com.kyoutube.app > $outFile
   $txt = Get-Content $outFile -Raw
 
   $frames = [int]([regex]::Match($txt, 'Total frames rendered:\s*(\d+)').Groups[1].Value)

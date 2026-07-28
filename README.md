@@ -135,7 +135,7 @@ flutter run \
 - 로그인 후 홈 우측 상단 `내 레시피` 아이콘으로 creator 목록 화면에 진입합니다.
 
 ## Firebase setup
-1. Firebase Console에서 프로젝트를 만들고 Cloud Messaging을 사용할 Android 앱 `com.kyoutube.kyoutube`을 등록합니다.
+1. Firebase Console에서 프로젝트를 만들고 Cloud Messaging을 사용할 Android 앱 `com.kyoutube.app`을 등록합니다.
 2. `google-services.json`을 다운로드해 `android/app/google-services.json`에 배치합니다.
 3. iOS도 사용할 경우 Firebase Console에서 iOS 앱을 추가하고 `GoogleService-Info.plist`를 다운로드합니다.
 4. `GoogleService-Info.plist`를 `ios/Runner` 아래에 복사한 뒤 Xcode에서 Runner target 리소스로 추가합니다.
@@ -195,7 +195,7 @@ flutter build appbundle \
 Production submission should run without `-PallowDebugSigningForRelease=true`.
 
 Before store submission, update these Android items:
-- `applicationId` in `android/app/build.gradle.kts` if you want a different final Play identifier than `com.kyoutube.kyoutube`
+- `applicationId` in `android/app/build.gradle.kts` if you want a different final Play identifier than `com.kyoutube.app`
 - `namespace` in `android/app/build.gradle.kts` if you change the package id
 - `package` path for `MainActivity.kt` if you change the package id
 - `app_name` in `android/app/src/main/res/values/strings.xml`

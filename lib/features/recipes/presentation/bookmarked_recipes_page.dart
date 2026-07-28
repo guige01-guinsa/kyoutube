@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/centered_state_view.dart';
 import '../application/recipe_providers.dart';
 import '../domain/bookmarked_recipe.dart';
-import '../../../core/widgets/centered_state_view.dart';
 
 class BookmarkedRecipesPage extends ConsumerWidget {
   const BookmarkedRecipesPage({super.key});
@@ -21,9 +21,9 @@ class BookmarkedRecipesPage extends ConsumerWidget {
             return CenteredStateView(
               icon: Icons.bookmark_outline,
               title: '저장한 북마크가 없습니다',
-              message: '공개 또는 크리에이터 상세에서 북마크를 눌러 모아 보세요.',
-              actionLabel: '공개 레시피 보기',
-              onAction: () => context.push('/'),
+              message: '레시피 상세에서 북마크 버튼을 눌러 모아 보세요.',
+              actionLabel: '홈으로 이동',
+              onAction: () => context.go('/'),
             );
           }
 

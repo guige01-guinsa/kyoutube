@@ -52,6 +52,20 @@ app.*.map.json
 # Supabase function local environment
 /supabase/functions/.env
 
+# Local developer environment overrides
+/.env.local
+/.env.development
+
+# Local device and release-validation artifacts
+/.artifacts/
+/ci_artifacts/
+/tmp_device_apk_extract/
+/tmp_device_base.apk
+/tmp_device_ui.xml
+/device*.png
+/ui*.xml
+/supabase/.temp/
+
 # Android release signing
 /android/key.properties
 *.jks

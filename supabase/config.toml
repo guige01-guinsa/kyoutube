@@ -15,3 +15,30 @@ major_version = 15
 [studio]
 enabled = true
 port = 54323
+
+[auth]
+enabled = true
+site_url = "io.supabase.kyoutube://login-callback"
+enable_anonymous_sign_ins = true
+additional_redirect_urls = [
+  "io.supabase.kyoutube://login-callback",
+  "http://127.0.0.1:54321/auth/v1/callback"
+]
+
+[auth.external.google]
+enabled = true
+# Google Cloud Console → API 및 서비스 → OAuth 2.0 클라이언트 → 클라이언트 ID (웹 애플리케이션)
+client_id = "env(AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(AUTH_GOOGLE_SECRET)"
+# 승인된 리디렉션 URI에 아래 URL 추가 필요:
+# https://<project-ref>.supabase.co/auth/v1/callback  (프로덕션)
+# http://127.0.0.1:54321/auth/v1/callback             (로컬)
+
+[auth.external.kakao]
+enabled = false
+# Kakao Developers → 내 애플리케이션 → REST API 키를 client_id로 사용
+client_id = ""
+secret = "env(AUTH_KAKAO_SECRET)"
+# Kakao 앱 설정 → 카카오 로그인 → Redirect URI에 아래 URL 추가 필요:
+# https://<project-ref>.supabase.co/auth/v1/callback  (프로덕션)
+# http://127.0.0.1:54321/auth/v1/callback             (로컬)

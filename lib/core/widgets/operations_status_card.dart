@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
+import '../ops/ops_report_formatter.dart';
 import '../ops/ops_monitor_service.dart';
 import 'centered_state_view.dart';
 
@@ -13,25 +15,6 @@ class OperationsStatusCard extends StatelessWidget {
     final minute = local.minute.toString().padLeft(2, '0');
     final second = local.second.toString().padLeft(2, '0');
     return '$hour:$minute:$second';
-  }
-
-  String _buildReport(OpsMonitorState state) {
-    final buffer = StringBuffer()
-      ..writeln('env=${state.appEnv}')
-      ..writeln('phase=${state.phase}')
-      ..writeln('ready=${state.isReady}')
-      ..writeln('startupError=${state.startupError == null ? '-' : OpsMonitorService.redact(state.startupError!)}')
-      ..writeln('recentErrors=${state.recentErrors.length}');
-
-    for (final error in state.recentErrors) {
-      buffer
-        ..writeln('---')
-        ..writeln('${error.timestamp.toIso8601String()} | ${error.source} | ${OpsMonitorService.redact(error.message)}')
-        ..writeln('fatal=${error.isFatal}')
-        ..writeln(error.stackTrace == null ? '-' : OpsMonitorService.redact(error.stackTrace!));
-    }
-
-    return buffer.toString();
   }
 
   @override
@@ -47,25 +30,59 @@ class OperationsStatusCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Icon(Icons.monitor_heart_outlined, color: colorScheme.primary),
-                    const SizedBox(width: 8),
-                    Text(
+                LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints constraints) {
+                    final title = Text(
                       '운영 상태',
                       style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const Spacer(),
-                    Chip(
+                    );
+                    final statusChip = Chip(
                       label: Text(state.isReady ? '준비 완료' : '점검 필요'),
                       side: BorderSide(color: colorScheme.outlineVariant),
-                    ),
-                  ],
+                    );
+
+                    if (constraints.maxWidth < 380) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              Icon(
+                                Icons.monitor_heart_outlined,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(child: title),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          statusChip,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: <Widget>[
+                        Icon(
+                          Icons.monitor_heart_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        title,
+                        const Spacer(),
+                        statusChip,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 Text('환경: ${state.appEnv}'),
                 const SizedBox(height: 4),
                 Text('현재 단계: ${state.phase}'),
+                const SizedBox(height: 4),
+                Text(
+                  '최근 시작 시간: ${state.startupTotalMs == null ? '-' : '${state.startupTotalMs}ms'}',
+                ),
                 const SizedBox(height: 4),
                 Text('최근 오류: ${state.recentErrors.length}건'),
                 if (state.startupError != null) ...<Widget>[
@@ -99,7 +116,8 @@ class OperationsStatusCard extends StatelessWidget {
                               children: <Widget>[
                                 Text(
                                   '[${_formatTimestamp(event.timestamp)}] ${event.source}',
-                                  style: Theme.of(context).textTheme.labelMedium,
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -111,7 +129,8 @@ class OperationsStatusCard extends StatelessWidget {
                                   const SizedBox(height: 4),
                                   Text(
                                     'stack trace saved',
-                                    style: Theme.of(context).textTheme.labelSmall,
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall,
                                   ),
                                 ],
                               ],
@@ -128,9 +147,21 @@ class OperationsStatusCard extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     OutlinedButton(
+                      onPressed: () {
+                        context.push('/ops');
+                      },
+                      child: const Text('대시보드 열기'),
+                    ),
+                    OutlinedButton(
                       onPressed: () async {
+                        final counters =
+                            await OpsMonitorService.getEventCounters();
+                        final report = OpsReportFormatter.buildStandardReport(
+                          opsState: state,
+                          eventCounters: counters,
+                        );
                         await Clipboard.setData(
-                          ClipboardData(text: _buildReport(state)),
+                          ClipboardData(text: report),
                         );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -147,7 +178,8 @@ class OperationsStatusCard extends StatelessWidget {
                               await OpsMonitorService.clearRecentErrors();
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('최근 오류를 지웠습니다.')),
+                                  const SnackBar(
+                                      content: Text('최근 오류를 지웠습니다.')),
                                 );
                               }
                             },

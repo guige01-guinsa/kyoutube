@@ -1,8 +1,8 @@
-# Privacy Policy Draft
+# Privacy Policy
 
 Last update: 2026-07-19
 
-This draft is intended to be published as the app's privacy policy page for Google Play submission. Replace placeholders before publishing.
+This policy is intended to be used as the app's privacy policy page for Google Play submission.
 
 ## What the app collects
 - Account information: email address used for login and authentication.
@@ -36,11 +36,11 @@ This draft is intended to be published as the app's privacy policy page for Goog
 - You can disable notifications through device settings.
 
 ## Contact
-- Privacy contact URL: <YOUR_PRIVACY_POLICY_URL>
-- Support email: <YOUR_SUPPORT_EMAIL>
+- Privacy contact URL: https://github.com/guige01-guinsa/kyoutube/blob/main/docs/privacy-policy.md
+- Support channel: https://github.com/guige01-guinsa/kyoutube/issues
 
 ## Finalization checklist
-- [ ] Replace placeholders.
-- [ ] Publish to a stable public URL.
-- [ ] Match Google Play Data safety answers to this policy.
-- [ ] Review with legal or policy owner if required.
+- [x] Replace placeholders.
+- [x] Publish to a stable public URL.
+- [x] Match Google Play Data safety answers to this policy.
+- [x] Review with policy owner before Play Console submission.

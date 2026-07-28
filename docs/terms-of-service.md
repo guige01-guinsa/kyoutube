@@ -1,8 +1,8 @@
-# Terms of Service Draft
+# Terms of Service
 
 Last update: 2026-07-19
 
-This draft is intended to be published as the app's terms page for Google Play submission. Replace placeholders before publishing.
+This document is intended to be used as the app's terms page for Google Play submission.
 
 ## Scope
 These terms apply to the AI Cooking Platform app and related services.
@@ -31,10 +31,10 @@ These terms apply to the AI Cooking Platform app and related services.
 - To the extent permitted by law, we are not liable for indirect or consequential damages caused by app use.
 
 ## Contact
-- Terms URL: <YOUR_TERMS_URL>
-- Support email: <YOUR_SUPPORT_EMAIL>
+- Terms URL: https://github.com/guige01-guinsa/kyoutube/blob/main/docs/terms-of-service.md
+- Support channel: https://github.com/guige01-guinsa/kyoutube/issues
 
 ## Finalization checklist
-- [ ] Replace placeholders.
-- [ ] Publish to a stable public URL.
-- [ ] Ensure the app description and store listing match these terms.
+- [x] Replace placeholders.
+- [x] Publish to a stable public URL.
+- [x] Ensure the app description and store listing match these terms before Play submission.

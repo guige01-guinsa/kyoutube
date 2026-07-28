@@ -14,11 +14,22 @@ Future<void> main() async {
 
     try {
       await OpsMonitorService.initialize();
+      await OpsMonitorService.beginStartupRun();
 
       FlutterError.onError = (FlutterErrorDetails details) {
         FlutterError.presentError(details);
+        final diagnostic = details.informationCollector == null
+            ? null
+            : details
+                .informationCollector!()
+                .map((DiagnosticsNode node) => node.toDescription())
+                .join('\n');
         OpsMonitorService.recordError(
-          details.exception,
+          StateError(
+            diagnostic == null
+                ? details.exception.toString()
+                : '${details.exception}\n$diagnostic',
+          ),
           source: 'flutter',
           stackTrace: details.stack,
         );

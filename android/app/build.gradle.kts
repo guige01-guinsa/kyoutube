@@ -25,7 +25,7 @@ val hasReleaseSigning =
     !keystoreProperties.getProperty("keyPassword").isNullOrBlank()
 
 android {
-    namespace = "com.kyoutube.kyoutube"
+    namespace = "com.kyoutube.app"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -35,7 +35,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.kyoutube.kyoutube"
+        applicationId = "com.kyoutube.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

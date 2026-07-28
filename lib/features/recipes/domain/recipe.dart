@@ -10,6 +10,7 @@ class Recipe {
     this.youtubeUrl,
     this.notes,
     this.visibility,
+    this.sourceType,
   });
 
   final String id;
@@ -22,4 +23,12 @@ class Recipe {
   final String? youtubeUrl;
   final String? notes;
   final String? visibility;
+  final String? sourceType;
+}
+
+class RecipeSourceType {
+  static const String manual = 'manual';
+  static const String publicImport = 'public_import';
+  static const String youtubeImport = 'youtube_import';
+  static const String creatorCopy = 'creator_copy';
 }

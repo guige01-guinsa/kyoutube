@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
-$package = 'com.kyoutube.kyoutube'
-$activity = 'com.kyoutube.kyoutube.MainActivity'
+$package = 'com.kyoutube.app'
+$activity = 'com.kyoutube.app.MainActivity'
 $gateFrames = 30
 $gateP95 = 50
 $gateSlowUi = 3

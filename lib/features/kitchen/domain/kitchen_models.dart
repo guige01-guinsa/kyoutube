@@ -1,42 +1,3 @@
-class KitchenIngredient {
-  const KitchenIngredient({
-    required this.id,
-    required this.name,
-    this.quantity,
-    this.unit,
-    this.storageLocation,
-    this.expiresOn,
-    this.note,
-  });
-
-  final String id;
-  final String name;
-  final double? quantity;
-  final String? unit;
-  final String? storageLocation;
-  final String? expiresOn;
-  final String? note;
-
-  factory KitchenIngredient.fromJson(Map<String, dynamic> json) {
-    double? parseQuantity(dynamic value) {
-      if (value is num) {
-        return value.toDouble();
-      }
-      return null;
-    }
-
-    return KitchenIngredient(
-      id: (json['id'] ?? '').toString(),
-      name: (json['name'] ?? '').toString(),
-      quantity: parseQuantity(json['quantity']),
-      unit: json['unit']?.toString(),
-      storageLocation: json['storage_location']?.toString(),
-      expiresOn: json['expires_on']?.toString(),
-      note: json['note']?.toString(),
-    );
-  }
-}
-
 class KitchenShoppingItem {
   const KitchenShoppingItem({
     required this.id,
@@ -80,6 +41,8 @@ class KitchenShoppingList {
     required this.title,
     required this.items,
     required this.openItemCount,
+    this.createdAt,
+    this.updatedAt,
   });
 
   final String id;
@@ -87,6 +50,8 @@ class KitchenShoppingList {
   final String title;
   final List<KitchenShoppingItem> items;
   final int openItemCount;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   factory KitchenShoppingList.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -113,6 +78,8 @@ class KitchenShoppingList {
       title: (json['title'] ?? '').toString(),
       items: parsedItems,
       openItemCount: parseCount(json['open_item_count']),
+      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
+      updatedAt: DateTime.tryParse((json['updated_at'] ?? '').toString()),
     );
   }
 }

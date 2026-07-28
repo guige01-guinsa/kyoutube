@@ -20,7 +20,7 @@ Last update: 2026-07-26
 - Place the keystore file at the `storeFile` location.
 
 2. Add Firebase Android config
-- Download `google-services.json` from Firebase Console for package `com.kyoutube.kyoutube`.
+- Download `google-services.json` from Firebase Console for package `com.kyoutube.app`.
 - Place it at `android/app/google-services.json`.
 
 3. Add Firebase iOS config

@@ -88,4 +88,4 @@ For `.github/workflows/internal-track-release-guard.yml` workflow_dispatch:
 2. `PUBLIC_RECIPE_SYNC_WORKER_SECRET` matches Supabase runtime env.
 3. `ANDROID_KEY_PROPERTIES` points to `storeFile=../upload-keystore.jks`.
 4. `ANDROID_UPLOAD_KEYSTORE_BASE64` decodes to the same keystore used by Play upload key.
-5. `ANDROID_GOOGLE_SERVICES_JSON` matches package id `com.kyoutube.kyoutube`.
+5. `ANDROID_GOOGLE_SERVICES_JSON` matches package id `com.kyoutube.app`.

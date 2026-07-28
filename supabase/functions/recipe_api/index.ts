@@ -72,135 +72,53 @@ function getEnv(name: string): string {
   return Deno.env.get(name) ?? "";
 }
 
-function buildCookRcpApiUrl(start: number, end: number): string {
-  const apiBaseUrl = getEnv("FOOD_API_BASE_URL").trim();
-  const apiKey = getEnv("FOOD_API_KEY").trim();
-  const apiUrlTemplate = getEnv("FOOD_API_URL_TEMPLATE").trim();
-
-  if (apiBaseUrl.length === 0 || apiKey.length === 0) {
-    throw new Error("FOOD_API_BASE_URL or FOOD_API_KEY is missing");
+function scoreLocalRecipe(row: PublicRecipeRow, tokens: string[], search: string): number {
+  if (tokens.length === 0) {
+    return 0;
   }
 
-  if (apiUrlTemplate.length > 0) {
-    return apiUrlTemplate
-      .replaceAll("{API_KEY}", apiKey)
-      .replaceAll("{SVC_NO}", "COOKRCP01")
-      .replaceAll("{START}", String(start))
-      .replaceAll("{END}", String(end));
-  }
+  const text = buildSearchText(row);
+  let score = 0;
+  let matchedTokens = 0;
 
-  if (apiBaseUrl.includes("{API_KEY}") || apiBaseUrl.includes("{START}") || apiBaseUrl.includes("{END}")) {
-    return apiBaseUrl
-      .replaceAll("{API_KEY}", apiKey)
-      .replaceAll("{SVC_NO}", "COOKRCP01")
-      .replaceAll("{START}", String(start))
-      .replaceAll("{END}", String(end));
-  }
+  for (const token of tokens) {
+    const candidates = expandKeywordToken(token).concat(expandAiToken(token));
+    let tokenMatched = false;
 
-  return `${apiBaseUrl.replace(/\/$/, "")}/${apiKey}/COOKRCP01/json/${start}/${end}`;
-}
+    for (const candidate of candidates) {
+      if (text.title.includes(candidate)) {
+        score += candidate === token ? 18 : 10;
+        tokenMatched = true;
+      }
+      if (text.summary.includes(candidate)) {
+        score += candidate === token ? 10 : 6;
+        tokenMatched = true;
+      }
+      if (text.ingredients.includes(candidate)) {
+        score += candidate === token ? 14 : 8;
+        tokenMatched = true;
+      }
+      if (text.steps.includes(candidate)) {
+        score += candidate === token ? 8 : 4;
+        tokenMatched = true;
+      }
+      if (text.compact.includes(compactSearchText(candidate))) {
+        score += candidate === token ? 12 : 6;
+        tokenMatched = true;
+      }
+    }
 
-function splitIngredients(text: string): string[] {
-  return text
-    .split(/[\n,]/g)
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-}
-
-function pickSteps(record: Record<string, unknown>): string[] {
-  const steps: string[] = [];
-
-  for (let i = 1; i <= 20; i += 1) {
-    const key = `MANUAL${String(i).padStart(2, "0")}`;
-    const value = String(record[key] ?? "").trim();
-    if (value.length > 0) {
-      steps.push(value);
+    if (tokenMatched) {
+      matchedTokens += 1;
     }
   }
 
-  return steps;
-}
-
-function mapPublicApiRecord(record: Record<string, unknown>): PublicRecipeRow | null {
-  const sourceId = String(record.RCP_SEQ ?? record.id ?? "").trim();
-  const title = String(record.RCP_NM ?? record.RCP_NM_KO ?? record.title ?? "").trim();
-  if (sourceId.length === 0 || title.length === 0) {
-    return null;
+  const compactQuery = compactSearchText(search);
+  if (compactQuery.length > 1 && text.compact.includes(compactQuery)) {
+    score += 20;
   }
 
-  const summary = String(record.HASH_TAG ?? record.RCP_PAT2 ?? record.summary ?? "").trim();
-  const ingredients = splitIngredients(String(record.RCP_PARTS_DTLS ?? record.ingredients ?? ""));
-  const steps = pickSteps(record);
-  const caloriesRaw = String(record.INFO_ENG ?? record.calories ?? "").trim();
-  const calories = caloriesRaw.length > 0 ? Number(caloriesRaw) : null;
-  const imageUrl = String(record.ATT_FILE_NO_MAIN ?? record.image_url ?? "").trim();
-  const now = new Date().toISOString();
-
-  return {
-    id: sourceId,
-    source_id: sourceId,
-    title,
-    summary: summary.length > 0 ? summary : null,
-    ingredients,
-    steps,
-    calories: Number.isFinite(calories) ? calories : null,
-    image_url: imageUrl.length > 0 ? imageUrl : null,
-    created_at: now,
-    updated_at: now,
-  };
-}
-
-async function fetchCookRcpRows(start: number, end: number): Promise<PublicRecipeRow[]> {
-  const timeoutMsRaw = Number(getEnv("FOOD_API_TIMEOUT_MS") || "12000");
-  const timeoutMs = Number.isFinite(timeoutMsRaw)
-    ? Math.max(3000, Math.min(timeoutMsRaw, 30000))
-    : 12000;
-
-  const response = await fetch(buildCookRcpApiUrl(start, end), {
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!response.ok) {
-    throw new Error(`COOKRCP01 request failed: ${response.status}`);
-  }
-
-  const payload = await response.json();
-  const rows = Array.isArray(payload?.COOKRCP01?.row)
-    ? payload.COOKRCP01.row
-    : (Array.isArray(payload?.row) ? payload.row : []);
-
-  if (!Array.isArray(rows)) {
-    return [];
-  }
-
-  return rows
-    .map((item: Record<string, unknown>) => mapPublicApiRecord(item))
-    .filter((item: PublicRecipeRow | null): item is PublicRecipeRow => item !== null);
-}
-
-async function fetchPublicRecipeBySourceId(sourceId: string): Promise<PublicRecipeRow | null> {
-  const pageSize = 300;
-  const maxPages = 40;
-
-  for (let page = 0; page < maxPages; page += 1) {
-    const start = page * pageSize + 1;
-    const end = start + pageSize - 1;
-    const rows = await fetchCookRcpRows(start, end);
-
-    if (rows.length === 0) {
-      break;
-    }
-
-    const match = rows.find((row) => row.source_id === sourceId);
-    if (match) {
-      return match;
-    }
-
-    if (rows.length < pageSize) {
-      break;
-    }
-  }
-
-  return null;
+  return score + matchedTokens * 2;
 }
 
 function getSupabaseConfig(): {
@@ -285,12 +203,29 @@ function parseSearchMode(url: URL): "keyword" | "ai" {
 
 function tokenizeSearch(search: string): string[] {
   return search
-    .trim()
     .toLowerCase()
-    .split(/[\s,]+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .split(/\s+/)
+    .map((token) => normalizeSearchToken(token))
+    .filter((token) => token.length > 0 && !isSearchStopWord(token))
     .slice(0, 8);
+}
+
+function normalizeSearchToken(token: string): string {
+  const trimmed = token.trim();
+  if (trimmed.length < 3) {
+    return trimmed;
+  }
+
+  return trimmed.replace(/(으로|에서|에게|까지|부터|하고|이며|이다|은|는|이|가|을|를|와|과|의|로|에|도|만|랑)$/u, "");
+}
+
+function isSearchStopWord(token: string): boolean {
+  return ["레시피", "요리", "음식", "만들기", "만드는법", "방법"].includes(token);
+}
+
+function compactSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function toStringList(values: unknown): string[] {
@@ -309,6 +244,7 @@ function buildSearchText(row: PublicRecipeRow): {
   ingredients: string;
   steps: string;
   all: string;
+  compact: string;
 } {
   const title = (row.title ?? "").toLowerCase();
   const summary = (row.summary ?? "").toLowerCase();
@@ -321,7 +257,67 @@ function buildSearchText(row: PublicRecipeRow): {
     ingredients,
     steps,
     all: `${title} ${summary} ${ingredients} ${steps}`.trim(),
+    compact: compactSearchText(`${title} ${summary} ${ingredients} ${steps}`),
   };
+}
+
+function isFallbackSample(row: PublicRecipeRow): boolean {
+  const sourceId = String(row.source_id ?? "").toLowerCase();
+  if (sourceId.startsWith("fallback-")) {
+    return true;
+  }
+
+  const summary = String(row.summary ?? "").toLowerCase();
+  return summary.includes("공공 api 키 미설정");
+}
+
+function preferRealRows(rows: PublicRecipeRow[]): PublicRecipeRow[] {
+  const realRows = rows.filter((row) => !isFallbackSample(row));
+  return realRows.length > 0 ? realRows : rows;
+}
+
+function ensureImageUrl(row: PublicRecipeRow): PublicRecipeRow {
+  if ((row.image_url ?? "").trim().length > 0) {
+    return row;
+  }
+
+  const seed = String(row.source_id ?? row.title ?? "recipe").trim();
+  return {
+    ...row,
+    image_url: `https://picsum.photos/seed/${encodeURIComponent(seed)}/640/360`,
+  };
+}
+
+function expandKeywordToken(token: string): string[] {
+  const dictionary: Record<string, string[]> = {
+    "계란": ["달걀"],
+    "달걀": ["계란"],
+    "닭": ["닭고기", "치킨", "chicken"],
+    "닭고기": ["닭"],
+    "치킨": ["닭", "닭고기", "chicken"],
+    "돼지": ["돼지고기", "삼겹살", "목살", "pork"],
+    "돼지고기": ["돼지", "삼겹살", "목살"],
+    "소고기": ["한우", "쇠고기", "불고기", "beef"],
+    "쇠고기": ["소고기", "한우", "불고기", "beef"],
+    "소불고기": ["불고기", "소고기"],
+    "밥": ["쌀", "볶음밥", "덮밥", "죽"],
+    "쌀": ["밥", "라이스", "rice"],
+    "새우": ["shrimp", "해물"],
+    "오징어": ["squid", "해물"],
+    "두부": ["tofu"],
+    "김치": ["배추김치", "묵은지"],
+    "볶음": ["볶아", "볶는", "볶는다", "볶은", "볶기", "볶다"],
+    "굽기": ["굽는", "굽는다", "구워", "구운", "굽다"],
+    "구이": ["굽는", "굽는다", "구워", "구운", "굽다"],
+    "끓이기": ["끓는", "끓인다", "끓여", "끓인", "끓이다"],
+    "찌기": ["찌는", "찐다", "쪄", "찐", "찌다"],
+    "튀기기": ["튀기는", "튀긴", "튀겨", "튀기다"],
+    "무침": ["무쳐", "무치는", "무친", "무치다"],
+    "조림": ["졸임", "조려", "조리는", "조린", "조리다"],
+    "졸임": ["조림", "조려", "조리는", "조린", "조리다"],
+  };
+
+  return [token, ...(dictionary[token] ?? [])].map((value) => value.toLowerCase());
 }
 
 function expandAiToken(token: string): string[] {
@@ -341,60 +337,15 @@ function expandAiToken(token: string): string[] {
   };
 
   const extras = dictionary[token] ?? [];
-  return [token, ...extras.map((item) => item.toLowerCase())];
+  return [...expandKeywordToken(token), ...extras.map((item) => item.toLowerCase())];
 }
 
-function matchesKeywordSearch(row: PublicRecipeRow, tokens: string[]): boolean {
-  if (tokens.length === 0) {
-    return true;
-  }
-
-  const text = buildSearchText(row);
-  return tokens.every((token) => text.all.includes(token));
+function scoreKeywordSearch(row: PublicRecipeRow, tokens: string[], search: string): number {
+  return scoreLocalRecipe(row, tokens, search);
 }
 
 function scoreAiSearch(row: PublicRecipeRow, tokens: string[]): number {
-  if (tokens.length === 0) {
-    return 0;
-  }
-
-  const text = buildSearchText(row);
-  let score = 0;
-  let matchedGroups = 0;
-
-  for (const token of tokens) {
-    const candidates = expandAiToken(token);
-    let matched = false;
-
-    for (const word of candidates) {
-      if (text.title.includes(word)) {
-        score += 4;
-        matched = true;
-      }
-      if (text.summary.includes(word)) {
-        score += 3;
-        matched = true;
-      }
-      if (text.ingredients.includes(word)) {
-        score += 3;
-        matched = true;
-      }
-      if (text.steps.includes(word)) {
-        score += 2;
-        matched = true;
-      }
-    }
-
-    if (matched) {
-      matchedGroups += 1;
-    }
-  }
-
-  if (matchedGroups == 0) {
-    return 0;
-  }
-
-  return score + matchedGroups;
+  return scoreLocalRecipe(row, tokens, tokens.join(" "));
 }
 
 function getBearerToken(req: Request): string | null {
@@ -409,6 +360,21 @@ function getBearerToken(req: Request): string | null {
   }
 
   return token.trim();
+}
+
+function hasBearerToken(req: Request): boolean {
+  return getBearerToken(req) != null;
+}
+
+function creatorAuthRequiredResponse(): Response {
+  return errorResponse(
+    401,
+    "CREATOR_AUTH_REQUIRED: creator API requires authentication; anonymous usage is limited to local draft only",
+    {
+      policy: "local_draft_only",
+      allow_anonymous_server_save: false,
+    }
+  );
 }
 
 async function getAuthenticatedUserId(req: Request): Promise<{ userId?: string; error?: Response }> {
@@ -462,6 +428,36 @@ async function restRequest(path: string, init: RequestInit): Promise<Response> {
     ...init,
     headers
   });
+}
+
+async function persistPublicRecipes(rows: PublicRecipeRow[]): Promise<PublicRecipeRow[]> {
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const response = await restRequest("/rest/v1/recipes_public?on_conflict=source_id", {
+    method: "POST",
+    headers: {
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify(rows.map((row) => ({
+      source_id: row.source_id,
+      title: row.title,
+      summary: row.summary,
+      ingredients: row.ingredients,
+      steps: row.steps,
+      calories: row.calories,
+      image_url: row.image_url,
+    }))),
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Failed to persist public search results: ${details}`);
+  }
+
+  const data = await response.json();
+  return Array.isArray(data) ? data as PublicRecipeRow[] : [];
 }
 
 async function parseRecipePayload(req: Request): Promise<{ payload?: RecipePayload; error?: Response }> {
@@ -520,81 +516,13 @@ async function listPublicRecipes(url: URL): Promise<Response> {
   }
 
   const search = (url.searchParams.get("search") ?? "").trim();
-  const searchMode = parseSearchMode(url);
   const tokens = tokenizeSearch(search);
-  const effectiveLimit = tokens.length === 0 ? limit : Math.min(limit, 5);
-
-  if (tokens.length === 0) {
-    const params = new URLSearchParams();
-    params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-    params.set("order", "created_at.desc");
-    params.set("limit", String(effectiveLimit));
-    params.set("offset", String(offset));
-
-    const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
-      method: "GET"
-    });
-
-    if (!response.ok) {
-      const details = await response.text();
-      return errorResponse(500, "Failed to fetch public recipes", details);
-    }
-
-    const data = await response.json();
-    return okResponse(data, 200);
-  }
-
-  const externalRows: PublicRecipeRow[] = [];
-  const pageSize = 300;
-  const maxPages = 40;
-
-  try {
-    for (let page = 0; page < maxPages; page += 1) {
-      const start = page * pageSize + 1;
-      const end = start + pageSize - 1;
-      const rows = await fetchCookRcpRows(start, end);
-
-      if (rows.length === 0) {
-        break;
-      }
-
-      externalRows.push(...rows);
-
-      if (rows.length < pageSize) {
-        break;
-      }
-    }
-  } catch (error) {
-    return errorResponse(502, "Failed to fetch COOKRCP01 recipes", String(error));
-  }
-
-  if (searchMode === "keyword") {
-    const matched = externalRows.filter((row) => matchesKeywordSearch(row, tokens));
-    return okResponse(matched.slice(offset, offset + effectiveLimit), 200);
-  }
-
-  const ranked = externalRows
-    .map((row) => ({
-      row,
-      score: scoreAiSearch(row, tokens),
-    }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => {
-      if (a.score == b.score) {
-        return String(b.row.created_at).localeCompare(String(a.row.created_at));
-      }
-      return b.score - a.score;
-    })
-    .map((item) => item.row);
-
-  return okResponse(ranked.slice(offset, offset + effectiveLimit), 200);
-}
-
-async function getPublicRecipeDetail(id: string): Promise<Response> {
+  const effectiveLimit = limit;
   const params = new URLSearchParams();
   params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-  params.set("id", `eq.${id}`);
-  params.set("limit", "1");
+  params.set("order", "created_at.desc");
+  params.set("limit", String(tokens.length === 0 ? effectiveLimit : 100));
+  params.set("offset", String(tokens.length === 0 ? offset : 0));
 
   const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
     method: "GET"
@@ -602,12 +530,62 @@ async function getPublicRecipeDetail(id: string): Promise<Response> {
 
   if (!response.ok) {
     const details = await response.text();
-    return errorResponse(500, "Failed to fetch recipe detail", details);
+    return errorResponse(500, "Failed to fetch public recipes", details);
   }
 
-  const rows = await response.json();
-  if (Array.isArray(rows) && rows.length > 0) {
-    return okResponse(rows[0], 200);
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    return okResponse([], 200);
+  }
+
+  const localRows = preferRealRows(data as PublicRecipeRow[]);
+  const normalizedRows = localRows.map(ensureImageUrl);
+
+  if (tokens.length === 0) {
+    return okResponse(normalizedRows.slice(0, effectiveLimit), 200);
+  }
+
+  const ranked = normalizedRows
+    .map((row: PublicRecipeRow) => ({
+      row,
+      score: scoreKeywordSearch(row, tokens, search),
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(offset, offset + effectiveLimit)
+    .map((item) => item.row);
+
+  if (ranked.length > 0) {
+    return okResponse(ranked, 200);
+  }
+
+  // When query tokens have no direct match, return recent rows as a fallback
+  // so users still see discoverable public recipes instead of an empty result.
+  return okResponse(normalizedRows.slice(offset, offset + effectiveLimit), 200);
+}
+
+async function getPublicRecipeDetail(id: string): Promise<Response> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+
+  if (isUuid) {
+    const params = new URLSearchParams();
+    params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
+    params.set("id", `eq.${id}`);
+    params.set("limit", "1");
+
+    const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
+      method: "GET"
+    });
+
+    if (!response.ok) {
+      const details = await response.text();
+      return errorResponse(500, "Failed to fetch recipe detail", details);
+    }
+
+    const rows = await response.json();
+    if (Array.isArray(rows) && rows.length > 0) {
+      return okResponse(ensureImageUrl(rows[0] as PublicRecipeRow), 200);
+    }
   }
 
   const sourceParams = new URLSearchParams();
@@ -626,16 +604,7 @@ async function getPublicRecipeDetail(id: string): Promise<Response> {
 
   const sourceRows = await sourceResponse.json();
   if (Array.isArray(sourceRows) && sourceRows.length > 0) {
-    return okResponse(sourceRows[0], 200);
-  }
-
-  try {
-    const external = await fetchPublicRecipeBySourceId(id);
-    if (external) {
-      return okResponse(external, 200);
-    }
-  } catch (error) {
-    return errorResponse(502, "Failed to fetch COOKRCP01 recipe detail", String(error));
+    return okResponse(ensureImageUrl(sourceRows[0] as PublicRecipeRow), 200);
   }
 
   return errorResponse(404, "Public recipe not found", { id });
@@ -1040,7 +1009,7 @@ async function listKitchenShoppingLists(url: URL, userId: string): Promise<Respo
   itemParams.set("select", "id,list_id,owner_id,name,normalized_name,quantity,unit,is_checked,created_at,updated_at");
   itemParams.set("owner_id", `eq.${userId}`);
   itemParams.set("list_id", `in.(${listIds.join(",")})`);
-  itemParams.set("order", "created_at.asc");
+  itemParams.set("order", "created_at.asc,id.asc");
 
   const itemResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
     method: "GET"
@@ -1210,6 +1179,160 @@ async function createShoppingFromRecipe(req: Request, userId: string): Promise<R
     return errorResponse(400, "recipe_type, recipe_id, required_ingredients are required");
   }
 
+  const sourceRecipeId = `${recipeType}:${recipeId}`;
+
+  async function loadShoppingItems(listId: string): Promise<Array<Record<string, unknown>>> {
+    const params = new URLSearchParams();
+    params.set("select", "id,list_id,name,normalized_name,quantity,unit,is_checked");
+    params.set("owner_id", `eq.${userId}`);
+    params.set("list_id", `eq.${listId}`);
+    params.set("order", "created_at.asc");
+    params.set("limit", "300");
+
+    const response = await restRequest(`/rest/v1/kitchen_shopping_items?${params.toString()}`, {
+      method: "GET"
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows as Array<Record<string, unknown>> : [];
+  }
+
+  // Reuse existing active list for the same source recipe to avoid duplicate active lists.
+  const activeListParams = new URLSearchParams();
+  activeListParams.set("select", "id,owner_id,status,title,source_recipe_id,updated_at");
+  activeListParams.set("owner_id", `eq.${userId}`);
+  activeListParams.set("source_recipe_id", `eq.${sourceRecipeId}`);
+  activeListParams.set("status", "eq.active");
+  activeListParams.set("order", "updated_at.desc");
+  activeListParams.set("limit", "1");
+
+  const activeListResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${activeListParams.toString()}`, {
+    method: "GET"
+  });
+  let reusableEmptyActiveList: Record<string, unknown> | null = null;
+
+  if (activeListResponse.ok) {
+    const activeRows = await activeListResponse.json();
+    if (Array.isArray(activeRows) && activeRows.length > 0) {
+      const activeList = activeRows[0] as Record<string, unknown>;
+      const listId = String(activeList.id ?? "");
+      let items = await loadShoppingItems(listId);
+      let openCount = items.filter((item) => item.is_checked !== true).length;
+      let resetFromFullyChecked = false;
+
+      // If user requests shopping again and the active list is fully checked,
+      // reset checks so the same list becomes actionable immediately.
+      if (items.length > 0 && openCount === 0) {
+        const resetItemParams = new URLSearchParams();
+        resetItemParams.set("owner_id", `eq.${userId}`);
+        resetItemParams.set("list_id", `eq.${listId}`);
+        await restRequest(`/rest/v1/kitchen_shopping_items?${resetItemParams.toString()}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_checked: false,
+            updated_at: new Date().toISOString(),
+          })
+        });
+
+        const listUpdateParams = new URLSearchParams();
+        listUpdateParams.set("id", `eq.${listId}`);
+        listUpdateParams.set("owner_id", `eq.${userId}`);
+        await restRequest(`/rest/v1/kitchen_shopping_lists?${listUpdateParams.toString()}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            updated_at: new Date().toISOString(),
+          })
+        });
+
+        items = await loadShoppingItems(listId);
+        openCount = items.filter((item) => item.is_checked !== true).length;
+        resetFromFullyChecked = true;
+      }
+
+      if (items.length === 0) {
+        reusableEmptyActiveList = activeList;
+      } else {
+        return okResponse({
+          shopping_list: activeList,
+          items,
+          missing_count: openCount,
+          reused_active_list: true,
+          reset_from_fully_checked: resetFromFullyChecked,
+          no_missing_items: false,
+        }, 200);
+      }
+    }
+  }
+
+  // If a completed list exists for the same source recipe, reopen it and reset all checks.
+  const completedListParams = new URLSearchParams();
+  completedListParams.set("select", "id,owner_id,status,title,source_recipe_id,updated_at");
+  completedListParams.set("owner_id", `eq.${userId}`);
+  completedListParams.set("source_recipe_id", `eq.${sourceRecipeId}`);
+  completedListParams.set("status", "eq.completed");
+  completedListParams.set("order", "updated_at.desc");
+  completedListParams.set("limit", "1");
+
+  const completedListResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${completedListParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (completedListResponse.ok) {
+    const completedRows = await completedListResponse.json();
+    if (Array.isArray(completedRows) && completedRows.length > 0) {
+      const completedList = completedRows[0] as Record<string, unknown>;
+      const listId = String(completedList.id ?? "");
+
+      const reopenParams = new URLSearchParams();
+      reopenParams.set("id", `eq.${listId}`);
+      reopenParams.set("owner_id", `eq.${userId}`);
+      const reopenResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${reopenParams.toString()}`, {
+        method: "PATCH",
+        headers: {
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify({
+          status: "active",
+          updated_at: new Date().toISOString(),
+        })
+      });
+
+      if (!reopenResponse.ok) {
+        const details = await reopenResponse.text();
+        return errorResponse(500, "Failed to reopen completed shopping list", details);
+      }
+
+      const resetItemParams = new URLSearchParams();
+      resetItemParams.set("owner_id", `eq.${userId}`);
+      resetItemParams.set("list_id", `eq.${listId}`);
+      await restRequest(`/rest/v1/kitchen_shopping_items?${resetItemParams.toString()}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          is_checked: false,
+          updated_at: new Date().toISOString(),
+        })
+      });
+
+      const reopenedRows = await reopenResponse.json();
+      const reopenedList = Array.isArray(reopenedRows) && reopenedRows.length > 0
+        ? reopenedRows[0] as Record<string, unknown>
+        : completedList;
+      const reopenedItems = await loadShoppingItems(listId);
+
+      return okResponse({
+        shopping_list: reopenedList,
+        items: reopenedItems,
+        missing_count: reopenedItems.length,
+        reopened_from_completed: true,
+        no_missing_items: reopenedItems.length === 0,
+      }, 200);
+    }
+  }
+
   const ingredientParams = new URLSearchParams();
   ingredientParams.set("select", "normalized_name");
   ingredientParams.set("owner_id", `eq.${userId}`);
@@ -1241,6 +1364,63 @@ async function createShoppingFromRecipe(req: Request, userId: string): Promise<R
     .filter(([normalized]) => !ownedSet.has(normalized))
     .map(([normalized, original]) => ({ normalized, original }));
 
+  if (missing.length === 0) {
+    return okResponse({
+      shopping_list: null,
+      items: [],
+      missing_count: 0,
+      no_missing_items: true,
+    }, 200);
+  }
+
+  if (reusableEmptyActiveList != null) {
+    const listId = String(reusableEmptyActiveList.id ?? "");
+    if (listId.length > 0) {
+      const itemPayload = missing.map((item) => ({
+        list_id: listId,
+        owner_id: userId,
+        name: item.original,
+        normalized_name: item.normalized,
+        quantity: null,
+        unit: null,
+        is_checked: false,
+      }));
+
+      const itemResponse = await restRequest("/rest/v1/kitchen_shopping_items", {
+        method: "POST",
+        headers: {
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify(itemPayload)
+      });
+
+      if (!itemResponse.ok) {
+        const details = await itemResponse.text();
+        return errorResponse(500, "Failed to create shopping items", details);
+      }
+
+      const listUpdateParams = new URLSearchParams();
+      listUpdateParams.set("id", `eq.${listId}`);
+      listUpdateParams.set("owner_id", `eq.${userId}`);
+      await restRequest(`/rest/v1/kitchen_shopping_lists?${listUpdateParams.toString()}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          updated_at: new Date().toISOString(),
+        })
+      });
+
+      const itemRows = await itemResponse.json();
+      const createdItems = Array.isArray(itemRows) ? itemRows : [];
+      return okResponse({
+        shopping_list: reusableEmptyActiveList,
+        items: createdItems,
+        missing_count: missing.length,
+        reused_active_list: true,
+        no_missing_items: false,
+      }, 200);
+    }
+  }
+
   const listResponse = await restRequest("/rest/v1/kitchen_shopping_lists", {
     method: "POST",
     headers: {
@@ -1250,7 +1430,7 @@ async function createShoppingFromRecipe(req: Request, userId: string): Promise<R
       owner_id: userId,
       status: "active",
       title: recipeTitle.length > 0 ? `${recipeTitle} 장보기` : "AI generated shopping list",
-      source_recipe_id: `${recipeType}:${recipeId}`,
+      source_recipe_id: sourceRecipeId,
     })
   });
 
@@ -1299,6 +1479,7 @@ async function createShoppingFromRecipe(req: Request, userId: string): Promise<R
     shopping_list: createdList,
     items: createdItems,
     missing_count: missing.length,
+    no_missing_items: false,
   }, 201);
 }
 
@@ -1455,6 +1636,104 @@ async function completeShoppingList(id: string, userId: string): Promise<Respons
   return okResponse({ completed_list_id: id, summary }, 200);
 }
 
+async function resetShoppingList(id: string, userId: string): Promise<Response> {
+  const listParams = new URLSearchParams();
+  listParams.set("select", "id,status");
+  listParams.set("id", `eq.${id}`);
+  listParams.set("owner_id", `eq.${userId}`);
+  listParams.set("limit", "1");
+
+  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
+    method: "GET"
+  });
+
+  if (!listResponse.ok) {
+    const details = await listResponse.text();
+    return errorResponse(500, "Failed to load shopping list", details);
+  }
+
+  const listRows = await listResponse.json();
+  if (!Array.isArray(listRows) || listRows.length === 0) {
+    return errorResponse(404, "Shopping list not found", { id });
+  }
+
+  const itemParams = new URLSearchParams();
+  itemParams.set("owner_id", `eq.${userId}`);
+  itemParams.set("list_id", `eq.${id}`);
+  const resetItemsResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      is_checked: false,
+      updated_at: new Date().toISOString(),
+    })
+  });
+
+  if (!resetItemsResponse.ok) {
+    const details = await resetItemsResponse.text();
+    return errorResponse(500, "Failed to reset shopping items", details);
+  }
+
+  const listUpdateParams = new URLSearchParams();
+  listUpdateParams.set("id", `eq.${id}`);
+  listUpdateParams.set("owner_id", `eq.${userId}`);
+  const listUpdateResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listUpdateParams.toString()}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      status: "active",
+      updated_at: new Date().toISOString(),
+    })
+  });
+
+  if (!listUpdateResponse.ok) {
+    const details = await listUpdateResponse.text();
+    return errorResponse(500, "Failed to update shopping list status", details);
+  }
+
+  const summary = await buildKitchenSummary(userId);
+  return okResponse({ reset_list_id: id, summary }, 200);
+}
+
+async function archiveOldCompletedShoppingLists(
+  userId: string,
+  retentionDays: number,
+): Promise<Response> {
+  if (!Number.isFinite(retentionDays) || retentionDays < 1 || retentionDays > 365) {
+    return errorResponse(400, "days must be between 1 and 365", { days: retentionDays });
+  }
+
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const params = new URLSearchParams();
+  params.set("owner_id", `eq.${userId}`);
+  params.set("status", "eq.completed");
+  params.set("updated_at", `lt.${cutoff}`);
+
+  const response = await restRequest(`/rest/v1/kitchen_shopping_lists?${params.toString()}`, {
+    method: "PATCH",
+    headers: {
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      status: "archived",
+      updated_at: new Date().toISOString(),
+    })
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    return errorResponse(500, "Failed to archive old completed shopping lists", details);
+  }
+
+  const rows = await response.json();
+  const archived = Array.isArray(rows) ? rows.length : 0;
+  return okResponse({
+    archived_count: archived,
+    retention_days: retentionDays,
+  }, 200);
+}
+
 async function listKitchenCookSessions(url: URL, userId: string): Promise<Response> {
   const { limit, offset, error } = parsePagination(url);
   if (error) {
@@ -1557,6 +1836,17 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
       }
       return await completeShoppingList(id, userId);
     }
+    if (action === "reset-shopping-list") {
+      if (id.length === 0) {
+        return errorResponse(400, "id query parameter is required for reset-shopping-list");
+      }
+      return await resetShoppingList(id, userId);
+    }
+    if (action === "archive-old-completed-shopping-lists") {
+      const daysRaw = Number(url.searchParams.get("days") ?? "30");
+      const retentionDays = Number.isInteger(daysRaw) ? daysRaw : 30;
+      return await archiveOldCompletedShoppingLists(userId, retentionDays);
+    }
     if (action === "complete-cook") {
       return await completeCook(req, userId);
     }
@@ -1626,6 +1916,10 @@ serve(async (req) => {
         return id ? await getPublicRecipeDetail(id) : await listPublicRecipes(url);
       }
 
+      if (type === "creator" && !hasBearerToken(req)) {
+        return creatorAuthRequiredResponse();
+      }
+
       const auth = await getAuthenticatedUserId(req);
       if (auth.error || !auth.userId) {
         return auth.error ?? errorResponse(401, "Unauthorized");
@@ -1636,17 +1930,25 @@ serve(async (req) => {
           : await listCreatorRecipes(url, auth.userId);
     }
 
-    const auth = await getAuthenticatedUserId(req);
-    if (auth.error || !auth.userId) {
-      return auth.error ?? errorResponse(401, "Unauthorized");
-    }
-
     if (type === "kitchen") {
+      const auth = await getAuthenticatedUserId(req);
+      if (auth.error || !auth.userId) {
+        return auth.error ?? errorResponse(401, "Unauthorized");
+      }
       return await handleKitchenRequest(req, url, auth.userId);
     }
 
     if (type !== "creator") {
       return errorResponse(400, `${req.method} endpoints require type=creator or type=kitchen`);
+    }
+
+    if (!hasBearerToken(req)) {
+      return creatorAuthRequiredResponse();
+    }
+
+    const auth = await getAuthenticatedUserId(req);
+    if (auth.error || !auth.userId) {
+      return auth.error ?? errorResponse(401, "Unauthorized");
     }
 
     if (req.method === "POST") {

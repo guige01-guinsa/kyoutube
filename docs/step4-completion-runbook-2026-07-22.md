@@ -24,7 +24,7 @@ Stabilize final Step 4 sign-off with two consecutive valid manual runs on the sa
 
 ## Capture command (run after each manual flow)
 ```powershell
-adb shell dumpsys gfxinfo com.kyoutube.kyoutube | Select-String "Total frames rendered|Janky frames|90th percentile|95th percentile|99th percentile|Number Slow UI thread|Number Slow bitmap uploads|Number Slow issue draw commands|Number Frame deadline missed"
+adb shell dumpsys gfxinfo com.kyoutube.app | Select-String "Total frames rendered|Janky frames|90th percentile|95th percentile|99th percentile|Number Slow UI thread|Number Slow bitmap uploads|Number Slow issue draw commands|Number Frame deadline missed"
 ```
 
 ## Assisted capture script (recommended)
@@ -42,7 +42,7 @@ Script behavior:
 
 ## Reset command (before each manual flow)
 ```powershell
-adb shell dumpsys gfxinfo com.kyoutube.kyoutube reset
+adb shell dumpsys gfxinfo com.kyoutube.app reset
 ```
 
 ## Completion decision

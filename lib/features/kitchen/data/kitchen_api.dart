@@ -82,49 +82,6 @@ class KitchenApi {
     return payload['data'];
   }
 
-  Future<List<KitchenIngredient>> listIngredients({String? query}) async {
-    final data = await _request(
-      method: 'GET',
-      query: <String, String>{
-        'view': 'ingredients',
-        if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
-      },
-    );
-
-    if (data is! List) {
-      return <KitchenIngredient>[];
-    }
-
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map(KitchenIngredient.fromJson)
-        .toList();
-  }
-
-  Future<KitchenIngredient> createIngredient({required String name}) async {
-    final data = await _request(
-      method: 'POST',
-      query: const <String, String>{'view': 'ingredients'},
-      body: <String, dynamic>{'name': name.trim()},
-    );
-
-    if (data is! Map<String, dynamic>) {
-      throw StateError('재료 생성 응답이 올바르지 않습니다.');
-    }
-
-    return KitchenIngredient.fromJson(data);
-  }
-
-  Future<void> deleteIngredient(String id) async {
-    await _request(
-      method: 'DELETE',
-      query: <String, String>{
-        'view': 'ingredients',
-        'id': id,
-      },
-    );
-  }
-
   Future<List<KitchenShoppingList>> listShoppingLists({
     String status = 'active',
   }) async {
@@ -168,6 +125,41 @@ class KitchenApi {
         'id': id,
       },
     );
+  }
+
+  Future<void> resetShoppingList(String id) async {
+    await _request(
+      method: 'POST',
+      query: <String, String>{
+        'action': 'reset-shopping-list',
+        'id': id,
+      },
+    );
+  }
+
+  Future<int> archiveOldCompletedShoppingLists({
+    int retentionDays = 30,
+  }) async {
+    final data = await _request(
+      method: 'POST',
+      query: <String, String>{
+        'action': 'archive-old-completed-shopping-lists',
+        'days': '$retentionDays',
+      },
+    );
+
+    if (data is! Map<String, dynamic>) {
+      return 0;
+    }
+
+    final archivedCount = data['archived_count'];
+    if (archivedCount is int) {
+      return archivedCount;
+    }
+    if (archivedCount is num) {
+      return archivedCount.toInt();
+    }
+    return 0;
   }
 
   Future<List<KitchenCookSession>> listCookSessions() async {

@@ -15,25 +15,35 @@ class RecipeThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = (imageUrl ?? '').isNotEmpty;
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final cacheWidth = (width * devicePixelRatio).round();
+    final cacheHeight = (height * devicePixelRatio).round();
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        width: width,
-        height: height,
-        child: hasImage
-            ? Image.network(
-                imageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _ThumbnailPlaceholder(
+    return RepaintBoundary(
+      child: ClipRRect(
+        clipBehavior: Clip.hardEdge,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: width,
+          height: height,
+          child: hasImage
+              ? Image.network(
+                  imageUrl!,
+                  fit: BoxFit.cover,
+                  cacheWidth: cacheWidth,
+                  cacheHeight: cacheHeight,
+                  filterQuality: FilterQuality.none,
+                  isAntiAlias: false,
+                  errorBuilder: (_, __, ___) => _ThumbnailPlaceholder(
+                    width: width,
+                    height: height,
+                  ),
+                )
+              : _ThumbnailPlaceholder(
                   width: width,
                   height: height,
                 ),
-              )
-            : _ThumbnailPlaceholder(
-                width: width,
-                height: height,
-              ),
+        ),
       ),
     );
   }
@@ -50,14 +60,15 @@ class _ThumbnailPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: width,
       height: height,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: colorScheme.surfaceContainerHighest,
       alignment: Alignment.center,
       child: Icon(
         Icons.restaurant_menu,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        color: colorScheme.onSurfaceVariant,
       ),
     );
   }

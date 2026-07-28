@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $false)]
-    [string]$PackageName = "com.kyoutube.kyoutube",
+    [string]$PackageName = "com.kyoutube.app",
 
     [Parameter(Mandatory = $false)]
     [string]$OutputFile = "docs/ops-execution-record-2026-07-27-internal-track.md",

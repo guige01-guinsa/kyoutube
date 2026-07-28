@@ -1,4 +1,4 @@
-# Google Play Data Safety Draft
+# Google Play Data Safety Submission Package
 
 Last update: 2026-07-19
 
@@ -29,8 +29,11 @@ Use this as the source of truth while completing the Google Play Data safety for
 - Confirm whether diagnostics are "collected" in the exact release build.
 - Confirm whether crash reporting is enabled before marking it in the form.
 - Align the final form with the public privacy policy.
+- Canonical policy URLs:
+	- Privacy: https://github.com/guige01-guinsa/kyoutube/blob/main/docs/privacy-policy.md
+	- Terms: https://github.com/guige01-guinsa/kyoutube/blob/main/docs/terms-of-service.md
 
 ## Finalization checklist
-- [ ] Decide final public URLs.
-- [ ] Fill the Play Data safety form with release-specific answers.
-- [ ] Re-check permissions against actual app behavior.
+- [x] Decide final public URLs.
+- [x] Fill the Play Data safety answers package with release-specific declarations.
+- [x] Re-check permissions against actual app behavior.
