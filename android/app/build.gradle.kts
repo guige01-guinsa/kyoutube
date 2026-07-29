@@ -36,7 +36,7 @@ android {
 
     defaultConfig {
         applicationId = "com.kyoutube.app"
-        minSdk = flutter.minSdkVersion
+        minSdk = 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -63,8 +63,12 @@ android {
                         "or run with -PallowDebugSigningForRelease=true for local verification only.",
                 )
             }
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
