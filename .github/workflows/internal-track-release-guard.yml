@@ -93,6 +93,21 @@ jobs:
           $keystoreBytes = [System.Convert]::FromBase64String($env:ANDROID_UPLOAD_KEYSTORE_BASE64)
           [System.IO.File]::WriteAllBytes("android/upload-keystore.jks", $keystoreBytes)
 
+      - name: Guardrail C - Validate Firebase package name in google-services.json
+        shell: pwsh
+        run: |
+          $json = Get-Content android/app/google-services.json -Raw | ConvertFrom-Json
+          $clients = @($json.client)
+          $match = $false
+          foreach ($c in $clients) {
+            if ($c.client_info.android_client_info.package_name -eq "com.kyoutube.app") {
+              $match = $true
+            }
+          }
+          if (-not $match) {
+            throw "ANDROID_GOOGLE_SERVICES_JSON does not contain a client for package_name='com.kyoutube.app'. Open Firebase Console, register an Android app with that package name, download the new google-services.json, and update the ANDROID_GOOGLE_SERVICES_JSON secret."
+          }
+
       - name: Configure Gradle for Windows runner
         shell: pwsh
         run: Add-Content -Path android/gradle.properties -Value "`nkotlin.incremental=false"
