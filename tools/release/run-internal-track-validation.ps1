@@ -71,10 +71,12 @@ function Invoke-HttpPostJson {
     param(
         [string]$Uri,
         [hashtable]$Headers = @{},
-        [string]$Body = "{}"
+        [string]$Body = "{}",
+        [int]$TimeoutSeconds = 30
     )
 
     $client = [System.Net.Http.HttpClient]::new()
+    $client.Timeout = [System.TimeSpan]::FromSeconds($TimeoutSeconds)
     $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $Uri)
     $response = $null
 
@@ -122,19 +124,19 @@ function Invoke-PublicRecipeSyncSmoke {
     $expectedAuthFailureCode = 401
 
     Write-Host " - Probe 1/3: request without x-worker-secret should be rejected..."
-    $missingHeaderResponse = Invoke-HttpPostJson -Uri $FunctionUrl -Body $payload
+    $missingHeaderResponse = Invoke-HttpPostJson -Uri $FunctionUrl -Body $payload -TimeoutSeconds 30
     if ($missingHeaderResponse.StatusCode -ne $expectedAuthFailureCode) {
         throw "public_recipe_sync unauthorized check failed (missing secret). Expected $expectedAuthFailureCode, got $($missingHeaderResponse.StatusCode). Body: $($missingHeaderResponse.Body)"
     }
 
     Write-Host " - Probe 2/3: request with invalid x-worker-secret should be rejected..."
-    $invalidHeaderResponse = Invoke-HttpPostJson -Uri $FunctionUrl -Headers @{ "x-worker-secret" = "invalid-secret" } -Body $payload
+    $invalidHeaderResponse = Invoke-HttpPostJson -Uri $FunctionUrl -Headers @{ "x-worker-secret" = "invalid-secret" } -Body $payload -TimeoutSeconds 30
     if ($invalidHeaderResponse.StatusCode -ne $expectedAuthFailureCode) {
         throw "public_recipe_sync unauthorized check failed (invalid secret). Expected $expectedAuthFailureCode, got $($invalidHeaderResponse.StatusCode). Body: $($invalidHeaderResponse.Body)"
     }
 
     Write-Host " - Probe 3/3: request with valid x-worker-secret should succeed..."
-    $validHeaderResponse = Invoke-HttpPostJson -Uri $FunctionUrl -Headers @{ "x-worker-secret" = $WorkerSecret } -Body $payload
+    $validHeaderResponse = Invoke-HttpPostJson -Uri $FunctionUrl -Headers @{ "x-worker-secret" = $WorkerSecret } -Body $payload -TimeoutSeconds 300
     if ($validHeaderResponse.StatusCode -lt 200 -or $validHeaderResponse.StatusCode -ge 300) {
         throw "public_recipe_sync authorized check failed. Expected 2xx, got $($validHeaderResponse.StatusCode). Body: $($validHeaderResponse.Body)"
     }
