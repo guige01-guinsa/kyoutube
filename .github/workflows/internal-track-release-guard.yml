@@ -77,7 +77,18 @@ jobs:
         shell: pwsh
         run: |
           Set-Content -Path android/key.properties -Value $env:ANDROID_KEY_PROPERTIES -NoNewline
-          Set-Content -Path android/app/google-services.json -Value $env:ANDROID_GOOGLE_SERVICES_JSON -NoNewline
+
+          [System.IO.File]::WriteAllText(
+            (Join-Path (Get-Location).Path "android/app/google-services.json"),
+            $env:ANDROID_GOOGLE_SERVICES_JSON,
+            [System.Text.Encoding]::UTF8
+          )
+
+          try {
+            $null = Get-Content "android/app/google-services.json" -Raw | ConvertFrom-Json -ErrorAction Stop
+          } catch {
+            throw "ANDROID_GOOGLE_SERVICES_JSON secret is not valid JSON. Re-set the secret with the complete google-services.json content from Firebase Console. Error: $_"
+          }
 
           $keystoreBytes = [System.Convert]::FromBase64String($env:ANDROID_UPLOAD_KEYSTORE_BASE64)
           [System.IO.File]::WriteAllBytes("android/upload-keystore.jks", $keystoreBytes)

@@ -199,6 +199,16 @@ Assert-PathExists -Path $keystoreFullPath -Hint "Place the upload keystore at th
 Write-Host "[3/6] Checking Firebase Android config..."
 Assert-PathExists -Path "android/app/google-services.json" -Hint "Download from Firebase Console for package name and place under android/app/."
 
+$googleServicesRaw = Get-Content "android/app/google-services.json" -Raw
+try {
+    $googleServicesJson = $googleServicesRaw | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    throw "android/app/google-services.json is not valid JSON (truncated or malformed). Re-set the ANDROID_GOOGLE_SERVICES_JSON secret with the complete file content from Firebase Console. Parse error: $_"
+}
+if ($null -eq $googleServicesJson.configuration_version) {
+    throw "android/app/google-services.json is missing the 'configuration_version' field — the file appears to be incomplete. Re-set the ANDROID_GOOGLE_SERVICES_JSON secret with the complete file content."
+}
+
 Write-Host "[4/6] Building signed release appbundle..."
 $buildArgs = @("build", "appbundle")
 
