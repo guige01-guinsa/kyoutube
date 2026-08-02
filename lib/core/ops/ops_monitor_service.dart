@@ -92,7 +92,7 @@ class OpsMonitorService {
 
   static final ValueNotifier<OpsMonitorState> state =
       ValueNotifier<OpsMonitorState>(
-    const OpsMonitorState(
+    OpsMonitorState(
       appEnv: Env.appEnv,
       phase: '초기화 전',
       isReady: false,

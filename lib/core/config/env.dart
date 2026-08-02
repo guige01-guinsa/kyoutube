@@ -1,11 +1,20 @@
 import 'package:flutter/foundation.dart';
 
 class Env {
-  static const String appEnv =
-      String.fromEnvironment(
-        'APP_ENV',
-        defaultValue: kReleaseMode ? 'production' : 'unset',
-      );
+  static const String _rawAppEnv =
+      String.fromEnvironment('APP_ENV', defaultValue: '');
+
+  static String get appEnv {
+    final normalized = _rawAppEnv.trim().toLowerCase();
+    switch (normalized) {
+      case 'local':
+      case 'staging':
+      case 'production':
+        return normalized;
+      default:
+        return kReleaseMode ? 'production' : 'local';
+    }
+  }
 
   static const String _supabaseUrl =
       String.fromEnvironment('SUPABASE_URL', defaultValue: '');
@@ -62,18 +71,6 @@ class Env {
   }
 
   static void validate() {
-    if (appEnv == 'unset') {
-      throw StateError(
-        'APP_ENV is required. Pass one of local, staging, production via --dart-define=APP_ENV=... .',
-      );
-    }
-
-    if (appEnv != 'local' && appEnv != 'staging' && appEnv != 'production') {
-      throw StateError(
-        'APP_ENV must be one of: local, staging, production.',
-      );
-    }
-
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
       throw StateError(
         'Supabase runtime values are required for the selected APP_ENV. '

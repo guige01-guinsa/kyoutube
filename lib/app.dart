@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/env.dart';
+import 'core/debug/runtime_diagnostics_overlay.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/firebase/firebase_messaging_service.dart';
 import 'core/router/app_router.dart';
@@ -64,6 +65,11 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            builder: (BuildContext context, Widget? child) {
+              return RuntimeDiagnosticsOverlay(
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const _BootstrapLoadingScreen(),
           );
         }
@@ -72,6 +78,11 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            builder: (BuildContext context, Widget? child) {
+              return RuntimeDiagnosticsOverlay(
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: _BootstrapErrorScreen(
               error: snapshot.error.toString(),
               onRetry: _retry,
@@ -94,6 +105,11 @@ class KYoutubeApp extends StatelessWidget {
       title: 'AI Cooking Platform',
       theme: AppTheme.light,
       routerConfig: AppRouter.router,
+      builder: (BuildContext context, Widget? child) {
+        return RuntimeDiagnosticsOverlay(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }
@@ -188,6 +204,11 @@ class BootstrapFailureApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      builder: (BuildContext context, Widget? child) {
+        return RuntimeDiagnosticsOverlay(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: Scaffold(
         body: SafeArea(
           child: Center(

@@ -43,6 +43,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                 context.push('/login');
                 return;
               }
+              context.push('/kitchen?tab=shopping');
+            },
+            icon: const Icon(Icons.shopping_cart_outlined),
+            tooltip: '장보기',
+          ),
+          IconButton(
+            onPressed: () {
+              if (currentUser == null) {
+                context.push('/login');
+                return;
+              }
               context.push('/bookmarks');
             },
             icon: const Icon(Icons.bookmark_outline),

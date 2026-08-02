@@ -1,4 +1,4 @@
-package com.kyoutube.kyoutube
+package com.kyoutube.app
 
 import io.flutter.embedding.android.FlutterActivity
 

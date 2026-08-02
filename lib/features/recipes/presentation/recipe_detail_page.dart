@@ -129,6 +129,10 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   }
 
   Future<void> _persistCurrentStepIndex(List<String> steps) async {
+    if (!mounted) {
+      return;
+    }
+
     final snapshot = ref.read(voiceGuideServiceProvider).snapshot(steps);
     if (!snapshot.hasSteps) {
       return;
