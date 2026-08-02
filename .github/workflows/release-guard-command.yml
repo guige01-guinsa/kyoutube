@@ -1,0 +1,81 @@
+name: Release Guard Command
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  dispatch:
+    if: github.event.issue.pull_request != null && startsWith(github.event.comment.body, '/release-guard')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: React to comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - name: Parse command options
+        id: parse
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          SKIP_SMOKE=false
+          SMOKE_SIZE=1
+
+          if echo "$COMMENT" | grep -q "skip-smoke"; then
+            SKIP_SMOKE=true
+          fi
+
+          SIZE_MATCH=$(echo "$COMMENT" | grep -oP 'size=\K[0-9]+' || true)
+          if [ -n "$SIZE_MATCH" ]; then
+            if [ "$SIZE_MATCH" -ge 1 ] && [ "$SIZE_MATCH" -le 200 ]; then
+              SMOKE_SIZE="$SIZE_MATCH"
+            fi
+          fi
+
+          echo "skip_smoke=$SKIP_SMOKE" >> $GITHUB_OUTPUT
+          echo "smoke_size=$SMOKE_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Trigger release guard workflow
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'internal-track-release-guard.yml',
+              ref: 'main',
+              inputs: {
+                skipPublicRecipeSyncSmoke: '${{ steps.parse.outputs.skip_smoke }}',
+                publicRecipeSyncSmokeSize: '${{ steps.parse.outputs.smoke_size }}'
+              }
+            });
+
+            const skipSmoke = '${{ steps.parse.outputs.skip_smoke }}' === 'true';
+            const smokeSize = '${{ steps.parse.outputs.smoke_size }}';
+            const optionLines = skipSmoke
+              ? '- 스모크 체크: **생략**'
+              : `- 스모크 체크 크기: **${smokeSize}**`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '🚀 **Release Guard 워크플로우가 시작되었습니다.**',
+                '',
+                optionLines,
+                '',
+                `[▶ Actions에서 진행 상황 확인](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/workflows/internal-track-release-guard.yml)`
+              ].join('\n')
+            });
