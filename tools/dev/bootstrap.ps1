@@ -28,7 +28,13 @@ Write-Host "FVM Flutter version matches .fvmrc: $expectedFlutterVersion"
 
 Write-Host "[2/6] Checking JDK 17..."
 $java = Require-Tool -Name "java" -Hint "Install a JDK 17 distribution and add it to PATH."
-$javaVersionText = (& $java -version 2>&1) -join "`n"
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$javaVersionOutput = & $java -version 2>&1
+$javaExitCode = $LASTEXITCODE
+$ErrorActionPreference = $previousErrorActionPreference
+if ($javaExitCode -ne 0) { throw "Failed to run java -version." }
+$javaVersionText = $javaVersionOutput -join "`n"
 if ($javaVersionText -notmatch '(?:version\s+"|openjdk\s+)(17)(?:[."\s]|$)') { throw "JDK 17 is required by android/app/build.gradle.kts (Java/Kotlin target 17)." }
 Write-Host "JDK 17 is available."
 
