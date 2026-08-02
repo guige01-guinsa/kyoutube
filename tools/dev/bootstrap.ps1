@@ -5,6 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $projectRoot
+. (Join-Path $PSScriptRoot "flutter-toolchain.ps1")
 
 function Require-Tool {
     param([string]$Name, [string]$Hint)
@@ -20,13 +21,10 @@ function Get-FirstVersionLine {
     return ($output | Select-Object -First 1)
 }
 
-Write-Host "[1/6] Checking pinned Flutter toolchain..."
-$flutter = Require-Tool -Name "flutter" -Hint "Install Flutter 3.44.8 and add it to PATH."
-$null = Require-Tool -Name "dart" -Hint "Dart is included with Flutter."
+Write-Host "[1/6] Checking project FVM Flutter toolchain..."
+$flutter = Get-ProjectFlutter -ProjectRoot $projectRoot
 $expectedFlutterVersion = (Get-Content .fvmrc | ConvertFrom-Json).flutter
-$flutterVersionLine = Get-FirstVersionLine -Executable $flutter -Arguments @("--version")
-if ($flutterVersionLine -notmatch "Flutter\s+$([regex]::Escape($expectedFlutterVersion))\b") { throw "Flutter $expectedFlutterVersion is required by .fvmrc, but PATH reports: $flutterVersionLine" }
-Write-Host "Flutter version matches .fvmrc: $expectedFlutterVersion"
+Write-Host "FVM Flutter version matches .fvmrc: $expectedFlutterVersion"
 
 Write-Host "[2/6] Checking JDK 17..."
 $java = Require-Tool -Name "java" -Hint "Install a JDK 17 distribution and add it to PATH."

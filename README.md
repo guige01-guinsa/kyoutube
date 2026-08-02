@@ -8,7 +8,7 @@ Flutter 앱은 레시피 탐색·저장·제작·주방 기능을 제공하며 S
 
 ## 2. 필수 도구
 
-- Flutter 3.44.8 (`.fvmrc`에 고정)
+- Flutter 3.44.8 (`.fvmrc` 및 프로젝트별 FVM SDK에 고정)
 - JDK 17 (Android Gradle Java/Kotlin target 17)
 - Android SDK와 `adb`
 - Node.js LTS 및 npm
@@ -16,6 +16,14 @@ Flutter 앱은 레시피 탐색·저장·제작·주방 기능을 제공하며 S
 - Supabase CLI: 전역 설치 또는 `npx supabase@latest`
 
 ## 3. 최초 설치
+
+FVM을 설치한 뒤, 저장소 루트에서 고정 SDK를 받습니다. 전역 Flutter는 이 프로젝트의 실행·검증에 사용하지 않습니다.
+
+```powershell
+fvm install 3.44.8
+```
+
+그 다음 bootstrap을 실행합니다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/dev/bootstrap.ps1
@@ -82,7 +90,7 @@ adb reverse --list
 
 ## 11. 문제 해결
 
-- Flutter 버전 오류: `.fvmrc`의 3.44.8을 설치하고 PATH가 해당 SDK를 가리키게 합니다.
+- Flutter 버전 오류: 저장소 루트에서 `fvm install 3.44.8`을 실행합니다. 스크립트는 `.fvm/flutter_sdk/bin/flutter.bat`만 사용하며 전역 Flutter로 대체하지 않습니다.
 - JDK 오류: JDK 17을 선택한 뒤 새 터미널에서 `java -version`을 확인합니다.
 - `.env.local` 오류: 예시 파일에서 새로 만들고 필요한 변수만 설정합니다.
 - Android 실기기에서 로컬 API에 연결되지 않음: `adb reverse` 결과에 54321 포트가 있는지 확인합니다.

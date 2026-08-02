@@ -2,7 +2,7 @@
 
 ## Supported Windows environment
 
-Use PowerShell from the repository root. Flutter 3.44.8 is pinned by `.fvmrc`. The Android project uses AGP 9.0.1, Gradle 9.1.0, `JavaVersion.VERSION_17`, and Kotlin `JVM_17`; therefore JDK 17 is the supported development JDK. Do not change Gradle or Android tool versions merely to match a globally installed JDK.
+Use PowerShell from the repository root. Flutter 3.44.8 is pinned by `.fvmrc` and the only supported project executable is `.fvm/flutter_sdk/bin/flutter.bat`. Install it with `fvm install 3.44.8`; the repository scripts intentionally stop rather than fall back to a different global Flutter SDK. The Android project uses AGP 9.0.1, Gradle 9.1.0, `JavaVersion.VERSION_17`, and Kotlin `JVM_17`; therefore JDK 17 is the supported development JDK. Do not change Gradle or Android tool versions merely to match a globally installed JDK.
 
 ## First use and daily loop
 

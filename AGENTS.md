@@ -16,7 +16,8 @@ K-youtube is an Android-first AI cooking platform. The Flutter app uses Riverpod
 
 ## Toolchain and routine
 
-- Flutter **3.44.8** is pinned in `.fvmrc`. Use that version; do not silently upgrade it.
+- Flutter **3.44.8** is pinned in `.fvmrc` and must run through `.fvm/flutter_sdk/bin/flutter.bat`; do not silently upgrade it or fall back to a global SDK.
+- Install the local SDK with `fvm install 3.44.8` from the repository root. If FVM itself is missing, install it through the approved developer-tool process first; do not substitute a different global Flutter version.
 - The Android project targets JVM 17. Install and select JDK 17 for Android/Gradle work.
 - First-run environment check: `powershell -ExecutionPolicy Bypass -File tools/dev/bootstrap.ps1`.
 - Run the app only through `powershell -ExecutionPolicy Bypass -File run-local.ps1 -AppEnv local`.
