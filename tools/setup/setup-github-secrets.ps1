@@ -73,12 +73,27 @@ Get-Content $envFile | ForEach-Object {
 
 $supabaseUrl = $envVars["SUPABASE_URL_PRODUCTION"]
 $supabaseAnonKey = $envVars["SUPABASE_ANON_KEY_PRODUCTION"]
+$supabaseAccessToken = $envVars["SUPABASE_ACCESS_TOKEN"]
+$supabaseDbPassword = $envVars["SUPABASE_DB_PASSWORD"]
 
 if ([string]::IsNullOrWhiteSpace($supabaseUrl) -or [string]::IsNullOrWhiteSpace($supabaseAnonKey)) {
     Write-Host "❌ .env 파일에서 SUPABASE_URL_PRODUCTION 또는 SUPABASE_ANON_KEY_PRODUCTION 값을 찾을 수 없습니다." -ForegroundColor Red
     Write-Host "   .env 파일에 두 값이 올바르게 입력되어 있는지 확인하세요." -ForegroundColor Yellow
     exit 1
 }
+
+if ([string]::IsNullOrWhiteSpace($supabaseAccessToken)) {
+    Write-Host "❌ .env 파일에서 SUPABASE_ACCESS_TOKEN 값을 찾을 수 없습니다." -ForegroundColor Red
+    Write-Host "   https://supabase.com/dashboard/account/tokens 에서 토큰을 생성하고 .env 에 추가하세요." -ForegroundColor Yellow
+    exit 1
+}
+
+if ([string]::IsNullOrWhiteSpace($supabaseDbPassword)) {
+    Write-Host "❌ .env 파일에서 SUPABASE_DB_PASSWORD 값을 찾을 수 없습니다." -ForegroundColor Red
+    Write-Host "   Supabase 대시보드 → Project Settings → Database 에서 비밀번호를 확인하고 .env 에 추가하세요." -ForegroundColor Yellow
+    exit 1
+}
+
 Write-Host "✅ Supabase 설정값 확인 완료" -ForegroundColor Green
 
 # Supabase project ref 추출 (URL에서 자동 파싱)
@@ -127,6 +142,8 @@ $repo = "guige01-guinsa/kyoutube"
 $secrets = @(
     @{ Name = "SUPABASE_URL_PRODUCTION";             Value = $supabaseUrl },
     @{ Name = "SUPABASE_ANON_KEY_PRODUCTION";        Value = $supabaseAnonKey },
+    @{ Name = "SUPABASE_ACCESS_TOKEN";               Value = $supabaseAccessToken },
+    @{ Name = "SUPABASE_DB_PASSWORD";                Value = $supabaseDbPassword },
     @{ Name = "ANDROID_UPLOAD_KEYSTORE_BASE64";      Value = $keystoreBase64 },
     @{ Name = "ANDROID_KEY_PROPERTIES";              Value = $keyProperties },
     @{ Name = "ANDROID_GOOGLE_SERVICES_JSON";        Value = $googleServicesJson },
