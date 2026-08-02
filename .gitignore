@@ -53,8 +53,10 @@ app.*.map.json
 /supabase/functions/.env
 
 # Local developer environment overrides
+/.env
 /.env.local
 /.env.development
+/supabase/functions/.env
 
 # Local release/test artifacts
 /.artifacts/

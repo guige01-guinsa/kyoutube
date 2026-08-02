@@ -1,201 +1,91 @@
 # K-youtube
 
-AI cooking platform MVP with Flutter + Supabase.
+Flutter, Supabase, Firebase 기반의 Android-first AI 요리 플랫폼입니다.
 
-## Current status
-- Manual bootstrap complete
-- App skeleton, routing, and Supabase init code added
-- Supabase schema and RLS migration drafts added
+## 1. 프로젝트 소개
 
-## Local setup
-1. Install Flutter SDK and add it to PATH.
-2. Run: flutter create . --project-name k_youtube --platforms=android,ios
-3. Run: flutter pub get
-4. Copy `.env.local.example` to `.env.local` and fill in the local values.
-5. Run `tools\dev\check-dev-env.ps1`.
-6. Start local Supabase stack.
-7. Run `tools\dev\run-local.ps1`.
+Flutter 앱은 레시피 탐색·저장·제작·주방 기능을 제공하며 Supabase Auth, Postgres, Storage와 Edge Functions를 사용합니다. Firebase Cloud Messaging은 모바일 푸시를 담당합니다.
 
-See [docs/development-environment.md](docs/development-environment.md) for the standard setup.
+## 2. 필수 도구
 
-### Local Supabase
+- Flutter 3.44.8 (`.fvmrc`에 고정)
+- JDK 17 (Android Gradle Java/Kotlin target 17)
+- Android SDK와 `adb`
+- Node.js LTS 및 npm
+- Docker Desktop (Supabase 로컬 스택을 사용할 때)
+- Supabase CLI: 전역 설치 또는 `npx supabase@latest`
+
+## 3. 최초 설치
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/dev/bootstrap.ps1
+```
+
+이 스크립트는 도구, Flutter/JDK 버전, Android SDK, 환경 파일 존재 여부를 검사하고 `flutter pub get`을 실행합니다. 값은 출력하거나 읽지 않습니다.
+
+## 4. 환경파일 설정
+
+`.env.example` 또는 `.env.local.example`을 `.env.local`로 복사하고 로컬 값을 설정합니다. `.env.local`, 루트 `.env`, `android/key.properties`, keystore와 Firebase 설정 파일은 커밋하지 않습니다.
+
+```powershell
+Copy-Item .env.local.example .env.local
+```
+
+`APP_ENV=local`에는 `SUPABASE_URL_LOCAL`, `SUPABASE_ANON_KEY_LOCAL`이 필요합니다. 실기기에서 로컬 Supabase에 접속할 때는 아래 Android 기기 연결 절차도 수행하세요.
+
+## 5. 로컬 Supabase 시작
+
+Docker Desktop을 시작한 뒤 로컬 스택을 실행합니다.
+
 ```powershell
 npx supabase@latest start -x studio,logflare,imgproxy
-npx supabase@latest db reset
-```
-
-### Public recipe sync function
-```powershell
-Invoke-RestMethod \
-	-Method Post \
-	-Uri http://127.0.0.1:54321/functions/v1/public_recipe_sync \
-	-Headers @{ "x-worker-secret" = "<PUBLIC_RECIPE_SYNC_WORKER_SECRET>"; "Content-Type" = "application/json" } \
-	-Body '{"size":30}'
-```
-
-### COOKRCP01 real API setup (식품안전나라)
-공공 레시피는 COOKRCP01 인증키를 설정하면 실제 식품안전나라 데이터에서 동기화됩니다.
-
-1) Edge Function 환경 변수 설정
-```powershell
-supabase secrets set FOOD_API_KEY="<COOKRCP01_API_KEY>"
-supabase secrets set FOOD_API_BASE_URL="https://openapi.foodsafetykorea.go.kr/api"
-supabase secrets set FOOD_API_URL_TEMPLATE="https://openapi.foodsafetykorea.go.kr/api/{API_KEY}/COOKRCP01/json/{START}/{END}"
-supabase secrets set PUBLIC_RECIPE_SYNC_WORKER_SECRET="<RANDOM_LONG_SECRET>"
-```
-
-2) 함수 실행
-```powershell
-Invoke-RestMethod \
-	-Method Post \
-	-Uri http://127.0.0.1:54321/functions/v1/public_recipe_sync \
-	-Headers @{ "x-worker-secret" = "<PUBLIC_RECIPE_SYNC_WORKER_SECRET>"; "Content-Type" = "application/json" } \
-	-Body '{"size":200}'
-```
-
-3) 동기화 개수 확인
-```powershell
-$service = "<SERVICE_ROLE_KEY_FROM_SUPABASE_START>"
-$headers = @{ apikey = $service; Authorization = "Bearer $service"; Prefer = "count=exact" }
-(Invoke-WebRequest -Uri "http://127.0.0.1:54321/rest/v1/recipes_public?select=id&limit=1" -Headers $headers).Headers["Content-Range"]
-```
-
-### Recipe API function examples
-GET list public:
-```powershell
-Invoke-RestMethod \
-	-Method Get \
-	-Uri "http://127.0.0.1:54321/functions/v1/recipe_api?type=public&search=egg&limit=10&offset=0" \
-	-Headers @{ apikey = "<ANON_KEY_FROM_SUPABASE_START>"; Authorization = "Bearer <ANON_KEY_FROM_SUPABASE_START>" }
-```
-
-GET detail public:
-```powershell
-Invoke-RestMethod \
-	-Method Get \
-	-Uri "http://127.0.0.1:54321/functions/v1/recipe_api/<PUBLIC_RECIPE_ID>?type=public" \
-	-Headers @{ apikey = "<ANON_KEY_FROM_SUPABASE_START>"; Authorization = "Bearer <ANON_KEY_FROM_SUPABASE_START>" }
-```
-
-POST creator (authorized):
-```powershell
-Invoke-RestMethod \
-	-Method Post \
-	-Uri "http://127.0.0.1:54321/functions/v1/recipe_api?type=creator" \
-	-Headers @{ apikey = "<ANON_KEY_FROM_SUPABASE_START>"; Authorization = "Bearer <USER_ACCESS_TOKEN>"; "Content-Type" = "application/json" } \
-	-Body '{"title":"My Omelette","summary":"Fast breakfast","ingredients":["egg","salt"],"steps":["Beat eggs","Cook on pan"],"tips":"Low heat","is_published":true}'
-```
-
-Local values from `supabase start` output:
-- SUPABASE_URL: `http://127.0.0.1:54321`
-- SUPABASE_ANON_KEY: use `ANON_KEY`
-
-### Run command example
-```powershell
-flutter run \
-	--dart-define=APP_ENV=local \
-	--dart-define=SUPABASE_URL=http://127.0.0.1:54321 \
-	--dart-define=SUPABASE_ANON_KEY=<ANON_KEY_FROM_SUPABASE_START>
-```
-
-### Environment separation
-- `APP_ENV` supports `local`, `staging`, `production`.
-- For quick local work, existing `SUPABASE_URL` and `SUPABASE_ANON_KEY` still work.
-- For safer separation, pass environment-specific keys instead of reusing one pair everywhere.
-
-Local example:
-```powershell
-flutter run \
-	--dart-define=APP_ENV=local \
-	--dart-define=SUPABASE_URL_LOCAL=http://127.0.0.1:54321 \
-	--dart-define=SUPABASE_ANON_KEY_LOCAL=<ANON_KEY_FROM_SUPABASE_START>
-```
-
-Real-device local check (Android, USB):
-```powershell
-adb reverse tcp:54321 tcp:54321
-adb reverse --list
 npx supabase@latest status
 ```
 
-Expected:
-- `adb reverse --list` includes `tcp:54321 tcp:54321`
-- Supabase API URL is `http://127.0.0.1:54321`
+기존 migration은 수정하지 않습니다. 데이터베이스 초기화와 migration push는 명시적 승인 없이는 실행하지 않습니다.
 
-Production example:
+## 6. Flutter 앱 실행
+
+표준 진입점은 루트 스크립트입니다.
+
 ```powershell
-flutter run \
-	--dart-define=APP_ENV=production \
-	--dart-define=SUPABASE_URL_PRODUCTION=https://<your-project-ref>.supabase.co \
-	--dart-define=SUPABASE_ANON_KEY_PRODUCTION=<YOUR_PRODUCTION_ANON_KEY>
+powershell -ExecutionPolicy Bypass -File run-local.ps1 -AppEnv local
 ```
 
-### Login flow
-- 홈 우측 상단 로그인 아이콘으로 이메일 로그인/회원가입 화면에 진입합니다.
-- 로그인 후 홈 우측 상단 `내 레시피` 아이콘으로 creator 목록 화면에 진입합니다.
+`local`, `staging`, `production` 중 환경을 선택할 수 있습니다. 운영 환경 실행은 검증된 환경 파일로만 수행하세요.
 
-## Firebase setup
-1. Firebase Console에서 프로젝트를 만들고 Cloud Messaging을 사용할 Android 앱 `com.kyoutube.kyoutube`을 등록합니다.
-2. `google-services.json`을 다운로드해 `android/app/google-services.json`에 배치합니다.
-3. iOS도 사용할 경우 Firebase Console에서 iOS 앱을 추가하고 `GoogleService-Info.plist`를 다운로드합니다.
-4. `GoogleService-Info.plist`를 `ios/Runner` 아래에 복사한 뒤 Xcode에서 Runner target 리소스로 추가합니다.
-5. Android 13 이상 알림 표시를 위해 앱 최초 실행 시 알림 권한을 허용합니다.
+## 7. 테스트와 정적 분석
 
-Android quick check:
 ```powershell
-Test-Path android/app/google-services.json
+powershell -ExecutionPolicy Bypass -File tools/dev/verify.ps1
 ```
 
-iOS quick check:
+개별 실행은 `flutter analyze`, `flutter test`입니다.
+
+## 8. Android 기기 연결
+
+USB 디버깅을 승인한 후 기기와 로컬 Supabase 포트를 연결합니다.
+
 ```powershell
-Test-Path ios/Runner/GoogleService-Info.plist
+adb devices
+adb reverse tcp:54321 tcp:54321
+adb reverse --list
 ```
 
-현재 앱은 시작 시 `Firebase.initializeApp()`을 호출합니다. 설정 파일이 없으면 Firebase 초기화 단계에서 바로 실패하도록 해 두었습니다.
+## 9. Edge Function 개발
 
-### Non-admin Flutter install (Windows)
-```powershell
-$meta = Invoke-RestMethod 'https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json'
-$stable = $meta.current_release.stable
-$release = $meta.releases | Where-Object { $_.hash -eq $stable }
-$url = "https://storage.googleapis.com/flutter_infra_release/releases/$($release.archive)"
-$zip = Join-Path $HOME 'tools\\flutter_sdk.zip'
-Invoke-WebRequest -Uri $url -OutFile $zip
-Expand-Archive -Path $zip -DestinationPath (Join-Path $HOME 'tools') -Force
-setx PATH "$env:PATH;$HOME\\tools\\flutter\\bin"
-```
+함수는 `supabase/functions/`의 Deno/TypeScript 소스입니다. 로컬 함수 실행은 Supabase CLI 문서를 따르며, 필요한 비밀값은 무시되는 로컬 파일 또는 로컬 Supabase 환경에만 둡니다. `recipe_api`, `ai_recipe_assistant`, `public_recipe_sync`는 배포 전 로컬 요청/응답 검증을 추가해야 합니다. 배포·비밀 설정 변경은 이 저장소의 일반 개발 절차에 포함하지 않습니다.
 
-## Architecture (MVP)
-- App: Flutter (Android first)
-- Backend: Supabase Auth, Postgres, Storage, Edge Functions
-- AI: OpenAI via Supabase Edge Function
-- Push: Firebase Cloud Messaging
+## 10. 릴리스 절차
 
-## Key folders
-- lib/: Flutter app code
-- supabase/migrations/: SQL schema and RLS policies
-- supabase/functions/: edge function placeholders
-- docs/: architecture and cost guardrails
+릴리스는 `docs/internal-track-release-checklist.md`와 기존 수동 workflow를 따릅니다. 서명키와 Firebase 파일이 필요하며, 로컬 개발 스크립트는 릴리스 빌드·AAB 업로드·배포를 수행하지 않습니다.
 
-## Android release prep
-- Release signing requires `android/key.properties` by default.
-- If release signing values are missing, `release` build fails to prevent accidental non-production signing.
-- For local verification only, you can allow debug signing explicitly with `-PallowDebugSigningForRelease=true`.
-- Copy `android/key.properties.example` to `android/key.properties` and fill in your real keystore values before Play release preparation.
+## 11. 문제 해결
 
-Example release commands:
-```powershell
-flutter build appbundle \
-	-PallowDebugSigningForRelease=true \
-	--dart-define=APP_ENV=production \
-	--dart-define=SUPABASE_URL_PRODUCTION=https://<your-project-ref>.supabase.co \
-	--dart-define=SUPABASE_ANON_KEY_PRODUCTION=<YOUR_PRODUCTION_ANON_KEY>
-```
+- Flutter 버전 오류: `.fvmrc`의 3.44.8을 설치하고 PATH가 해당 SDK를 가리키게 합니다.
+- JDK 오류: JDK 17을 선택한 뒤 새 터미널에서 `java -version`을 확인합니다.
+- `.env.local` 오류: 예시 파일에서 새로 만들고 필요한 변수만 설정합니다.
+- Android 실기기에서 로컬 API에 연결되지 않음: `adb reverse` 결과에 54321 포트가 있는지 확인합니다.
+- Firebase 초기화 오류: 플랫폼별 Firebase 설정 파일이 로컬에 있는지 확인합니다. 해당 파일은 커밋하지 않습니다.
 
-Production submission should run without `-PallowDebugSigningForRelease=true`.
-
-Before store submission, update these Android items:
-- `applicationId` in `android/app/build.gradle.kts` if you want a different final Play identifier than `com.kyoutube.kyoutube`
-- `namespace` in `android/app/build.gradle.kts` if you change the package id
-- `package` path for `MainActivity.kt` if you change the package id
-- `app_name` in `android/app/src/main/res/values/strings.xml`
+상세 개발 흐름은 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), 구성은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고하세요.
