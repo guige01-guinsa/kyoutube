@@ -31,7 +31,8 @@ function Get-ProjectFlutter {
 
         throw (
             "Project FVM SDK is missing: $fvmFlutter. " +
-            "Install FVM if needed, then run 'fvm install $expectedVersion' from the repository root. " +
+            "If the 'fvm' command is unavailable, install it with 'dart pub global activate fvm' and add the Dart Pub cache bin directory to PATH. " +
+            "Then run 'fvm install $expectedVersion' from the repository root. " +
             "The project requires Flutter $expectedVersion from .fvmrc.$globalHint"
         )
     }

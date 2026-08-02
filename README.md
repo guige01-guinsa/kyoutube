@@ -17,7 +17,7 @@ Flutter 앱은 레시피 탐색·저장·제작·주방 기능을 제공하며 S
 
 ## 3. 최초 설치
 
-FVM을 설치한 뒤, 저장소 루트에서 고정 SDK를 받습니다. 전역 Flutter는 이 프로젝트의 실행·검증에 사용하지 않습니다.
+FVM 명령이 없다면 먼저 `dart pub global activate fvm`을 실행하고 Dart Pub cache의 bin 디렉터리를 PATH에 추가합니다. 그 후 저장소 루트에서 고정 SDK를 받습니다. 전역 Flutter는 이 프로젝트의 실행·검증에 사용하지 않습니다.
 
 ```powershell
 fvm install 3.44.8
