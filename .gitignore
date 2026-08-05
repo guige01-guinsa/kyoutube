@@ -68,6 +68,7 @@ app.*.map.json
 /device*.png
 /ui*.xml
 /supabase/.temp/
+/.local-backups/
 
 # Android release signing
 /android/key.properties

@@ -24,9 +24,8 @@ foreach ($procedure in $requiredProcedures) {
   }
 }
 
-# The behavior suite is intentionally transaction-scoped. Phase 2 will add
-# the implementation and enable these scenarios without touching developer
-# data: pending rejection; purchased-only inventory; skipped/unavailable
-# no-op; same-key retry/concurrency; completed no-op; rollback; owner/list
-# ownership; and create-key deduplication.
-throw 'KITCHEN_COMPLETION_BEHAVIOR_SUITE_PENDING_PHASE_2_IMPLEMENTATION'
+# The transaction-scoped behavior suite is in
+# kitchen_completion_behavior_contract.sql. It covers pending rejection,
+# purchased-only inventory, skipped/unavailable no-op, retries, rollback,
+# owner/list ownership, and creation-key deduplication without retaining rows.
+Write-Output 'KITCHEN_COMPLETION_RPC_CONTRACT_PRESENT'
