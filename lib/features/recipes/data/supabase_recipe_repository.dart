@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,10 +10,12 @@ import '../domain/recipe.dart';
 import 'recipe_repository.dart';
 
 class SupabaseRecipeRepository implements RecipeRepository {
-  SupabaseRecipeRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+  SupabaseRecipeRepository({SupabaseClient? client, http.Client? httpClient})
+      : _client = client ?? Supabase.instance.client,
+        _httpClient = httpClient ?? http.Client();
 
   final SupabaseClient _client;
+  final http.Client _httpClient;
 
   Future<Session> _requireSession() async {
     final session = _client.auth.currentSession;
@@ -84,7 +87,7 @@ class SupabaseRecipeRepository implements RecipeRepository {
       },
     );
 
-    final response = await http.get(
+    final response = await _httpClient.get(
       uri,
       headers: <String, String>{
         'apikey': Env.supabaseAnonKey,
@@ -119,7 +122,8 @@ class SupabaseRecipeRepository implements RecipeRepository {
     return <String, int>{
       'ingredient_count': parseInt(data['ingredient_count']),
       'expiring_soon_count': parseInt(data['expiring_soon_count']),
-      'active_shopping_list_count': parseInt(data['active_shopping_list_count']),
+      'active_shopping_list_count':
+          parseInt(data['active_shopping_list_count']),
       'open_shopping_item_count': parseInt(data['open_shopping_item_count']),
       'recent_cook_count_7d': parseInt(data['recent_cook_count_7d']),
     };
@@ -402,7 +406,7 @@ class SupabaseRecipeRepository implements RecipeRepository {
       throw StateError('로그인이 필요합니다.');
     }
 
-    final response = await http.get(
+    final response = await _httpClient.get(
       Uri.parse('${Env.supabaseUrl}/functions/v1/recipe_api/$id?type=creator'),
       headers: <String, String>{
         'apikey': Env.supabaseAnonKey,
@@ -465,14 +469,16 @@ class SupabaseRecipeRepository implements RecipeRepository {
       },
     );
 
-    final response = await http.get(
+    final response = await _httpClient.get(
       uri,
       headers: <String, String>{
         'apikey': Env.supabaseAnonKey,
+        'Authorization': 'Bearer ${Env.supabaseAnonKey}',
       },
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      _logPublicRecipeDiagnostics(statusCode: response.statusCode);
       throw StateError('공개 레시피를 불러오지 못했습니다.');
     }
 
@@ -483,13 +489,31 @@ class SupabaseRecipeRepository implements RecipeRepository {
 
     final rows = payload['data'];
     if (rows is! List<dynamic>) {
-      return const <Recipe>[];
+      _logPublicRecipeDiagnostics(statusCode: response.statusCode);
+      throw StateError('공개 레시피 응답 형식이 올바르지 않습니다.');
     }
+
+    _logPublicRecipeDiagnostics(
+      statusCode: response.statusCode,
+      dataCount: rows.length,
+    );
 
     return rows.map((dynamic row) {
       final map = row as Map<String, dynamic>;
       return _mapRecipe(map);
     }).toList();
+  }
+
+  void _logPublicRecipeDiagnostics({
+    required int statusCode,
+    int? dataCount,
+  }) {
+    if (!kReleaseMode) {
+      debugPrint(
+        'recipe_api public list status=$statusCode '
+        'data-count=${dataCount ?? 'unavailable'}',
+      );
+    }
   }
 
   @override
@@ -579,7 +603,7 @@ class SupabaseRecipeRepository implements RecipeRepository {
       },
     );
 
-    final response = await http.get(
+    final response = await _httpClient.get(
       uri,
       headers: <String, String>{
         'apikey': Env.supabaseAnonKey,
@@ -609,16 +633,45 @@ class SupabaseRecipeRepository implements RecipeRepository {
 
   @override
   Future<Recipe?> getRecipeById(String id) async {
-    final row = await _client
-        .from('recipes_public')
-        .select('id,title,summary,ingredients,steps,image_url')
-        .eq('id', id)
-        .maybeSingle();
+    final uri = Uri.parse(
+      '${Env.supabaseUrl}/functions/v1/recipe_api/${Uri.encodeComponent(id)}',
+    ).replace(
+      queryParameters: const <String, String>{'type': 'public'},
+    );
+    final response = await _httpClient.get(
+      uri,
+      headers: <String, String>{
+        'apikey': Env.supabaseAnonKey,
+        'Authorization': 'Bearer ${Env.supabaseAnonKey}',
+      },
+    );
 
-    if (row == null) return null;
+    _logPublicRecipeDetailDiagnostics(statusCode: response.statusCode);
+    if (response.statusCode == 404) {
+      return null;
+    }
 
-    final map = row;
-    return _mapRecipe(map);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('공개 레시피 상세를 불러오지 못했습니다.');
+    }
+
+    final payload = jsonDecode(response.body);
+    if (payload is! Map<String, dynamic> || payload['status'] != 'ok') {
+      throw StateError('공개 레시피 상세를 불러오지 못했습니다.');
+    }
+
+    final data = payload['data'];
+    if (data is! Map<String, dynamic>) {
+      throw StateError('공개 레시피 상세 응답 형식이 올바르지 않습니다.');
+    }
+
+    return _mapRecipe(data);
+  }
+
+  void _logPublicRecipeDetailDiagnostics({required int statusCode}) {
+    if (!kReleaseMode) {
+      debugPrint('recipe_api public detail status=$statusCode');
+    }
   }
 
   @override

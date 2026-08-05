@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -32,6 +33,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     final recipesAsync = ref.watch(publicRecipesProvider(publicQuery));
     final authUserAsync = ref.watch(authUserProvider);
     final currentUser = authUserAsync.valueOrNull;
+
+    const showFcmDebugPanel = !kReleaseMode;
 
     return Scaffold(
       appBar: AppBar(
@@ -102,6 +105,21 @@ class _HomePageState extends ConsumerState<HomePage> {
           Expanded(
             child: recipesAsync.when(
               data: (List<Recipe> recipes) {
+                if (recipes.isEmpty) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      ref.invalidate(publicRecipesProvider(publicQuery));
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const <Widget>[
+                        SizedBox(height: 96),
+                        Center(child: Text('조건에 맞는 공개 레시피가 없습니다.')),
+                      ],
+                    ),
+                  );
+                }
+
                 return RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(publicRecipesProvider(publicQuery));
@@ -110,35 +128,36 @@ class _HomePageState extends ConsumerState<HomePage> {
                   child: ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: recipes.length + 3,
+                    itemCount: recipes.length + 2 + (showFcmDebugPanel ? 1 : 0),
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (BuildContext context, int index) {
-                      if (index == 0) {
-                        return const OperationsStatusCard();
+                      if (index < recipes.length) {
+                        final recipe = recipes[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          leading: RecipeThumbnail(imageUrl: recipe.imageUrl),
+                          title: Text(recipe.title),
+                          subtitle: Text(recipe.summary ?? '요약 없음'),
+                          trailing: Text('${recipe.ingredients.length}개 재료'),
+                          onTap: () {
+                            context.push('/recipes/${recipe.id}');
+                          },
+                        );
                       }
 
-                      if (index == 1) {
-                        return const _FcmDebugPanel();
-                      }
-
-                      if (index == 2) {
+                      final diagnosticIndex = index - recipes.length;
+                      if (diagnosticIndex == 0) {
                         return const _KitchenSummaryCard();
                       }
 
-                      final recipe = recipes[index - 3];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        leading: RecipeThumbnail(imageUrl: recipe.imageUrl),
-                        title: Text(recipe.title),
-                        subtitle: Text(recipe.summary ?? '요약 없음'),
-                        trailing: Text('${recipe.ingredients.length}개 재료'),
-                        onTap: () {
-                          context.push('/recipes/${recipe.id}');
-                        },
-                      );
+                      if (showFcmDebugPanel && diagnosticIndex == 1) {
+                        return const _FcmDebugPanel();
+                      }
+
+                      return const OperationsStatusCard();
                     },
                   ),
                 );
@@ -327,6 +346,10 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
               setState(() {});
               _emitQuery(value);
             },
+            onSubmitted: (String value) {
+              _debounce?.cancel();
+              widget.onQueryChanged(value);
+            },
           ),
           const SizedBox(height: 8),
           FilterChip(
@@ -367,11 +390,12 @@ class _FcmDebugPanel extends StatelessWidget {
                       : '현재 플랫폼은 FCM 디버그 대상이 아닙니다. Android 또는 iOS에서 확인하세요.',
                 ),
                 const SizedBox(height: 8),
-                SelectableText(
-                  '토큰: ${state.token ?? '아직 없음'}',
+                Text(
+                  '토큰: ${state.tokenPreview ?? '아직 없음'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (state.lastMessageTitle != null || state.lastMessageBody != null) ...<Widget>[
+                if (state.lastMessageTitle != null ||
+                    state.lastMessageBody != null) ...<Widget>[
                   const SizedBox(height: 8),
                   Text('마지막 알림 제목: ${state.lastMessageTitle ?? '-'}'),
                   const SizedBox(height: 4),
@@ -381,7 +405,8 @@ class _FcmDebugPanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     '오류: ${state.errorMessage}',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -390,7 +415,7 @@ class _FcmDebugPanel extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     OutlinedButton(
-                      onPressed: state.isSupportedPlatform
+                      onPressed: state.isSupportedPlatform && !kReleaseMode
                           ? () => FirebaseMessagingService.requestPermission()
                           : null,
                       child: const Text('권한 요청'),

@@ -77,7 +77,8 @@ class OpsMonitorState {
       appEnv: appEnv ?? this.appEnv,
       phase: phase ?? this.phase,
       isReady: isReady ?? this.isReady,
-      startupError: clearStartupError ? null : (startupError ?? this.startupError),
+      startupError:
+          clearStartupError ? null : (startupError ?? this.startupError),
       recentErrors: recentErrors ?? this.recentErrors,
     );
   }
@@ -110,6 +111,11 @@ class OpsMonitorService {
       r'(apikey|api_key|service_role_key|anon_key|secret|password)\s*[:=]\s*[^\s,;]+',
       caseSensitive: false,
     ),
+    RegExp(
+      r'(?:fcm|registration)[ _-]?token\s*[:=]?\s*[A-Za-z0-9:_-]{16,}',
+      caseSensitive: false,
+    ),
+    RegExp(r'\b[A-Za-z0-9_-]{20,}:[A-Za-z0-9_-]{20,}\b'),
     RegExp(r'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+'),
   ];
 
@@ -123,9 +129,8 @@ class OpsMonitorService {
           return 'Bearer [REDACTED]';
         }
 
-        final separatorIndex = text.contains(':')
-          ? text.indexOf(':')
-          : text.indexOf('=');
+        final separatorIndex =
+            text.contains(':') ? text.indexOf(':') : text.indexOf('=');
         if (separatorIndex > 0) {
           return '${text.substring(0, separatorIndex + 1)} [REDACTED]';
         }

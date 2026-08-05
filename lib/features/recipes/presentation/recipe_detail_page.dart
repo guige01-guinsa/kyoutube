@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../auth/application/auth_providers.dart';
 import '../../cooking/application/voice_guide_providers.dart';
+import '../../cooking/application/voice_guide_service.dart';
 import '../../kitchen/application/kitchen_providers.dart';
 import '../../../core/widgets/centered_state_view.dart';
 import '../application/recipe_providers.dart';
@@ -27,8 +28,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       'cooking.auto_advance_seconds';
   static const String _autoAdvanceEnabledPrefKey =
       'cooking.auto_advance_enabled';
-  static const String _lastStepIndexPrefKeyPrefix =
-      'cooking.last_step_index';
+  static const String _lastStepIndexPrefKeyPrefix = 'cooking.last_step_index';
 
   Timer? _autoAdvanceTimer;
   bool _autoAdvanceEnabled = false;
@@ -42,13 +42,13 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   int? _cookRating;
   bool? _cookLiked;
   final TextEditingController _cookNoteController = TextEditingController();
+  late final VoiceGuideService _voiceGuideService;
 
   Duration get _autoAdvanceInterval => Duration(seconds: _autoAdvanceSeconds);
 
   bool _isSessionProblem(Object error) {
     final message = error.toString();
-    return message.contains('로그인이 필요합니다') ||
-        message.contains('다시 로그인해 주세요');
+    return message.contains('로그인이 필요합니다') || message.contains('다시 로그인해 주세요');
   }
 
   bool _isNetworkProblem(Object error) {
@@ -83,6 +83,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   @override
   void initState() {
     super.initState();
+    _voiceGuideService = ref.read(voiceGuideServiceProvider);
     _restoreAutoAdvancePreferences();
     _loadBookmarkState();
   }
@@ -90,7 +91,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   @override
   void dispose() {
     _cancelAutoAdvanceTimer();
-    ref.read(voiceGuideServiceProvider).stop();
+    unawaited(_voiceGuideService.stop());
     _cookNoteController.dispose();
     super.dispose();
   }
@@ -133,7 +134,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       return;
     }
 
-    final snapshot = ref.read(voiceGuideServiceProvider).snapshot(steps);
+    final snapshot = _voiceGuideService.snapshot(steps);
     if (!snapshot.hasSteps) {
       return;
     }
@@ -143,7 +144,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   }
 
   Future<void> _startGuide(List<String> steps, {int? fromIndex}) async {
-    final service = ref.read(voiceGuideServiceProvider);
+    final service = _voiceGuideService;
     await service.start(steps, fromIndex: fromIndex);
     await _persistCurrentStepIndex(steps);
     if (!mounted) {
@@ -153,7 +154,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   }
 
   Future<void> _nextStep(List<String> steps) async {
-    final service = ref.read(voiceGuideServiceProvider);
+    final service = _voiceGuideService;
     await service.next(steps);
     await _persistCurrentStepIndex(steps);
     if (!mounted) {
@@ -163,7 +164,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   }
 
   Future<void> _previousStep(List<String> steps) async {
-    final service = ref.read(voiceGuideServiceProvider);
+    final service = _voiceGuideService;
     await service.previous(steps);
     await _persistCurrentStepIndex(steps);
     if (!mounted) {
@@ -202,11 +203,10 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
     try {
       final repository = ref.read(recipeRepositoryProvider);
       await repository.createSubscriberRecipeFromPublic(source: recipe);
-      ref.invalidate(subscriberRecipesProvider);
-
       if (!mounted) {
         return;
       }
+      ref.invalidate(subscriberRecipesProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('내 요리 노트에 복사했습니다.')),
@@ -289,7 +289,8 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
     try {
       final repository = ref.read(recipeRepositoryProvider);
       if (_isBookmarked) {
-        await repository.removeBookmark(recipeType: 'public', recipeId: recipe.id);
+        await repository.removeBookmark(
+            recipeType: 'public', recipeId: recipe.id);
       } else {
         await repository.addBookmark(recipeType: 'public', recipeId: recipe.id);
       }
@@ -303,7 +304,8 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_isBookmarked ? '북마크에 저장했습니다.' : '북마크를 해제했습니다.')),
+        SnackBar(
+            content: Text(_isBookmarked ? '북마크에 저장했습니다.' : '북마크를 해제했습니다.')),
       );
     } catch (err) {
       if (!mounted) {
@@ -357,11 +359,10 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
         recipeType: 'public',
         recipe: recipe,
       );
-      ref.invalidate(kitchenSummaryProvider);
-
       if (!mounted) {
         return;
       }
+      ref.invalidate(kitchenSummaryProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -414,12 +415,11 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
             note: _cookNoteController.text,
           );
 
-      ref.invalidate(kitchenSummaryProvider);
-      ref.invalidate(kitchenCookSessionsProvider);
-
       if (!mounted) {
         return;
       }
+      ref.invalidate(kitchenSummaryProvider);
+      ref.invalidate(kitchenCookSessionsProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -453,7 +453,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   }
 
   Future<void> _startAutoAdvance(List<String> steps, {int? fromIndex}) async {
-    final service = ref.read(voiceGuideServiceProvider);
+    final service = _voiceGuideService;
     final snapshot = service.snapshot(steps);
 
     if (!snapshot.hasSteps) {
@@ -512,7 +512,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
     _cancelAutoAdvanceTimer();
 
     if (stopGuidance) {
-      await ref.read(voiceGuideServiceProvider).stopGuidance(steps);
+      await _voiceGuideService.stopGuidance(steps);
     }
 
     if (!mounted) {
@@ -547,7 +547,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
 
     return Scaffold(
       appBar: AppBar(
-          title: const Text('레시피 상세'),
+        title: const Text('레시피 상세'),
         actions: <Widget>[
           IconButton(
             onPressed: _isBookmarkLoading
@@ -580,9 +580,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
             );
           }
 
-          final guideSnapshot = ref
-              .read(voiceGuideServiceProvider)
-              .snapshot(recipe.steps);
+          final guideSnapshot = _voiceGuideService.snapshot(recipe.steps);
 
           if (_lastStepRestorePending && guideSnapshot.hasSteps) {
             final restoreIndex = _clampStepIndex(
@@ -723,11 +721,16 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
                             isExpanded: true,
                             hint: const Text('평점을 선택하세요'),
                             items: const <DropdownMenuItem<int>>[
-                              DropdownMenuItem<int>(value: 1, child: Text('1점')),
-                              DropdownMenuItem<int>(value: 2, child: Text('2점')),
-                              DropdownMenuItem<int>(value: 3, child: Text('3점')),
-                              DropdownMenuItem<int>(value: 4, child: Text('4점')),
-                              DropdownMenuItem<int>(value: 5, child: Text('5점')),
+                              DropdownMenuItem<int>(
+                                  value: 1, child: Text('1점')),
+                              DropdownMenuItem<int>(
+                                  value: 2, child: Text('2점')),
+                              DropdownMenuItem<int>(
+                                  value: 3, child: Text('3점')),
+                              DropdownMenuItem<int>(
+                                  value: 4, child: Text('4점')),
+                              DropdownMenuItem<int>(
+                                  value: 5, child: Text('5점')),
                             ],
                             onChanged: (int? value) {
                               setState(() {
@@ -866,11 +869,12 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
                             ),
                           ),
                           Switch.adaptive(
-                            value:
-                                _autoAdvanceEnabled || _autoAdvanceRestorePending,
+                            value: _autoAdvanceEnabled ||
+                                _autoAdvanceRestorePending,
                             onChanged: guideSnapshot.hasSteps
                                 ? (bool enabled) async {
-                                    await _setAutoAdvance(enabled, recipe.steps);
+                                    await _setAutoAdvance(
+                                        enabled, recipe.steps);
                                   }
                                 : null,
                           ),

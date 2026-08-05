@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,6 +11,8 @@ import 'package:k_youtube/features/recipes/data/recipe_repository.dart';
 import 'package:k_youtube/features/recipes/domain/recipe.dart';
 import 'package:k_youtube/features/recipes/presentation/creator_recipe_detail_page.dart';
 import 'package:k_youtube/features/recipes/presentation/bookmarked_recipes_page.dart';
+import 'package:k_youtube/features/recipes/presentation/recipe_detail_page.dart';
+import 'package:k_youtube/features/home/presentation/home_page.dart';
 
 class _FakeRecipeRepository implements RecipeRepository {
   @override
@@ -79,7 +83,14 @@ class _FakeRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<Recipe?> getRecipeById(String id) async => null;
+  Future<Recipe?> getRecipeById(String id) async {
+    return Recipe(
+      id: id,
+      title: '상세 레시피',
+      ingredients: <String>['재료'],
+      steps: <String>['순서'],
+    );
+  }
 
   @override
   Future<Recipe?> getSubscriberRecipeById(String id) async {
@@ -114,7 +125,7 @@ class _FakeRecipeRepository implements RecipeRepository {
     return <Recipe>[
       Recipe(
         id: 'test-id',
-        title: '테스트 레시피',
+        title: search == null || search.isEmpty ? '테스트 레시피' : '검색 결과: $search',
         ingredients: <String>['재료'],
         steps: <String>['순서'],
       ),
@@ -201,13 +212,28 @@ class _FakeRecipeRepository implements RecipeRepository {
   Future<bool> isBookmarked({
     required String recipeType,
     required String recipeId,
-  }) async => false;
+  }) async =>
+      false;
 
   @override
   Future<void> removeBookmark({
     required String recipeType,
     required String recipeId,
   }) async {}
+}
+
+class _DelayedRecipeRepository extends _FakeRecipeRepository {
+  _DelayedRecipeRepository(this.completer);
+
+  final Completer<List<Recipe>> completer;
+
+  @override
+  Future<List<Recipe>> listPublicRecipes({
+    String? search,
+    bool useAiSearch = false,
+  }) {
+    return completer.future;
+  }
 }
 
 void main() {
@@ -225,6 +251,88 @@ void main() {
 
     expect(find.text('AI Cooking Platform'), findsOneWidget);
     expect(find.text('공개 레시피 검색'), findsOneWidget);
+    expect(find.text('테스트 레시피'), findsOneWidget);
+  });
+
+  testWidgets('home search submits immediately and keeps the result visible',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          recipeRepositoryProvider.overrideWithValue(_FakeRecipeRepository()),
+        ],
+        child: const KYoutubeApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '감자');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(find.text('검색 결과: 감자'), findsOneWidget);
+  });
+
+  testWidgets('disposing home during a pending search does not access ref',
+      (WidgetTester tester) async {
+    final completer = Completer<List<Recipe>>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          recipeRepositoryProvider.overrideWithValue(
+            _DelayedRecipeRepository(completer),
+          ),
+        ],
+        child: const MaterialApp(home: HomePage()),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), '감자');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    completer.complete(<Recipe>[]);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selecting a public search result opens its detail page',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          recipeRepositoryProvider.overrideWithValue(_FakeRecipeRepository()),
+        ],
+        child: const KYoutubeApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('테스트 레시피'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('상세 레시피'), findsOneWidget);
+  });
+
+  testWidgets('disposing a recipe detail page does not access ref',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          recipeRepositoryProvider.overrideWithValue(_FakeRecipeRepository()),
+        ],
+        child: const MaterialApp(
+          home: RecipeDetailPage(recipeId: 'external-source-id'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('creator recipe detail shows tips', (WidgetTester tester) async {
@@ -245,7 +353,8 @@ void main() {
     expect(find.text('테스트 팁'), findsOneWidget);
   });
 
-  testWidgets('bookmarks page renders saved recipe', (WidgetTester tester) async {
+  testWidgets('bookmarks page renders saved recipe',
+      (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: <Override>[

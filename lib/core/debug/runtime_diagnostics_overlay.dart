@@ -9,7 +9,7 @@ class RuntimeDiagnosticsConfig {
 
   // Temporary runtime diagnostics for device testing.
   // Disable with: --dart-define=ENABLE_RUNTIME_DIAGNOSTICS=false
-  static const bool enabled =
+  static const bool enabled = !kReleaseMode &&
       bool.fromEnvironment('ENABLE_RUNTIME_DIAGNOSTICS', defaultValue: true);
 }
 

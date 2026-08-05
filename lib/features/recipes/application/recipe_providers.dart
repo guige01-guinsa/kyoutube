@@ -38,25 +38,14 @@ final recipeImageServiceProvider = Provider<RecipeImageService>(
   (ref) => RecipeImageService(),
 );
 
-final publicRecipesProvider = FutureProvider.family<List<Recipe>, PublicRecipeQuery>(
+final publicRecipesProvider =
+    FutureProvider.family<List<Recipe>, PublicRecipeQuery>(
   (ref, PublicRecipeQuery query) async {
     final repository = ref.watch(recipeRepositoryProvider);
     final recipes = await repository.listPublicRecipes(
       search: query.search.trim().isEmpty ? null : query.search.trim(),
       useAiSearch: query.useAiSearch,
     );
-
-    if (recipes.isEmpty) {
-      return <Recipe>[
-        Recipe(
-          id: 'sample-1',
-          title: '두부 스테이크',
-          summary: '담백하고 단백질이 풍부한 한 접시',
-          ingredients: <String>['두부 1모', '양파 1/2개', '간장 1큰술'],
-          steps: <String>['두부 물기 제거', '재료 혼합 후 굽기', '소스 뿌려 완성'],
-        ),
-      ];
-    }
 
     return recipes;
   },

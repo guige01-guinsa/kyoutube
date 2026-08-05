@@ -4,6 +4,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import '../ops/ops_monitor_service.dart';
+
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -14,7 +16,7 @@ class FirebaseMessagingDebugState {
     required this.isSupportedPlatform,
     required this.isInitialized,
     this.permissionStatus = 'not-requested',
-    this.token,
+    this.tokenPreview,
     this.lastMessageTitle,
     this.lastMessageBody,
     this.errorMessage,
@@ -23,7 +25,10 @@ class FirebaseMessagingDebugState {
   final bool isSupportedPlatform;
   final bool isInitialized;
   final String permissionStatus;
-  final String? token;
+
+  /// A diagnostic-only token preview. Never store the complete registration
+  /// token in UI state because this state can be rendered, copied, or logged.
+  final String? tokenPreview;
   final String? lastMessageTitle;
   final String? lastMessageBody;
   final String? errorMessage;
@@ -32,11 +37,11 @@ class FirebaseMessagingDebugState {
     bool? isSupportedPlatform,
     bool? isInitialized,
     String? permissionStatus,
-    String? token,
+    String? tokenPreview,
     String? lastMessageTitle,
     String? lastMessageBody,
     String? errorMessage,
-    bool clearToken = false,
+    bool clearTokenPreview = false,
     bool clearLastMessageTitle = false,
     bool clearLastMessageBody = false,
     bool clearErrorMessage = false,
@@ -45,7 +50,8 @@ class FirebaseMessagingDebugState {
       isSupportedPlatform: isSupportedPlatform ?? this.isSupportedPlatform,
       isInitialized: isInitialized ?? this.isInitialized,
       permissionStatus: permissionStatus ?? this.permissionStatus,
-      token: clearToken ? null : (token ?? this.token),
+      tokenPreview:
+          clearTokenPreview ? null : (tokenPreview ?? this.tokenPreview),
       lastMessageTitle: clearLastMessageTitle
           ? null
           : (lastMessageTitle ?? this.lastMessageTitle),
@@ -83,6 +89,18 @@ class FirebaseMessagingService {
         defaultTargetPlatform == TargetPlatform.iOS;
   }
 
+  static String? tokenPreviewForDiagnostics(String? token) {
+    if (token == null || token.isEmpty) {
+      return null;
+    }
+
+    if (token.length <= 8) {
+      return '[MASKED]';
+    }
+
+    return '${token.substring(0, 4)}…${token.substring(token.length - 4)}';
+  }
+
   static Future<void> initialize() async {
     if (_initialized || !isSupportedPlatform) {
       debugState.value = debugState.value.copyWith(
@@ -110,21 +128,25 @@ class FirebaseMessagingService {
         isSupportedPlatform: true,
         isInitialized: true,
         permissionStatus: settings.authorizationStatus.name,
-        token: token,
+        tokenPreview: tokenPreviewForDiagnostics(token),
       );
 
       if (initialMessage != null) {
         debugState.value = debugState.value.copyWith(
-          lastMessageTitle: initialMessage.notification?.title ?? '(앱 시작)',
-          lastMessageBody: initialMessage.notification?.body ??
-              initialMessage.data.toString(),
+          lastMessageTitle: OpsMonitorService.redact(
+            initialMessage.notification?.title ?? '(앱 시작)',
+          ),
+          lastMessageBody: OpsMonitorService.redact(
+            initialMessage.notification?.body ?? '(데이터 메시지)',
+          ),
           clearErrorMessage: true,
         );
       }
 
-      _tokenRefreshSubscription = messaging.onTokenRefresh.listen((String token) {
+      _tokenRefreshSubscription =
+          messaging.onTokenRefresh.listen((String token) {
         debugState.value = debugState.value.copyWith(
-          token: token,
+          tokenPreview: tokenPreviewForDiagnostics(token),
           clearErrorMessage: true,
         );
       });
@@ -132,9 +154,12 @@ class FirebaseMessagingService {
       _foregroundSubscription = FirebaseMessaging.onMessage.listen(
         (RemoteMessage message) {
           debugState.value = debugState.value.copyWith(
-            lastMessageTitle: message.notification?.title ?? '(제목 없음)',
-            lastMessageBody: message.notification?.body ??
-                message.data.toString(),
+            lastMessageTitle: OpsMonitorService.redact(
+              message.notification?.title ?? '(제목 없음)',
+            ),
+            lastMessageBody: OpsMonitorService.redact(
+              message.notification?.body ?? '(데이터 메시지)',
+            ),
             clearErrorMessage: true,
           );
         },
@@ -143,9 +168,12 @@ class FirebaseMessagingService {
       _openedAppSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
         (RemoteMessage message) {
           debugState.value = debugState.value.copyWith(
-            lastMessageTitle: message.notification?.title ?? '(앱 열림)',
-            lastMessageBody:
-                message.notification?.body ?? message.data.toString(),
+            lastMessageTitle: OpsMonitorService.redact(
+              message.notification?.title ?? '(앱 열림)',
+            ),
+            lastMessageBody: OpsMonitorService.redact(
+              message.notification?.body ?? '(데이터 메시지)',
+            ),
             clearErrorMessage: true,
           );
         },
@@ -156,27 +184,29 @@ class FirebaseMessagingService {
       debugState.value = FirebaseMessagingDebugState(
         isSupportedPlatform: true,
         isInitialized: false,
-        errorMessage: error.toString(),
+        errorMessage: OpsMonitorService.redact(error.toString()),
       );
     }
   }
 
   static Future<void> refreshToken() async {
-    if (!isSupportedPlatform) {
+    if (!isSupportedPlatform || kReleaseMode) {
       return;
     }
 
     try {
-      final token = await FirebaseMessaging.instance.getToken();
+      final messaging = FirebaseMessaging.instance;
+      await messaging.deleteToken();
+      final token = await messaging.getToken();
       debugState.value = debugState.value.copyWith(
         isSupportedPlatform: true,
         isInitialized: true,
-        token: token,
+        tokenPreview: tokenPreviewForDiagnostics(token),
         clearErrorMessage: true,
       );
     } catch (error) {
       debugState.value = debugState.value.copyWith(
-        errorMessage: error.toString(),
+        errorMessage: OpsMonitorService.redact(error.toString()),
       );
     }
   }
@@ -201,7 +231,7 @@ class FirebaseMessagingService {
       );
     } catch (error) {
       debugState.value = debugState.value.copyWith(
-        errorMessage: error.toString(),
+        errorMessage: OpsMonitorService.redact(error.toString()),
       );
     }
   }
