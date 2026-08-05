@@ -289,8 +289,8 @@ void main() {
     await tester.pump();
 
     await tester.enterText(find.byType(TextField), '감자');
-    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pump(const Duration(milliseconds: 300));
     completer.complete(<Recipe>[]);
     await tester.pumpAndSettle();
 

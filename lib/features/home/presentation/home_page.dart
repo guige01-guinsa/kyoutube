@@ -92,11 +92,17 @@ class _HomePageState extends ConsumerState<HomePage> {
             initialQuery: _searchQuery,
             useAiSearch: _useAiSearch,
             onQueryChanged: (String value) {
+              if (!mounted) {
+                return;
+              }
               setState(() {
                 _searchQuery = value;
               });
             },
             onAiSearchChanged: (bool enabled) {
+              if (!mounted) {
+                return;
+              }
               setState(() {
                 _useAiSearch = enabled;
               });
@@ -309,6 +315,9 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
   void _emitQuery(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) {
+        return;
+      }
       widget.onQueryChanged(value);
     });
   }
@@ -348,6 +357,9 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
             },
             onSubmitted: (String value) {
               _debounce?.cancel();
+              if (!mounted) {
+                return;
+              }
               widget.onQueryChanged(value);
             },
           ),
