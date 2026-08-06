@@ -1197,109 +1197,71 @@ async function deleteKitchenIngredient(id: string, userId: string): Promise<Resp
   return okResponse({ deleted: rows[0] }, 200);
 }
 
-async function createShoppingFromRecipe(req: Request, userId: string): Promise<Response> {
-  const body = await req.json().catch(() => null);
-  const recipeType = typeof body?.recipe_type === "string" ? body.recipe_type.trim() : "";
-  const recipeId = typeof body?.recipe_id === "string" ? body.recipe_id.trim() : "";
-  const recipeTitle = typeof body?.recipe_title === "string" ? body.recipe_title.trim() : "";
-  const requiredIngredients = Array.isArray(body?.required_ingredients)
-    ? body.required_ingredients.map((value: unknown) => String(value ?? "").trim()).filter((value: string) => value.length > 0)
-    : [];
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const managedShoppingItemFields = new Set(["id", "list_id", "owner_id", "normalized_name", "status", "is_checked", "completed_at", "inventory_change_count"]);
 
-  if (recipeType.length === 0 || recipeId.length === 0 || requiredIngredients.length === 0) {
-    return errorResponse(400, "recipe_type, recipe_id, required_ingredients are required");
-  }
+function idempotencyKey(req: Request): string | null {
+  const key = (req.headers.get("Idempotency-Key") ?? "").trim();
+  return uuidPattern.test(key) ? key : null;
+}
 
-  const ingredientParams = new URLSearchParams();
-  ingredientParams.set("select", "normalized_name");
-  ingredientParams.set("owner_id", `eq.${userId}`);
-  const ingredientResponse = await restRequest(`/rest/v1/kitchen_ingredients?${ingredientParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!ingredientResponse.ok) {
-    const details = await ingredientResponse.text();
-    return errorResponse(500, "Failed to load kitchen ingredients", details);
-  }
-
-  const ownedRows = await ingredientResponse.json();
-  const ownedSet = new Set(
-    (Array.isArray(ownedRows) ? ownedRows : [])
-      .map((row: Record<string, unknown>) => String(row.normalized_name ?? "").trim())
-      .filter((value: string) => value.length > 0)
-  );
-
-  const deduped = new Map<string, string>();
-  for (const ingredient of requiredIngredients) {
-    const normalized = normalizeIngredientName(ingredient);
-    if (normalized.length > 0 && !deduped.has(normalized)) {
-      deduped.set(normalized, ingredient);
-    }
-  }
-
-  const missing = [...deduped.entries()]
-    .filter(([normalized]) => !ownedSet.has(normalized))
-    .map(([normalized, original]) => ({ normalized, original }));
-
-  const listResponse = await restRequest("/rest/v1/kitchen_shopping_lists", {
+async function userRpc(req: Request, rpcName: string, body: Record<string, unknown>): Promise<Response> {
+  const token = getBearerToken(req);
+  if (!token) return errorResponse(401, "Authorization Bearer token is required");
+  const { supabaseUrl, anonKey } = getSupabaseConfig();
+  return fetch(`${supabaseUrl}/rest/v1/rpc/${rpcName}`, {
     method: "POST",
-    headers: {
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({
-      owner_id: userId,
-      status: "active",
-      title: recipeTitle.length > 0 ? `${recipeTitle} 장보기` : "AI generated shopping list",
-      source_recipe_id: `${recipeType}:${recipeId}`,
-    })
+    headers: { apikey: anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
+}
 
-  if (!listResponse.ok) {
-    const details = await listResponse.text();
-    return errorResponse(500, "Failed to create shopping list", details);
+function shoppingRpcError(response: Response): Response {
+  if (response.status === 401 || response.status === 403) return errorResponse(401, "Unauthorized");
+  if (response.status === 404) return errorResponse(404, "Shopping list not found");
+  return errorResponse(422, "Shopping request was rejected", { code: "shopping_request_rejected" });
+}
+
+async function createShoppingFromRecipe(req: Request, _userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const key = idempotencyKey(req);
+  if (!key) return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
+  const sourceRecipeId = typeof body?.source_recipe_id === "string" ? body.source_recipe_id.trim() : "";
+  if (!Array.isArray(body?.items)) {
+    return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
   }
-
-  const listRows = await listResponse.json();
-  if (!Array.isArray(listRows) || listRows.length === 0) {
-    return errorResponse(500, "Shopping list creation returned empty response");
+  if (sourceRecipeId.length === 0 || !/^(public|creator|user):.+/.test(sourceRecipeId)) {
+    return errorResponse(400, "source_recipe_id is required");
   }
-
-  const createdList = listRows[0] as Record<string, unknown>;
-  let createdItems: unknown[] = [];
-
-  if (missing.length > 0) {
-    const itemPayload = missing.map((item) => ({
-      list_id: createdList.id,
-      owner_id: userId,
-      name: item.original,
-      normalized_name: item.normalized,
-      quantity: null,
-      unit: null,
-      is_checked: false,
-    }));
-
-    const itemResponse = await restRequest("/rest/v1/kitchen_shopping_items", {
-      method: "POST",
-      headers: {
-        Prefer: "return=representation"
-      },
-      body: JSON.stringify(itemPayload)
-    });
-
-    if (!itemResponse.ok) {
-      const details = await itemResponse.text();
-      return errorResponse(500, "Failed to create shopping items", details);
-    }
-
-    const itemRows = await itemResponse.json();
-    createdItems = Array.isArray(itemRows) ? itemRows : [];
+  const items = body.items;
+  const names = new Set<string>();
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
+    const value = item as Record<string, unknown>;
+    if (Object.keys(value).some((field) => managedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted");
+    const name = typeof value.name === "string" ? value.name.trim() : "";
+    const text = typeof value.ingredient_text === "string" ? value.ingredient_text : "";
+    if (!name || !text.trim() || name.length > 200 || text.length > 500 || (value.quantity !== null && value.quantity !== undefined && (typeof value.quantity !== "number" || !Number.isFinite(value.quantity) || value.quantity <= 0)) || (value.unit !== null && value.unit !== undefined && (typeof value.unit !== "string" || !value.unit.trim() || value.unit.trim().length > 32))) return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
+    const canonical = name.toLowerCase();
+    if (names.has(canonical)) return errorResponse(422, "Duplicate canonical ingredient names require review", { code: "ingredient_review_required" });
+    names.add(canonical);
   }
-
-  return okResponse({
-    shopping_list: createdList,
-    items: createdItems,
-    missing_count: missing.length,
-  }, 201);
+  const rpc = await userRpc(req, "create_kitchen_shopping_list", { p_source_recipe_id: sourceRecipeId, p_items: items, p_idempotency_key: key });
+  if (!rpc.ok) return shoppingRpcError(rpc);
+  const rows: unknown = await rpc.json().catch(() => null);
+  if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || typeof rows[0] !== "object" || Array.isArray(rows[0])) {
+    return errorResponse(500, "Shopping create response shape was invalid");
+  }
+  const result = rows[0] as Record<string, unknown>;
+  const listId = typeof result.list_id === "string" ? result.list_id.trim() : "";
+  const status = typeof result.status === "string" ? result.status : "";
+  const created = result.created;
+  const replayed = result.replayed;
+  const responseIdempotencyKey = typeof result.idempotency_key === "string" ? result.idempotency_key.trim() : "";
+  if (!listId || status !== "active" || typeof created !== "boolean" || typeof replayed !== "boolean" || !responseIdempotencyKey || responseIdempotencyKey !== key) {
+    return errorResponse(500, "Shopping create result was invalid");
+  }
+  return okResponse({ list_id: listId, status, created, replayed, idempotency_key: responseIdempotencyKey }, created ? 201 : 200);
 }
 
 async function patchShoppingItem(req: Request, id: string, userId: string): Promise<Response> {
@@ -1336,123 +1298,15 @@ async function patchShoppingItem(req: Request, id: string, userId: string): Prom
   return okResponse(rows[0], 200);
 }
 
-async function completeShoppingList(id: string, userId: string): Promise<Response> {
-  const listParams = new URLSearchParams();
-  listParams.set("select", "id,status");
-  listParams.set("id", `eq.${id}`);
-  listParams.set("owner_id", `eq.${userId}`);
-  listParams.set("limit", "1");
-
-  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!listResponse.ok) {
-    const details = await listResponse.text();
-    return errorResponse(500, "Failed to load shopping list", details);
-  }
-
-  const listRows = await listResponse.json();
-  if (!Array.isArray(listRows) || listRows.length === 0) {
-    return errorResponse(404, "Shopping list not found", { id });
-  }
-
-  const itemParams = new URLSearchParams();
-  itemParams.set("select", "id,name,normalized_name,quantity,unit");
-  itemParams.set("owner_id", `eq.${userId}`);
-  itemParams.set("list_id", `eq.${id}`);
-  itemParams.set("is_checked", "eq.true");
-
-  const checkedResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!checkedResponse.ok) {
-    const details = await checkedResponse.text();
-    return errorResponse(500, "Failed to load shopping items", details);
-  }
-
-  const checkedItems = await checkedResponse.json();
-  const checkedRows = Array.isArray(checkedItems) ? checkedItems as Array<Record<string, unknown>> : [];
-
-  for (const item of checkedRows) {
-    const normalizedName = String(item.normalized_name ?? "").trim();
-    const name = String(item.name ?? "").trim();
-    if (normalizedName.length === 0 || name.length === 0) {
-      continue;
-    }
-
-    const ingredientParams = new URLSearchParams();
-    ingredientParams.set("select", "id,quantity");
-    ingredientParams.set("owner_id", `eq.${userId}`);
-    ingredientParams.set("normalized_name", `eq.${normalizedName}`);
-    ingredientParams.set("limit", "1");
-
-    const existingResponse = await restRequest(`/rest/v1/kitchen_ingredients?${ingredientParams.toString()}`, {
-      method: "GET"
-    });
-
-    if (!existingResponse.ok) {
-      continue;
-    }
-
-    const existingRows = await existingResponse.json();
-    const itemQuantity = typeof item.quantity === "number" ? item.quantity : null;
-
-    if (Array.isArray(existingRows) && existingRows.length > 0) {
-      const existing = existingRows[0] as Record<string, unknown>;
-      const existingQuantity = typeof existing.quantity === "number" ? existing.quantity : null;
-      const mergedQuantity = itemQuantity !== null && existingQuantity !== null
-        ? existingQuantity + itemQuantity
-        : existingQuantity ?? itemQuantity;
-
-      const updateParams = new URLSearchParams();
-      updateParams.set("id", `eq.${String(existing.id)}`);
-      updateParams.set("owner_id", `eq.${userId}`);
-
-      await restRequest(`/rest/v1/kitchen_ingredients?${updateParams.toString()}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          quantity: mergedQuantity,
-          unit: typeof item.unit === "string" ? item.unit : null,
-          updated_at: new Date().toISOString(),
-        })
-      });
-    } else {
-      await restRequest("/rest/v1/kitchen_ingredients", {
-        method: "POST",
-        body: JSON.stringify({
-          owner_id: userId,
-          name,
-          normalized_name: normalizedName,
-          quantity: itemQuantity,
-          unit: typeof item.unit === "string" ? item.unit : null,
-        })
-      });
-    }
-  }
-
-  const completeParams = new URLSearchParams();
-  completeParams.set("id", `eq.${id}`);
-  completeParams.set("owner_id", `eq.${userId}`);
-  const completeResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${completeParams.toString()}`, {
-    method: "PATCH",
-    headers: {
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({
-      status: "completed",
-      updated_at: new Date().toISOString(),
-    })
-  });
-
-  if (!completeResponse.ok) {
-    const details = await completeResponse.text();
-    return errorResponse(500, "Failed to complete shopping list", details);
-  }
-
-  const summary = await buildKitchenSummary(userId);
-  return okResponse({ completed_list_id: id, summary }, 200);
+async function completeShoppingList(req: Request, id: string, _userId: string): Promise<Response> {
+  const key = idempotencyKey(req);
+  if (!key) return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
+  if (!uuidPattern.test(id)) return errorResponse(400, "Shopping list id must be a UUID");
+  const rpc = await userRpc(req, "complete_kitchen_shopping_list", { p_list_id: id, p_idempotency_key: key });
+  if (!rpc.ok) return shoppingRpcError(rpc);
+  const rows = await rpc.json();
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  return okResponse({ shopping_list: result }, 200);
 }
 
 async function listKitchenCookSessions(url: URL, userId: string): Promise<Response> {
@@ -1555,7 +1409,7 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
       if (id.length === 0) {
         return errorResponse(400, "id query parameter is required for complete-shopping-list");
       }
-      return await completeShoppingList(id, userId);
+      return await completeShoppingList(req, id, userId);
     }
     if (action === "complete-cook") {
       return await completeCook(req, userId);
