@@ -6,6 +6,7 @@ import '../data/kitchen_api.dart';
 import '../data/shopping_persistence.dart';
 import '../domain/kitchen_models.dart';
 import 'shopping_persistence_controllers.dart';
+import 'shopping_item_mutation_controller.dart';
 
 final kitchenApiProvider = Provider<KitchenApi>(
   (ref) => KitchenApi(),
@@ -42,6 +43,11 @@ final shoppingListCompletionControllerProvider =
     keyStore: await ref.watch(completionKeyStoreProvider.future),
     currentUserId: () async => ref.read(authUserProvider).valueOrNull?.id,
   );
+});
+
+final shoppingItemMutationControllerProvider =
+    Provider<ShoppingItemMutationController>((ref) {
+  return ShoppingItemMutationController(api: ref.read(kitchenApiProvider));
 });
 
 final kitchenIngredientSearchProvider = StateProvider<String>(

@@ -141,6 +141,12 @@ class KitchenShoppingItem {
     final status = KitchenShoppingItemStatusJson.parse(json['status']);
     final reviewStatus =
         KitchenShoppingItemReviewStatusJson.parse(json['review_status']);
+    final unit = json['unit'];
+    if (unit != null &&
+        (unit is! String ||
+            !<String>{'g', 'kg', 'ml', 'l', 'ea'}.contains(unit))) {
+      throw const FormatException('Invalid shopping item unit');
+    }
     final needsReview = json['needs_review'];
     if (needsReview is! bool ||
         needsReview !=
@@ -176,7 +182,7 @@ class KitchenShoppingItem {
       needsReview: needsReview,
       isChecked: isChecked,
       quantity: parseQuantity(json['quantity']),
-      unit: json['unit']?.toString(),
+      unit: unit as String?,
       revision: revision,
       updatedAt: updatedAt,
     );
