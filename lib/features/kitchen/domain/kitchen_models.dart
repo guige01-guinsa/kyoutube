@@ -37,12 +37,65 @@ class KitchenIngredient {
   }
 }
 
+enum KitchenShoppingItemStatus {
+  pending,
+  purchased,
+  skipped,
+  unavailable,
+}
+
+extension KitchenShoppingItemStatusJson on KitchenShoppingItemStatus {
+  String get value => name;
+
+  static KitchenShoppingItemStatus parse(Object? value) {
+    switch (value) {
+      case 'pending':
+        return KitchenShoppingItemStatus.pending;
+      case 'purchased':
+        return KitchenShoppingItemStatus.purchased;
+      case 'skipped':
+        return KitchenShoppingItemStatus.skipped;
+      case 'unavailable':
+        return KitchenShoppingItemStatus.unavailable;
+      default:
+        throw const FormatException('Unknown shopping item status');
+    }
+  }
+}
+
+enum KitchenShoppingItemReviewStatus {
+  required,
+  confirmed,
+}
+
+extension KitchenShoppingItemReviewStatusJson
+    on KitchenShoppingItemReviewStatus {
+  String get value => name;
+
+  static KitchenShoppingItemReviewStatus parse(Object? value) {
+    switch (value) {
+      case 'required':
+        return KitchenShoppingItemReviewStatus.required;
+      case 'confirmed':
+        return KitchenShoppingItemReviewStatus.confirmed;
+      default:
+        throw const FormatException('Unknown shopping item review status');
+    }
+  }
+}
+
 class KitchenShoppingItem {
   const KitchenShoppingItem({
     required this.id,
     required this.listId,
     required this.name,
+    required this.ingredientText,
+    required this.status,
+    required this.reviewStatus,
+    required this.needsReview,
     required this.isChecked,
+    required this.revision,
+    required this.updatedAt,
     this.quantity,
     this.unit,
   });
@@ -50,25 +103,82 @@ class KitchenShoppingItem {
   final String id;
   final String listId;
   final String name;
+  final String ingredientText;
+  final KitchenShoppingItemStatus status;
+  final KitchenShoppingItemReviewStatus reviewStatus;
+  final bool needsReview;
   final bool isChecked;
   final double? quantity;
   final String? unit;
+  final int revision;
+  final DateTime updatedAt;
+
+  /// Legacy UI compatibility; new state transitions must use [status].
+  bool get isPurchased => status == KitchenShoppingItemStatus.purchased;
 
   factory KitchenShoppingItem.fromJson(Map<String, dynamic> json) {
+    if (json['id'] is! String ||
+        (json['id'] as String).trim().isEmpty ||
+        json['list_id'] is! String ||
+        (json['list_id'] as String).trim().isEmpty ||
+        json['name'] is! String ||
+        (json['name'] as String).trim().isEmpty ||
+        json['ingredient_text'] is! String ||
+        (json['ingredient_text'] as String).isEmpty) {
+      throw const FormatException(
+          'Invalid shopping item identity or ingredient text');
+    }
     double? parseQuantity(dynamic value) {
       if (value is num) {
         return value.toDouble();
       }
+      if (value != null) {
+        throw const FormatException('Invalid shopping item quantity');
+      }
       return null;
     }
 
+    final status = KitchenShoppingItemStatusJson.parse(json['status']);
+    final reviewStatus =
+        KitchenShoppingItemReviewStatusJson.parse(json['review_status']);
+    final needsReview = json['needs_review'];
+    if (needsReview is! bool ||
+        needsReview !=
+            (reviewStatus == KitchenShoppingItemReviewStatus.required)) {
+      throw const FormatException('Shopping item review state is inconsistent');
+    }
+    final isChecked = json['is_checked'];
+    if (isChecked is! bool ||
+        isChecked != (status == KitchenShoppingItemStatus.purchased)) {
+      throw const FormatException(
+          'Shopping item status and legacy check state are inconsistent');
+    }
+    final revision = json['revision'];
+    if (revision is! int || revision < 0) {
+      throw const FormatException('Invalid shopping item revision');
+    }
+    final updatedAtValue = json['updated_at'];
+    if (updatedAtValue is! String) {
+      throw const FormatException('Invalid shopping item updated_at');
+    }
+    final updatedAt = DateTime.tryParse(updatedAtValue);
+    if (updatedAt == null) {
+      throw const FormatException('Invalid shopping item updated_at');
+    }
+
     return KitchenShoppingItem(
-      id: (json['id'] ?? '').toString(),
-      listId: (json['list_id'] ?? '').toString(),
-      name: (json['name'] ?? '').toString(),
-      isChecked: json['is_checked'] == true,
+      id: (json['id'] as String).trim(),
+      listId: (json['list_id'] as String).trim(),
+      name: (json['name'] as String).trim(),
+      ingredientText: json['ingredient_text'] as String,
+      status: status,
+      reviewStatus: reviewStatus,
+      needsReview: needsReview,
+      isChecked: isChecked,
       quantity: parseQuantity(json['quantity']),
       unit: json['unit']?.toString(),
+      revision: revision,
+      updatedAt: updatedAt,
     );
   }
 }
