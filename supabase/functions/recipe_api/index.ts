@@ -429,9 +429,8 @@ async function getAuthenticatedUserId(req: Request): Promise<{ userId?: string; 
   });
 
   if (!response.ok) {
-    const details = await response.text();
     return {
-      error: errorResponse(401, "Invalid or expired access token", details)
+      error: errorResponse(401, "Invalid or expired access token")
     };
   }
 
@@ -991,7 +990,43 @@ async function listKitchenIngredients(url: URL, userId: string): Promise<Respons
   return okResponse(await response.json(), 200);
 }
 
-async function listKitchenShoppingLists(url: URL, userId: string): Promise<Response> {
+function toShoppingItemResponse(row: Record<string, unknown>): Record<string, unknown> | null {
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const listId = typeof row.list_id === "string" ? row.list_id.trim() : "";
+  const name = typeof row.name === "string" ? row.name : "";
+  const ingredientText = typeof row.ingredient_text === "string" ? row.ingredient_text : "";
+  const status = typeof row.status === "string" ? row.status : "";
+  const reviewStatus = typeof row.review_status === "string" ? row.review_status : "";
+  const revision = typeof row.revision === "number" && Number.isInteger(row.revision) ? row.revision : null;
+  if (!id || !listId || !name || !ingredientText || !status || !reviewStatus || revision === null) return null;
+  return {
+    id,
+    list_id: listId,
+    name,
+    ingredient_text: ingredientText,
+    quantity: row.quantity ?? null,
+    unit: row.unit ?? null,
+    status,
+    review_status: reviewStatus,
+    needs_review: reviewStatus === "required",
+    is_checked: row.is_checked === true,
+    revision,
+    updated_at: typeof row.updated_at === "string" ? row.updated_at : null,
+  };
+}
+
+async function getShoppingItem(req: Request, id: string): Promise<Record<string, unknown> | null> {
+  const params = new URLSearchParams();
+  params.set("select", "id,list_id,name,ingredient_text,quantity,unit,status,review_status,is_checked,revision,updated_at");
+  params.set("id", `eq.${id}`);
+  const response = await userRestRequest(req, `/rest/v1/kitchen_shopping_items?${params.toString()}`, { method: "GET" });
+  if (!response.ok) return null;
+  const rows = await response.json().catch(() => null);
+  if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || typeof rows[0] !== "object") return null;
+  return toShoppingItemResponse(rows[0] as Record<string, unknown>);
+}
+
+async function listKitchenShoppingLists(req: Request, url: URL, userId: string): Promise<Response> {
   const { limit, offset, error } = parsePagination(url);
   if (error) {
     return error;
@@ -1012,13 +1047,12 @@ async function listKitchenShoppingLists(url: URL, userId: string): Promise<Respo
   listParams.set("limit", String(limit));
   listParams.set("offset", String(offset));
 
-  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
+  const listResponse = await userRestRequest(req, `/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
     method: "GET"
   });
 
   if (!listResponse.ok) {
-    const details = await listResponse.text();
-    return errorResponse(500, "Failed to fetch shopping lists", details);
+    return errorResponse(500, "Failed to fetch shopping lists");
   }
 
   const listsRaw = await listResponse.json();
@@ -1037,22 +1071,23 @@ async function listKitchenShoppingLists(url: URL, userId: string): Promise<Respo
   }
 
   const itemParams = new URLSearchParams();
-  itemParams.set("select", "id,list_id,owner_id,name,normalized_name,quantity,unit,is_checked,created_at,updated_at");
+  itemParams.set("select", "id,list_id,name,ingredient_text,quantity,unit,status,review_status,is_checked,revision,updated_at");
   itemParams.set("owner_id", `eq.${userId}`);
   itemParams.set("list_id", `in.(${listIds.join(",")})`);
   itemParams.set("order", "created_at.asc");
 
-  const itemResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
+  const itemResponse = await userRestRequest(req, `/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
     method: "GET"
   });
 
   if (!itemResponse.ok) {
-    const details = await itemResponse.text();
-    return errorResponse(500, "Failed to fetch shopping items", details);
+    return errorResponse(500, "Failed to fetch shopping items");
   }
 
   const itemsRaw = await itemResponse.json();
-  const items = Array.isArray(itemsRaw) ? itemsRaw as Array<Record<string, unknown>> : [];
+  const items = Array.isArray(itemsRaw)
+    ? itemsRaw.map((row) => row && typeof row === "object" ? toShoppingItemResponse(row as Record<string, unknown>) : null).filter((row): row is Record<string, unknown> => row !== null)
+    : [];
   const itemMap = new Map<string, Array<Record<string, unknown>>>();
 
   for (const item of items) {
@@ -1198,11 +1233,35 @@ async function deleteKitchenIngredient(id: string, userId: string): Promise<Resp
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const managedShoppingItemFields = new Set(["id", "list_id", "owner_id", "normalized_name", "status", "is_checked", "completed_at", "inventory_change_count"]);
+const createManagedShoppingItemFields = new Set([
+  "id", "list_id", "owner_id", "normalized_name", "status", "is_checked", "review_status",
+  "needs_review", "revision", "updated_at", "completed_at", "inventory_change_count"
+]);
+const managedShoppingItemFields = new Set([
+  "id", "list_id", "owner_id", "normalized_name", "status", "is_checked", "review_status",
+  "needs_review", "revision", "updated_at", "completed_at", "inventory_change_count", "ingredient_text"
+]);
+const statusManagedShoppingItemFields = new Set([
+  "id", "list_id", "owner_id", "normalized_name", "is_checked", "review_status",
+  "needs_review", "revision", "updated_at", "completed_at", "inventory_change_count", "ingredient_text"
+]);
+const canonicalShoppingUnits = new Set(["g", "kg", "ml", "l", "ea"]);
+const canonicalShoppingStatuses = new Set(["pending", "purchased", "skipped", "unavailable"]);
 
 function idempotencyKey(req: Request): string | null {
   const key = (req.headers.get("Idempotency-Key") ?? "").trim();
   return uuidPattern.test(key) ? key : null;
+}
+
+async function userRestRequest(req: Request, path: string, init: RequestInit): Promise<Response> {
+  const token = getBearerToken(req);
+  if (!token) return new Response(null, { status: 401 });
+  const { supabaseUrl, anonKey } = getSupabaseConfig();
+  const headers = new Headers(init.headers ?? {});
+  headers.set("apikey", anonKey);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
+  return fetch(`${supabaseUrl}${path}`, { ...init, headers });
 }
 
 async function userRpc(req: Request, rpcName: string, body: Record<string, unknown>): Promise<Response> {
@@ -1216,10 +1275,80 @@ async function userRpc(req: Request, rpcName: string, body: Record<string, unkno
   });
 }
 
-function shoppingRpcError(response: Response): Response {
+async function shoppingRpcError(response: Response): Promise<Response> {
   if (response.status === 401 || response.status === 403) return errorResponse(401, "Unauthorized");
   if (response.status === 404) return errorResponse(404, "Shopping list not found");
+  const details = await response.text().catch(() => "");
+  if (/shopping item not found|not found for the authenticated user/i.test(details)) return errorResponse(404, "Shopping item not found");
+  if (/revision conflict/i.test(details)) return errorResponse(409, "Shopping item revision conflict", { code: "shopping_item_conflict" });
+  if (/not active|active shopping list/i.test(details)) return errorResponse(409, "Shopping list is not active", { code: "shopping_list_inactive" });
   return errorResponse(422, "Shopping request was rejected", { code: "shopping_request_rejected" });
+}
+
+function validateExpectedRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function validateReviewPayload(body: unknown): { name: string; quantity: number | null; unit: string | null; expectedRevision: number } | Response {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse(400, "Review payload is invalid", { code: "invalid_review_payload" });
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((field) => managedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted", { code: "managed_shopping_field" });
+  const name = typeof value.name === "string" ? value.name.trim() : "";
+  const expectedRevision = value.expected_revision;
+  const quantity = value.quantity === null || value.quantity === undefined ? null : value.quantity;
+  const rawUnit = value.unit === null || value.unit === undefined ? null : value.unit;
+  const rawCanonicalUnit = rawUnit === null ? null : typeof rawUnit === "string" ? rawUnit.trim().toLowerCase() : "__invalid__";
+  const unit = rawCanonicalUnit === "개" ? "ea" : rawCanonicalUnit;
+  if (!name || name.length > 200 || !validateExpectedRevision(expectedRevision) ||
+      (quantity !== null && (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0)) ||
+      (unit !== null && !canonicalShoppingUnits.has(unit))) {
+    return errorResponse(422, "Review payload is invalid", { code: "invalid_review_payload" });
+  }
+  if ((quantity === null) !== (unit === null)) return errorResponse(422, "Review quantity and unit must be provided together", { code: "invalid_review_payload" });
+  return { name, quantity: quantity as number | null, unit, expectedRevision };
+}
+
+function validateStatusPayload(body: unknown): { status: string; expectedRevision: number } | Response {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse(400, "Status payload is invalid", { code: "invalid_status_payload" });
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((field) => statusManagedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted", { code: "managed_shopping_field" });
+  const status = typeof value.status === "string" ? value.status.trim().toLowerCase() : "";
+  if (!canonicalShoppingStatuses.has(status) || !validateExpectedRevision(value.expected_revision)) return errorResponse(422, "Status payload is invalid", { code: "invalid_status_payload" });
+  return { status, expectedRevision: value.expected_revision };
+}
+
+async function updateShoppingItemByRpc(req: Request, id: string, rpcName: string, body: Record<string, unknown>): Promise<Response> {
+  if (!uuidPattern.test(id)) return errorResponse(400, "Shopping item id must be a UUID");
+  const rpc = await userRpc(req, rpcName, body);
+  if (!rpc.ok) return await shoppingRpcError(rpc);
+  const item = await getShoppingItem(req, id);
+  if (!item) return errorResponse(500, "Shopping item response was invalid");
+  return okResponse(item, 200);
+}
+
+async function reviewShoppingItem(req: Request, id: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  const parsed = validateReviewPayload(body);
+  if (parsed instanceof Response) return parsed;
+  const item = await updateShoppingItemByRpc(req, id, "review_kitchen_shopping_item", {
+    p_item_id: id,
+    p_name: parsed.name,
+    p_quantity: parsed.quantity,
+    p_unit: parsed.unit,
+    p_expected_revision: parsed.expectedRevision,
+  });
+  return item;
+}
+
+async function setShoppingItemStatus(req: Request, id: string, bodyOverride: unknown = undefined): Promise<Response> {
+  const body = bodyOverride === undefined ? await req.json().catch(() => null) : bodyOverride;
+  const parsed = validateStatusPayload(body);
+  if (parsed instanceof Response) return parsed;
+  return await updateShoppingItemByRpc(req, id, "set_kitchen_shopping_item_status", {
+    p_item_id: id,
+    p_status: parsed.status,
+    p_expected_revision: parsed.expectedRevision,
+  });
 }
 
 async function createShoppingFromRecipe(req: Request, _userId: string): Promise<Response> {
@@ -1238,7 +1367,7 @@ async function createShoppingFromRecipe(req: Request, _userId: string): Promise<
   for (const item of items) {
     if (!item || typeof item !== "object" || Array.isArray(item)) return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
     const value = item as Record<string, unknown>;
-    if (Object.keys(value).some((field) => managedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted");
+    if (Object.keys(value).some((field) => createManagedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted");
     const name = typeof value.name === "string" ? value.name.trim() : "";
     const text = typeof value.ingredient_text === "string" ? value.ingredient_text : "";
     if (!name || !text.trim() || name.length > 200 || text.length > 500 || (value.quantity !== null && value.quantity !== undefined && (typeof value.quantity !== "number" || !Number.isFinite(value.quantity) || value.quantity <= 0)) || (value.unit !== null && value.unit !== undefined && (typeof value.unit !== "string" || !value.unit.trim() || value.unit.trim().length > 32))) return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
@@ -1247,7 +1376,7 @@ async function createShoppingFromRecipe(req: Request, _userId: string): Promise<
     names.add(canonical);
   }
   const rpc = await userRpc(req, "create_kitchen_shopping_list", { p_source_recipe_id: sourceRecipeId, p_items: items, p_idempotency_key: key });
-  if (!rpc.ok) return shoppingRpcError(rpc);
+  if (!rpc.ok) return await shoppingRpcError(rpc);
   const rows: unknown = await rpc.json().catch(() => null);
   if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || typeof rows[0] !== "object" || Array.isArray(rows[0])) {
     return errorResponse(500, "Shopping create response shape was invalid");
@@ -1264,38 +1393,16 @@ async function createShoppingFromRecipe(req: Request, _userId: string): Promise<
   return okResponse({ list_id: listId, status, created, replayed, idempotency_key: responseIdempotencyKey }, created ? 201 : 200);
 }
 
-async function patchShoppingItem(req: Request, id: string, userId: string): Promise<Response> {
+async function patchShoppingItemLegacy(req: Request, id: string): Promise<Response> {
   const body = await req.json().catch(() => null);
-  if (typeof body?.is_checked !== "boolean") {
-    return errorResponse(400, "is_checked(boolean) is required");
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof (body as Record<string, unknown>).is_checked !== "boolean") {
+    return errorResponse(400, "is_checked(boolean) and expected_revision are required", { code: "invalid_status_payload" });
   }
-
-  const params = new URLSearchParams();
-  params.set("id", `eq.${id}`);
-  params.set("owner_id", `eq.${userId}`);
-
-  const response = await restRequest(`/rest/v1/kitchen_shopping_items?${params.toString()}`, {
-    method: "PATCH",
-    headers: {
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({
-      is_checked: body.is_checked,
-      updated_at: new Date().toISOString(),
-    })
+  const value = body as Record<string, unknown>;
+  return await setShoppingItemStatus(req, id, {
+    status: value.is_checked ? "purchased" : "pending",
+    expected_revision: value.expected_revision,
   });
-
-  if (!response.ok) {
-    const details = await response.text();
-    return errorResponse(500, "Failed to update shopping item", details);
-  }
-
-  const rows = await response.json();
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return errorResponse(404, "Shopping item not found", { id });
-  }
-
-  return okResponse(rows[0], 200);
 }
 
 async function completeShoppingList(req: Request, id: string, _userId: string): Promise<Response> {
@@ -1303,7 +1410,7 @@ async function completeShoppingList(req: Request, id: string, _userId: string): 
   if (!key) return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
   if (!uuidPattern.test(id)) return errorResponse(400, "Shopping list id must be a UUID");
   const rpc = await userRpc(req, "complete_kitchen_shopping_list", { p_list_id: id, p_idempotency_key: key });
-  if (!rpc.ok) return shoppingRpcError(rpc);
+  if (!rpc.ok) return await shoppingRpcError(rpc);
   const rows = await rpc.json();
   const result = Array.isArray(rows) ? rows[0] : rows;
   return okResponse({ shopping_list: result }, 200);
@@ -1390,7 +1497,7 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
       return await listKitchenIngredients(url, userId);
     }
     if (view === "shopping-lists") {
-      return await listKitchenShoppingLists(url, userId);
+      return await listKitchenShoppingLists(req, url, userId);
     }
     if (view === "cook-sessions") {
       return await listKitchenCookSessions(url, userId);
@@ -1404,6 +1511,11 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
     }
     if (action === "create-shopping-from-recipe") {
       return await createShoppingFromRecipe(req, userId);
+    }
+    if (action === "review-shopping-item" || action === "set-shopping-item-status") {
+      if (id.length === 0) return errorResponse(400, "id query parameter is required for shopping item action");
+      if (action === "review-shopping-item") return await reviewShoppingItem(req, id);
+      return await setShoppingItemStatus(req, id);
     }
     if (action === "complete-shopping-list") {
       if (id.length === 0) {
@@ -1425,7 +1537,7 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
       return await patchKitchenIngredient(req, id, userId);
     }
     if (view === "shopping-item") {
-      return await patchShoppingItem(req, id, userId);
+      return await patchShoppingItemLegacy(req, id);
     }
     return errorResponse(400, "Unsupported kitchen PATCH view", { view });
   }
@@ -1528,8 +1640,7 @@ serve(async (req) => {
   } catch (error) {
     return errorResponse(
       500,
-      "Unexpected server error",
-      error instanceof Error ? error.message : String(error)
+      "Unexpected server error"
     );
   }
 });

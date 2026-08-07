@@ -36,6 +36,21 @@ function Get-StructuredCreateData([string]$Name, $Response, [bool]$ExpectedCreat
   if($data.idempotency_key -isnot [string] -or $data.idempotency_key -cne $ExpectedIdempotencyKey){ Fail "${Name}_idempotency_invalid" }
   return $data
 }
+function Get-ShoppingItemData([string]$Name, $Response, [string]$ExpectedId, [string]$ExpectedListId, [string]$ExpectedStatus, [int]$ExpectedRevision) {
+  $payload=Convert-Body $Response
+  if($null -eq $payload){ Fail "${Name}_response_parse" }
+  $dataProperty=$payload.PSObject.Properties['data']
+  if($null -eq $dataProperty -or $dataProperty.Value -isnot [System.Management.Automation.PSCustomObject]){ Fail "${Name}_data_invalid" }
+  $data=$dataProperty.Value
+  foreach($field in @('id','list_id','name','ingredient_text','quantity','unit','status','review_status','needs_review','is_checked','revision','updated_at')) {
+    if($null -eq $data.PSObject.Properties[$field]){ Fail "${Name}_field_missing_$field" }
+  }
+  if($data.id -cne $ExpectedId -or $data.list_id -cne $ExpectedListId){ Fail "${Name}_identity_invalid" }
+  if($data.status -cne $ExpectedStatus -or [int]$data.revision -ne $ExpectedRevision){ Fail "${Name}_state_invalid" }
+  if($data.needs_review -isnot [bool] -or $data.needs_review -ne ([string]$data.review_status -ceq 'required')){ Fail "${Name}_needs_review_invalid" }
+  if($null -ne $data.PSObject.Properties['owner_id'] -or $null -ne $data.PSObject.Properties['normalized_name']){ Fail "${Name}_managed_field_exposed" }
+  return $data
+}
 function ConvertTo-SafeBodyText($Value) {
   if($null -eq $Value){ return $null }
   if($Value -is [System.Array]){
@@ -145,6 +160,8 @@ function Get-LocalStackState {
     if($name -eq 'supabase_edge_runtime_k-youtube') { $script:edgeInspect=$container }
   }
   if($script:edgeInspect.Config.Labels.'com.supabase.cli.project' -ne 'k-youtube') { Fail 'edge_label_mismatch' }
+  $denoVersion=Invoke-CapturedProcess $script:dockerPath 'exec supabase_edge_runtime_k-youtube edge-runtime --version' 10000
+  if($denoVersion.State -ne 'ok' -or $denoVersion.StdOut -notmatch '(?m)^deno 2\.1\.4(?:\s|\()') { Fail 'deno_version_mismatch' }
   $script:edgeRuntimeUp=$true
 }
 function Get-LocalConfig {
@@ -350,7 +367,7 @@ try {
 
   $completeUrl="$edgeUrl&action=complete-shopping-list&id=$listId"
   Assert-Status 'pending_completion_rejected' (Invoke-SafeHttp 'POST' $completeUrl (@{ apikey=$config.Anon; Authorization="Bearer $($userA.Token)"; 'Idempotency-Key'=(New-Key) }) @{}).Status 422
-  Assert-Status 'other_user_completion_rejected' (Invoke-SafeHttp 'POST' $completeUrl (@{ apikey=$config.Anon; Authorization="Bearer $($userB.Token)"; 'Idempotency-Key'=(New-Key) }) @{}).Status 422
+  Assert-Status 'other_user_completion_rejected' (Invoke-SafeHttp 'POST' $completeUrl (@{ apikey=$config.Anon; Authorization="Bearer $($userB.Token)"; 'Idempotency-Key'=(New-Key) }) @{}).Status 404
 
   $script:CurrentStage='fixture_item_lookup'
   $listResponse=Invoke-SafeHttp 'GET' "$edgeUrl&view=shopping-lists&status=all" (Get-UserHeaders $userA.Token) $null
@@ -384,23 +401,55 @@ try {
   if(-not [guid]::TryParse($itemId, [ref]$itemGuid)){ Fail 'fixture_item_id_invalid' }
   $itemListIdProperty=$fixtureItem.PSObject.Properties['list_id']
   if($null -eq $itemListIdProperty -or $itemListIdProperty.Value -isnot [string] -or $itemListIdProperty.Value -cne $listId){ Fail 'fixture_item_list_mismatch' }
-  $script:CurrentStage='fixture_item_purchase_request'
-  $itemIdQuery=[uri]::EscapeDataString($itemId)
-  $purchasePayload=@{ is_checked=$true }
-  if([string]::IsNullOrWhiteSpace($itemIdQuery) -or $purchasePayload.is_checked -isnot [bool] -or -not $purchasePayload.is_checked){ Fail 'fixture_item_patch_request_invalid' }
-  $script:CurrentStage='fixture_item_purchase_response'
-  $purchaseResponse=Invoke-SafeHttp 'PATCH' "$edgeUrl&view=shopping-item&id=$itemIdQuery" (Get-UserHeaders $userA.Token) $purchasePayload
-  Assert-Status 'mark_item_purchased' $purchaseResponse.Status 200
+  foreach($field in @('id','list_id','name','ingredient_text','quantity','unit','status','review_status','needs_review','is_checked','revision','updated_at')) {
+    if($null -eq $fixtureItem.PSObject.Properties[$field]){ Fail "fixture_item_field_missing_$field" }
+  }
+  if($fixtureItem.needs_review -isnot [bool] -or $fixtureItem.needs_review -ne ([string]$fixtureItem.review_status -ceq 'required')){ Fail 'fixture_item_needs_review_invalid' }
+  if($null -ne $fixtureItem.PSObject.Properties['owner_id'] -or $null -ne $fixtureItem.PSObject.Properties['normalized_name']){ Fail 'fixture_item_managed_field_exposed' }
+  Write-SafeStatus 'PASS shopping_item_response_fields status=200'
 
-  $inventoryBefore=Get-Count "kitchen_ingredients?select=id&owner_id=$([uri]::EscapeDataString("eq.$($userA.Id)"))&normalized_name=eq.contract%20potato"
+  $itemIdQuery=[uri]::EscapeDataString($itemId)
+  $reviewUrl="$edgeUrl&action=review-shopping-item&id=$itemIdQuery"
+  $statusUrl="$edgeUrl&action=set-shopping-item-status&id=$itemIdQuery"
+  Assert-Status 'review_missing_expected_revision' (Invoke-SafeHttp 'POST' $reviewUrl (Get-UserHeaders $userA.Token) @{ name='Reviewed'; quantity=3; unit='kg' }).Status 422
+  Assert-Status 'review_managed_field_rejected' (Invoke-SafeHttp 'POST' $reviewUrl (Get-UserHeaders $userA.Token) @{ name='Reviewed'; ingredient_text='forbidden'; expected_revision=0 }).Status 400
+  Assert-Status 'review_quantity_unit_pair_rejected' (Invoke-SafeHttp 'POST' $reviewUrl (Get-UserHeaders $userA.Token) @{ name='Reviewed'; quantity=3; expected_revision=0 }).Status 422
+  $reviewResponse=Invoke-SafeHttp 'POST' $reviewUrl (Get-UserHeaders $userA.Token) @{ name='Contract Potato Reviewed'; quantity=3; unit='kg'; expected_revision=0 }
+  Assert-Status 'review_shopping_item_rpc' $reviewResponse.Status 200
+  $reviewedItem=Get-ShoppingItemData 'review_shopping_item_rpc' $reviewResponse $itemId $listId 'pending' 1
+  if($reviewedItem.ingredient_text -cne 'contract potato 2kg'){ Fail 'review_ingredient_text_changed' }
+
+  $staleStatus=Invoke-SafeHttp 'POST' $statusUrl (Get-UserHeaders $userA.Token) @{ status='skipped'; expected_revision=0 }
+  Assert-Status 'status_stale_revision' $staleStatus.Status 409
+  Assert-ErrorCode 'status_stale_revision_code' $staleStatus 'shopping_item_conflict'
+  $otherUserStatus=Invoke-SafeHttp 'POST' $statusUrl (Get-UserHeaders $userB.Token) @{ status='purchased'; expected_revision=1 }
+  Assert-Status 'status_other_user_rejected' $otherUserStatus.Status 404
+
+  $statusResponse=Invoke-SafeHttp 'POST' $statusUrl (Get-UserHeaders $userA.Token) @{ status='purchased'; expected_revision=1 }
+  Assert-Status 'status_shopping_item_rpc' $statusResponse.Status 200
+  $purchasedItem=Get-ShoppingItemData 'status_shopping_item_rpc' $statusResponse $itemId $listId 'purchased' 2
+  if($purchasedItem.is_checked -isnot [bool] -or -not $purchasedItem.is_checked){ Fail 'status_is_checked_sync_invalid' }
+
+  $legacyResponse=Invoke-SafeHttp 'PATCH' "$edgeUrl&view=shopping-item&id=$itemIdQuery" (Get-UserHeaders $userA.Token) @{ is_checked=$false; expected_revision=2 }
+  Assert-Status 'legacy_is_checked_rpc_mapping' $legacyResponse.Status 200
+  $legacyItem=Get-ShoppingItemData 'legacy_is_checked_rpc_mapping' $legacyResponse $itemId $listId 'pending' 3
+  if($legacyItem.is_checked -isnot [bool] -or $legacyItem.is_checked){ Fail 'legacy_is_checked_sync_invalid' }
+  $statusResponse=Invoke-SafeHttp 'POST' $statusUrl (Get-UserHeaders $userA.Token) @{ status='purchased'; expected_revision=3 }
+  Assert-Status 'status_after_legacy_mapping' $statusResponse.Status 200
+  $purchasedItem=Get-ShoppingItemData 'status_after_legacy_mapping' $statusResponse $itemId $listId 'purchased' 4
+  if(-not $purchasedItem.is_checked){ Fail 'status_after_legacy_sync_invalid' }
+
+  $inventoryBefore=Get-Count "kitchen_ingredients?select=id&owner_id=$([uri]::EscapeDataString("eq.$($userA.Id)"))&normalized_name=eq.contract%20potato%20reviewed"
   $completeKey=New-Key
   $completed=Invoke-SafeHttp 'POST' $completeUrl (@{ apikey=$config.Anon; Authorization="Bearer $($userA.Token)"; 'Idempotency-Key'=$completeKey }) @{}
   Assert-Status 'complete_success' $completed.Status 200
-  $inventoryAfter=Get-Count "kitchen_ingredients?select=id&owner_id=$([uri]::EscapeDataString("eq.$($userA.Id)"))&normalized_name=eq.contract%20potato"
+  $inventoryAfter=Get-Count "kitchen_ingredients?select=id&owner_id=$([uri]::EscapeDataString("eq.$($userA.Id)"))&normalized_name=eq.contract%20potato%20reviewed"
   Assert-True 'inventory_applied_once' ($inventoryAfter -eq ($inventoryBefore + 1))
   Assert-Status 'complete_same_key_replay' (Invoke-SafeHttp 'POST' $completeUrl (@{ apikey=$config.Anon; Authorization="Bearer $($userA.Token)"; 'Idempotency-Key'=$completeKey }) @{}).Status 200
   Assert-Status 'complete_different_key_noop' (Invoke-SafeHttp 'POST' $completeUrl (@{ apikey=$config.Anon; Authorization="Bearer $($userA.Token)"; 'Idempotency-Key'=(New-Key) }) @{}).Status 200
-  Assert-True 'inventory_replay_noop' ((Get-Count "kitchen_ingredients?select=id&owner_id=$([uri]::EscapeDataString("eq.$($userA.Id)"))&normalized_name=eq.contract%20potato") -eq $inventoryAfter)
+  Assert-True 'inventory_replay_noop' ((Get-Count "kitchen_ingredients?select=id&owner_id=$([uri]::EscapeDataString("eq.$($userA.Id)"))&normalized_name=eq.contract%20potato%20reviewed") -eq $inventoryAfter)
+  $inactiveStatus=Invoke-SafeHttp 'POST' $statusUrl (Get-UserHeaders $userA.Token) @{ status='pending'; expected_revision=4 }
+  Assert-Status 'status_inactive_list_rejected' $inactiveStatus.Status 409
     } finally {
       $script:CleanupStage='cleanup_before'; Write-SafeStatus 'cleanup_before'
       Remove-Fixtures
