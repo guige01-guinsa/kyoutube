@@ -6,7 +6,6 @@ import '../../../core/widgets/centered_state_view.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../recipes/application/recipe_providers.dart';
 import '../application/kitchen_providers.dart';
-import '../data/kitchen_api.dart';
 import '../domain/kitchen_models.dart';
 
 class KitchenPage extends ConsumerStatefulWidget {
@@ -116,10 +115,9 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
 
   Future<void> _completeShoppingList(KitchenShoppingList list) async {
     try {
-      await ref.read(kitchenApiProvider).completeShoppingList(
-            listId: list.id,
-            idempotencyKey: KitchenApi.newIdempotencyKey(),
-          );
+      final completion =
+          await ref.read(shoppingListCompletionControllerProvider.future);
+      await completion.complete(list.id);
       await _refreshAll();
       if (!mounted) {
         return;
