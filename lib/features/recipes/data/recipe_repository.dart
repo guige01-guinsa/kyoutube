@@ -3,10 +3,6 @@ import '../domain/bookmarked_recipe.dart';
 
 abstract class RecipeRepository {
   Future<Map<String, int>> getKitchenSummary();
-  Future<int> createKitchenShoppingFromRecipe({
-    required String recipeType,
-    required Recipe recipe,
-  });
   Future<Recipe> createSubscriberRecipeFromPublic({
     required Recipe source,
     String? notes,

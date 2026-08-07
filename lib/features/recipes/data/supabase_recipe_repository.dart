@@ -130,58 +130,6 @@ class SupabaseRecipeRepository implements RecipeRepository {
   }
 
   @override
-  Future<int> createKitchenShoppingFromRecipe({
-    required String recipeType,
-    required Recipe recipe,
-  }) async {
-    final session = await _requireSession();
-    final uri = Uri.parse('${Env.supabaseUrl}/functions/v1/recipe_api').replace(
-      queryParameters: const <String, String>{
-        'type': 'kitchen',
-        'action': 'create-shopping-from-recipe',
-      },
-    );
-
-    final response = await http.post(
-      uri,
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'apikey': Env.supabaseAnonKey,
-        'Authorization': 'Bearer ${session.accessToken}',
-      },
-      body: jsonEncode(<String, dynamic>{
-        'recipe_type': recipeType,
-        'recipe_id': recipe.id,
-        'recipe_title': recipe.title,
-        'required_ingredients': recipe.ingredients,
-      }),
-    );
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('장보기 목록 생성에 실패했습니다.');
-    }
-
-    final payload = jsonDecode(response.body);
-    if (payload is! Map<String, dynamic> || payload['status'] != 'ok') {
-      throw StateError('장보기 목록 생성에 실패했습니다.');
-    }
-
-    final data = payload['data'];
-    if (data is! Map<String, dynamic>) {
-      return 0;
-    }
-
-    final missingCount = data['missing_count'];
-    if (missingCount is int) {
-      return missingCount;
-    }
-    if (missingCount is num) {
-      return missingCount.toInt();
-    }
-    return 0;
-  }
-
-  @override
   Future<Recipe> createSubscriberRecipeFromPublic({
     required Recipe source,
     String? notes,

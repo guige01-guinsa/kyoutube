@@ -64,14 +64,6 @@ class _FakeRecipeRepository implements RecipeRepository {
   }) async {}
 
   @override
-  Future<int> createKitchenShoppingFromRecipe({
-    required String recipeType,
-    required Recipe recipe,
-  }) async {
-    return 0;
-  }
-
-  @override
   Future<Recipe?> getCreatorRecipeById(String id) async {
     return Recipe(
       id: id,

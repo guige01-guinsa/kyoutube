@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/config/env.dart';
 import '../domain/kitchen_models.dart';
+import '../domain/shopping_review_drafts.dart';
 
 enum KitchenApiErrorKind {
   badRequest,
@@ -70,6 +71,47 @@ class KitchenShoppingListCompletion {
       status: status,
       completedAt: completedAt,
       inventoryChangeCount: count.toInt(),
+    );
+  }
+}
+
+class KitchenShoppingListCreateResult {
+  const KitchenShoppingListCreateResult({
+    required this.listId,
+    required this.status,
+    required this.created,
+    required this.replayed,
+    required this.idempotencyKey,
+  });
+
+  final String listId;
+  final String status;
+  final bool created;
+  final bool replayed;
+  final String idempotencyKey;
+
+  factory KitchenShoppingListCreateResult.fromJson(Map<String, dynamic> json) {
+    final listId = json['list_id'];
+    final status = json['status'];
+    final created = json['created'];
+    final replayed = json['replayed'];
+    final key = json['idempotency_key'];
+    if (listId is! String ||
+        listId.isEmpty ||
+        status is! String ||
+        status.isEmpty ||
+        created is! bool ||
+        replayed is! bool ||
+        key is! String ||
+        key.isEmpty) {
+      throw const FormatException('Invalid shopping list create response');
+    }
+    return KitchenShoppingListCreateResult(
+      listId: listId,
+      status: status,
+      created: created,
+      replayed: replayed,
+      idempotencyKey: key,
     );
   }
 }
@@ -351,6 +393,45 @@ class KitchenApi {
     }
     return KitchenShoppingListCompletion.fromJson(
         data['shopping_list'] as Map<String, dynamic>);
+  }
+
+  Future<KitchenShoppingListCreateResult> createShoppingList({
+    required String sourceRecipeId,
+    required List<ShoppingReviewDraftItem> items,
+    required String idempotencyKey,
+  }) async {
+    final key = idempotencyKey.trim();
+    if (!_isUuid(key)) {
+      throw const KitchenApiException(
+        kind: KitchenApiErrorKind.badRequest,
+        statusCode: 400,
+        message: 'Idempotency key is invalid.',
+      );
+    }
+    final data = await _request(
+      method: 'POST',
+      query: const <String, String>{'action': 'create-shopping-from-recipe'},
+      extraHeaders: <String, String>{'Idempotency-Key': key},
+      body: <String, dynamic>{
+        'source_recipe_id': sourceRecipeId,
+        'items': items
+            .map((item) => <String, dynamic>{
+                  'name': item.name.trim(),
+                  'ingredient_text': item.ingredientText,
+                  'quantity': item.quantity,
+                  'unit': item.unit,
+                })
+            .toList(),
+      },
+    );
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid shopping list create response');
+    }
+    final result = KitchenShoppingListCreateResult.fromJson(data);
+    if (result.idempotencyKey != key || (!result.created && !result.replayed)) {
+      throw const FormatException('Invalid shopping list create response');
+    }
+    return result;
   }
 
   static bool _isUuid(String value) => RegExp(

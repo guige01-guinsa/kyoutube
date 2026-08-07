@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:k_youtube/features/kitchen/data/kitchen_api.dart';
 import 'package:k_youtube/features/kitchen/domain/kitchen_models.dart';
+import 'package:k_youtube/features/kitchen/domain/shopping_review_drafts.dart';
 
 class _FakeClient extends http.BaseClient {
   _FakeClient(this.handler);
@@ -145,5 +146,48 @@ void main() {
             .having((error) => error.kind, 'kind', entry.kind)),
       );
     }
+  });
+
+  test('structured create sends only reviewed item fields and the draft key',
+      () async {
+    final client = _FakeClient((request) async => _ok(<String, dynamic>{
+          'list_id': 'list-1',
+          'status': 'active',
+          'created': true,
+          'replayed': false,
+          'idempotency_key': '550e8400-e29b-41d4-a716-446655440000',
+        }));
+    final api =
+        KitchenApi(httpClient: client, accessTokenProvider: () async => 'jwt');
+    final result = await api.createShoppingList(
+      sourceRecipeId: 'public:recipe-1',
+      idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+      items: const <ShoppingReviewDraftItem>[
+        ShoppingReviewDraftItem(
+          localId: 'local-1',
+          ingredientText: '2 kg potato',
+          name: 'Potato',
+          quantityInput: '2',
+          quantity: 2,
+          unit: 'kg',
+        ),
+      ],
+    );
+    expect(result.created, isTrue);
+    final body = jsonDecode((client.lastRequest! as http.Request).body)
+        as Map<String, dynamic>;
+    expect(body['source_recipe_id'], 'public:recipe-1');
+    expect(body['items'], <Map<String, dynamic>>[
+      <String, dynamic>{
+        'name': 'Potato',
+        'ingredient_text': '2 kg potato',
+        'quantity': 2,
+        'unit': 'kg'
+      },
+    ]);
+    expect(client.lastRequest!.headers['Idempotency-Key'],
+        '550e8400-e29b-41d4-a716-446655440000');
+    expect(body.containsKey('owner_id'), isFalse);
+    expect((body['items'] as List).single.containsKey('revision'), isFalse);
   });
 }

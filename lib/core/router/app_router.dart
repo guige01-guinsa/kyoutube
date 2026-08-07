@@ -11,6 +11,7 @@ import '../../features/recipes/presentation/recipe_detail_page.dart';
 import '../../features/recipes/presentation/subscriber_recipe_detail_page.dart';
 import '../../features/recipes/presentation/subscriber_recipes_page.dart';
 import '../../features/kitchen/presentation/kitchen_page.dart';
+import '../../features/kitchen/presentation/shopping_review_page.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
@@ -72,6 +73,13 @@ class AppRouter {
         builder: (BuildContext context, GoRouterState state) {
           final tab = state.uri.queryParameters['tab'] ?? 'ingredients';
           return KitchenPage(initialTab: tab);
+        },
+      ),
+      GoRoute(
+        path: '/shopping-review',
+        builder: (BuildContext context, GoRouterState state) {
+          final source = state.uri.queryParameters['source'] ?? '';
+          return ShoppingReviewPage(sourceRecipeReference: source);
         },
       ),
     ],

@@ -353,46 +353,9 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       return;
     }
 
-    try {
-      final repository = ref.read(recipeRepositoryProvider);
-      final missingCount = await repository.createKitchenShoppingFromRecipe(
-        recipeType: 'public',
-        recipe: recipe,
-      );
-      if (!mounted) {
-        return;
-      }
-      ref.invalidate(kitchenSummaryProvider);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('장보기 목록을 만들었습니다. 부족 재료 $missingCount개'),
-          action: SnackBarAction(
-            label: '장보기 열기',
-            onPressed: () {
-              context.push('/kitchen?tab=shopping');
-            },
-          ),
-        ),
-      );
-    } catch (err) {
-      if (!mounted) {
-        return;
-      }
-
-      if (_isSessionProblem(err)) {
-        context.push('/login');
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _friendlyActionError(err, '장보기 목록 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
-          ),
-        ),
-      );
-    }
+    if (!mounted) return;
+    final source = Uri.encodeComponent('public:${recipe.id}');
+    context.push('/shopping-review?source=$source');
   }
 
   Future<void> _completeCookSession(Recipe recipe) async {
