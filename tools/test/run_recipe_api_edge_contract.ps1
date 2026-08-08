@@ -25,15 +25,21 @@ function Assert-ErrorCode([string]$Name, $Response, [string]$Expected) {
 function Get-StructuredCreateData([string]$Name, $Response, [bool]$ExpectedCreated, [bool]$ExpectedReplayed, [string]$ExpectedIdempotencyKey) {
   $payload=Convert-Body $Response
   if($null -eq $payload){ Fail "${Name}_response_parse" }
+  if($null -eq $payload.PSObject.Properties['status'] -or [string]$payload.status -cne 'ok'){ Fail "${Name}_response_parse" }
   $dataProperty=$payload.PSObject.Properties['data']
   if($null -eq $dataProperty){ Fail "${Name}_data_missing" }
   $data=$dataProperty.Value
-  if($data -isnot [System.Management.Automation.PSCustomObject]){ Fail "${Name}_data_not_object" }
-  if($data.list_id -isnot [string] -or [string]::IsNullOrWhiteSpace($data.list_id)){ Fail "${Name}_list_id_invalid" }
-  if($data.status -isnot [string] -or $data.status -cne 'active'){ Fail "${Name}_status_invalid" }
-  if($data.created -isnot [bool] -or $data.created -ne $ExpectedCreated){ Fail "${Name}_created_invalid" }
-  if($data.replayed -isnot [bool] -or $data.replayed -ne $ExpectedReplayed){ Fail "${Name}_replayed_invalid" }
-  if($data.idempotency_key -isnot [string] -or $data.idempotency_key -cne $ExpectedIdempotencyKey){ Fail "${Name}_idempotency_invalid" }
+  if($data -isnot [System.Management.Automation.PSCustomObject]){ Fail "${Name}_data_missing" }
+  $listIdProperty=$data.PSObject.Properties['list_id']
+  if($null -eq $listIdProperty -or $listIdProperty.Value -isnot [string] -or [string]::IsNullOrWhiteSpace($listIdProperty.Value)){ Fail "${Name}_list_id_invalid" }
+  $statusProperty=$data.PSObject.Properties['status']
+  if($null -eq $statusProperty -or $statusProperty.Value -isnot [string] -or $statusProperty.Value -cne 'active'){ Fail "${Name}_status_invalid" }
+  $createdProperty=$data.PSObject.Properties['created']
+  if($null -eq $createdProperty -or $createdProperty.Value -isnot [bool] -or $createdProperty.Value -ne $ExpectedCreated){ Fail "${Name}_created_invalid" }
+  $replayedProperty=$data.PSObject.Properties['replayed']
+  if($null -eq $replayedProperty -or $replayedProperty.Value -isnot [bool] -or $replayedProperty.Value -ne $ExpectedReplayed){ Fail "${Name}_replayed_invalid" }
+  $idempotencyProperty=$data.PSObject.Properties['idempotency_key']
+  if($null -eq $idempotencyProperty -or $idempotencyProperty.Value -isnot [string] -or $idempotencyProperty.Value -cne $ExpectedIdempotencyKey){ Fail "${Name}_idempotency_invalid" }
   return $data
 }
 function Get-ShoppingItemData([string]$Name, $Response, [string]$ExpectedId, [string]$ExpectedListId, [string]$ExpectedStatus, [int]$ExpectedRevision) {
@@ -50,6 +56,38 @@ function Get-ShoppingItemData([string]$Name, $Response, [string]$ExpectedId, [st
   if($data.needs_review -isnot [bool] -or $data.needs_review -ne ([string]$data.review_status -ceq 'required')){ Fail "${Name}_needs_review_invalid" }
   if($null -ne $data.PSObject.Properties['owner_id'] -or $null -ne $data.PSObject.Properties['normalized_name']){ Fail "${Name}_managed_field_exposed" }
   return $data
+}
+function Assert-EmptyAccountKitchen([string]$EdgeUrl, $User) {
+  $headers=Get-UserHeaders $User.Token
+  $summary=Invoke-SafeHttp 'GET' "$EdgeUrl&view=summary" $headers $null
+  if($summary.Status -ne 200){ Fail "kitchen_summary_http_$($summary.Status)" }
+  Write-SafeStatus 'PASS kitchen_summary_http status=200'
+  $summaryPayload=Convert-Body $summary
+  if($null -eq $summaryPayload){ Fail 'kitchen_summary_response_parse' }
+  if($summaryPayload.status -cne 'ok'){ Fail 'kitchen_summary_response_parse' }
+  $summaryDataProperty=$summaryPayload.PSObject.Properties['data']
+  if($null -eq $summaryDataProperty){ Fail 'kitchen_summary_data_missing' }
+  $summaryData=$summaryDataProperty.Value
+  if($summaryData -isnot [System.Management.Automation.PSCustomObject]){ Fail 'kitchen_summary_data_missing' }
+  Write-SafeStatus 'PASS kitchen_summary_contract status=200'
+  foreach($field in @('ingredient_count','expiring_soon_count','active_shopping_list_count','open_shopping_item_count','recent_cook_count_7d')) {
+    if($null -eq $summaryData.PSObject.Properties[$field]){ Fail 'kitchen_summary_field_missing' }
+    $value=$summaryData.$field
+    if($value -isnot [int] -and $value -isnot [long] -and $value -isnot [decimal] -and $value -isnot [double]){ Fail 'kitchen_summary_field_invalid' }
+    if([double]$value -lt 0 -or [double]$value -ne [math]::Truncate([double]$value)){ Fail 'kitchen_summary_field_invalid' }
+    if([int64]$value -ne 0){ Fail 'kitchen_summary_expected_zero' }
+  }
+  Write-SafeStatus 'PASS kitchen_summary_counts_zero status=200'
+
+  $lists=Invoke-SafeHttp 'GET' "$EdgeUrl&view=shopping-lists&status=active" $headers $null
+  if($lists.Status -ne 200){ Fail "kitchen_empty_lists_http_$($lists.Status)" }
+  Write-SafeStatus 'PASS kitchen_empty_lists_http status=200'
+  $listsPayload=Convert-Body $lists
+  if($null -eq $listsPayload -or $listsPayload.status -cne 'ok'){ Fail 'kitchen_empty_lists_response_parse' }
+  $listsDataProperty=$listsPayload.PSObject.Properties['data']
+  if($null -eq $listsDataProperty -or $listsDataProperty.Value -isnot [System.Array]){ Fail 'kitchen_empty_lists_response_parse' }
+  if(@($listsDataProperty.Value).Count -ne 0){ Fail 'kitchen_empty_lists_expected_empty' }
+  Write-SafeStatus 'PASS kitchen_empty_lists_contract status=200'
 }
 function ConvertTo-SafeBodyText($Value) {
   if($null -eq $Value){ return $null }
@@ -325,8 +363,9 @@ try {
     $users=@(); $script:fixtureUsers=@(); $baselineAuthCount=Get-LocalAuthUserCount
     try {
   $script:CurrentStage='jwt_issue_before'; Write-SafeStatus 'jwt_issue_before'; $userA=New-LocalUser 'a'; $users+=@($userA); $script:CurrentStage='jwt_issue_after'; Write-SafeStatus 'jwt_issue_after'; $script:CurrentStage='fixture_setup_after'; Write-SafeStatus 'fixture_setup_after'
+  Write-SafeStatus 'kitchen_empty_account_before'; $edgeUrl="$($config.Url)/functions/v1/recipe_api?type=kitchen"; Assert-EmptyAccountKitchen $edgeUrl $userA; Write-SafeStatus 'kitchen_empty_account_after'
   $userB=New-LocalUser 'b'; $users+=@($userB)
-  $script:CurrentStage='edge_assertions_before'; Write-SafeStatus 'edge_assertions_before'; $edgeUrl="$($config.Url)/functions/v1/recipe_api?type=kitchen"
+  $script:CurrentStage='edge_assertions_before'; Write-SafeStatus 'edge_assertions_before'
   $createUrl="$edgeUrl&action=create-shopping-from-recipe"
 
   Assert-Status 'jwt_missing' (Invoke-SafeHttp 'POST' $createUrl @{ apikey=$config.Anon } @{}).Status 401
