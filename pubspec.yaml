@@ -19,6 +19,8 @@ dependencies:
   intl: ^0.19.0
   shared_preferences: ^2.3.2
   url_launcher: ^6.3.1
+  youtube_recipe_search:
+    path: ../K-youtube-youtube-module/packages/youtube_recipe_search
 
 dev_dependencies:
   flutter_test:

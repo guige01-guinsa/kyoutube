@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
+import '../../../core/config/env.dart';
 import '../../../core/firebase/firebase_messaging_service.dart';
 import '../../../core/widgets/operations_status_card.dart';
 import '../../auth/application/auth_providers.dart';
@@ -40,6 +40,14 @@ class _HomePageState extends ConsumerState<HomePage> {
       appBar: AppBar(
         title: const Text('AI Cooking Platform'),
         actions: <Widget>[
+          if (Env.youtubeSearchEnabled)
+            IconButton(
+              onPressed: () {
+                context.push('/youtube');
+              },
+              icon: const Icon(Icons.ondemand_video_outlined),
+              tooltip: 'YouTube',
+            ),
           IconButton(
             onPressed: () {
               if (currentUser == null) {

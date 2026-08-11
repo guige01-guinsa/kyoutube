@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 class Env {
+  static const bool youtubeSearchEnabled = bool.fromEnvironment(
+    'YOUTUBE_SEARCH_ENABLED',
+    defaultValue: false,
+  );
   static const String _rawAppEnv =
       String.fromEnvironment('APP_ENV', defaultValue: '');
 

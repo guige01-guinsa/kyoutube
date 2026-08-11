@@ -74,3 +74,11 @@ app.*.map.json
 /android/key.properties
 *.jks
 *.keystore
+
+# Local backups and secrets
+*.bak
+backups/
+.env
+.env.*
+.env*.json
+.vscode/launch.json

@@ -523,29 +523,14 @@ async function listPublicRecipes(url: URL): Promise<Response> {
   const tokens = tokenizeSearch(search);
   const effectiveLimit = tokens.length === 0 ? limit : Math.min(limit, 5);
 
-  if (tokens.length === 0) {
-    const params = new URLSearchParams();
-    params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-    params.set("order", "created_at.desc");
-    params.set("limit", String(effectiveLimit));
-    params.set("offset", String(offset));
-
-    const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
-      method: "GET"
-    });
-
-    if (!response.ok) {
-      const details = await response.text();
-      return errorResponse(500, "Failed to fetch public recipes", details);
-    }
-
-    const data = await response.json();
-    return okResponse(data, 200);
-  }
-
+  // Public recipes must come only from Food Safety Korea COOKRCP01.
+  // Do not query recipes_public here.
   const externalRows: PublicRecipeRow[] = [];
   const pageSize = 300;
-  const maxPages = 40;
+
+  const maxPages = tokens.length === 0
+    ? Math.max(1, Math.ceil((offset + effectiveLimit) / pageSize))
+    : 40;
 
   try {
     for (let page = 0; page < maxPages; page += 1) {
@@ -564,14 +549,33 @@ async function listPublicRecipes(url: URL): Promise<Response> {
       }
     }
   } catch (error) {
-    return errorResponse(502, "Failed to fetch COOKRCP01 recipes", String(error));
+    return errorResponse(
+      502,
+      "Failed to fetch COOKRCP01 recipes",
+      String(error),
+    );
+  }
+
+  if (tokens.length === 0) {
+    return okResponse(
+      externalRows.slice(offset, offset + effectiveLimit),
+      200,
+    );
   }
 
   if (searchMode === "keyword") {
-    const matched = externalRows.filter((row) => matchesKeywordSearch(row, tokens));
-    return okResponse(matched.slice(offset, offset + effectiveLimit), 200);
+    const matched = externalRows.filter((row) =>
+      matchesKeywordSearch(row, tokens)
+    );
+
+    return okResponse(
+      matched.slice(offset, offset + effectiveLimit),
+      200,
+    );
   }
 
+  // AI search mode ranks only Food Safety Korea results.
+  // It does not call another recipe or image service.
   const ranked = externalRows
     .map((row) => ({
       row,
@@ -579,67 +583,50 @@ async function listPublicRecipes(url: URL): Promise<Response> {
     }))
     .filter((item) => item.score > 0)
     .sort((a, b) => {
-      if (a.score == b.score) {
-        return String(b.row.created_at).localeCompare(String(a.row.created_at));
+      if (a.score === b.score) {
+        return String(b.row.created_at).localeCompare(
+          String(a.row.created_at),
+        );
       }
+
       return b.score - a.score;
     })
     .map((item) => item.row);
 
-  return okResponse(ranked.slice(offset, offset + effectiveLimit), 200);
+  return okResponse(
+    ranked.slice(offset, offset + effectiveLimit),
+    200,
+  );
 }
-
 async function getPublicRecipeDetail(id: string): Promise<Response> {
-  const params = new URLSearchParams();
-  params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-  params.set("id", `eq.${id}`);
-  params.set("limit", "1");
+  const sourceId = id.trim();
 
-  const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
-    method: "GET"
-  });
-
-  if (!response.ok) {
-    const details = await response.text();
-    return errorResponse(500, "Failed to fetch recipe detail", details);
+  if (sourceId.length === 0) {
+    return errorResponse(400, "Public recipe id is required");
   }
 
-  const rows = await response.json();
-  if (Array.isArray(rows) && rows.length > 0) {
-    return okResponse(rows[0], 200);
-  }
-
-  const sourceParams = new URLSearchParams();
-  sourceParams.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-  sourceParams.set("source_id", `eq.${id}`);
-  sourceParams.set("limit", "1");
-
-  const sourceResponse = await restRequest(`/rest/v1/recipes_public?${sourceParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!sourceResponse.ok) {
-    const details = await sourceResponse.text();
-    return errorResponse(500, "Failed to fetch recipe detail", details);
-  }
-
-  const sourceRows = await sourceResponse.json();
-  if (Array.isArray(sourceRows) && sourceRows.length > 0) {
-    return okResponse(sourceRows[0], 200);
-  }
-
+  // Public recipe detail must come only from Food Safety Korea COOKRCP01.
+  // Do not query recipes_public here.
   try {
-    const external = await fetchPublicRecipeBySourceId(id);
+    const external = await fetchPublicRecipeBySourceId(sourceId);
+
     if (external) {
       return okResponse(external, 200);
     }
   } catch (error) {
-    return errorResponse(502, "Failed to fetch COOKRCP01 recipe detail", String(error));
+    return errorResponse(
+      502,
+      "Failed to fetch COOKRCP01 recipe detail",
+      String(error),
+    );
   }
 
-  return errorResponse(404, "Public recipe not found", { id });
+  return errorResponse(
+    404,
+    "Public recipe not found",
+    { id: sourceId },
+  );
 }
-
 async function listCreatorRecipes(url: URL, userId: string): Promise<Response> {
   const { limit, offset, error } = parsePagination(url);
   if (error) {

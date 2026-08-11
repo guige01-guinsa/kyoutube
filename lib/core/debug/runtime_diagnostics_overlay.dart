@@ -7,10 +7,20 @@ import '../ops/ops_monitor_service.dart';
 class RuntimeDiagnosticsConfig {
   const RuntimeDiagnosticsConfig._();
 
-  // Temporary runtime diagnostics for device testing.
-  // Disable with: --dart-define=ENABLE_RUNTIME_DIAGNOSTICS=false
+  // Runtime diagnostics for device testing.
+  //
+  // Auto diagnostics:
+  // - enabled by default in debug/profile
+  // - shown only when startup is not ready or startupError exists
+  // - disable with: --dart-define=ENABLE_RUNTIME_DIAGNOSTICS=false
+  //
+  // Force visible:
+  // - enable with: --dart-define=SHOW_RUNTIME_DIAGNOSTICS=true
   static const bool enabled = !kReleaseMode &&
       bool.fromEnvironment('ENABLE_RUNTIME_DIAGNOSTICS', defaultValue: true);
+
+  static const bool forceVisible = !kReleaseMode &&
+      bool.fromEnvironment('SHOW_RUNTIME_DIAGNOSTICS', defaultValue: false);
 }
 
 class RuntimeDiagnosticsOverlay extends StatelessWidget {
@@ -27,68 +37,86 @@ class RuntimeDiagnosticsOverlay extends StatelessWidget {
       return child;
     }
 
-    return Stack(
-      children: <Widget>[
-        child,
-        const Positioned(
-          left: 12,
-          right: 12,
-          bottom: 12,
-          child: _RuntimeDiagnosticsPanel(),
-        ),
-      ],
+    return ValueListenableBuilder<OpsMonitorState>(
+      valueListenable: OpsMonitorService.state,
+      builder: (BuildContext context, OpsMonitorState state, _) {
+        final bool shouldShowDiagnostics =
+            RuntimeDiagnosticsConfig.forceVisible ||
+                !state.isReady ||
+                state.startupError != null;
+
+        if (!shouldShowDiagnostics) {
+          return child;
+        }
+
+        return Stack(
+          children: <Widget>[
+            child,
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: _RuntimeDiagnosticsPanel(state: state),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
 class _RuntimeDiagnosticsPanel extends StatelessWidget {
-  const _RuntimeDiagnosticsPanel();
+  const _RuntimeDiagnosticsPanel({
+    required this.state,
+  });
+
+  final OpsMonitorState state;
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<OpsMonitorState>(
-      valueListenable: OpsMonitorService.state,
-      builder: (BuildContext context, OpsMonitorState state, _) {
-        final ColorScheme colors = Theme.of(context).colorScheme;
-        final String latestError =
-            state.recentErrors.isEmpty ? '-' : state.recentErrors.first.message;
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final bool startupHealthy = state.isReady && state.startupError == null;
 
-        return Card(
-          color: colors.surface.withValues(alpha: 0.95),
-          elevation: 3,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: DefaultTextStyle(
-              style: TextStyle(
-                color: colors.onSurface,
-                fontSize: 11,
-                height: 1.35,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  const Text(
-                    'RUNTIME DIAGNOSTICS',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'mode: ${kReleaseMode ? 'release' : 'debug/profile'}',
-                  ),
-                  Text('env: ${Env.appEnv}'),
-                  Text('phase: ${state.phase}'),
-                  Text('ready: ${state.isReady}'),
-                  Text('url-set: ${Env.supabaseUrl.isNotEmpty}'),
-                  Text('anon-set: ${Env.supabaseAnonKey.isNotEmpty}'),
-                  Text('startup-error: ${state.startupError ?? '-'}'),
-                  Text('latest-error: $latestError'),
-                ],
-              ),
-            ),
+    final String latestError = startupHealthy
+        ? '-'
+        : state.recentErrors.isEmpty
+            ? '-'
+            : state.recentErrors.first.message;
+
+    return Card(
+      color: colors.surface.withValues(alpha: 0.95),
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: DefaultTextStyle(
+          style: TextStyle(
+            color: colors.onSurface,
+            fontSize: 11,
+            height: 1.35,
           ),
-        );
-      },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const Text(
+                'RUNTIME DIAGNOSTICS',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'mode: ${kReleaseMode ? 'release' : 'debug/profile'}',
+              ),
+              Text('env: ${Env.appEnv}'),
+              Text('phase: ${state.phase}'),
+              Text('ready: ${state.isReady}'),
+              Text('url-set: ${Env.supabaseUrl.isNotEmpty}'),
+              Text('anon-set: ${Env.supabaseAnonKey.isNotEmpty}'),
+              Text('startup-error: ${state.startupError ?? '-'}'),
+              Text('latest-error: $latestError'),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
