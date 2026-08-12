@@ -610,7 +610,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
                     OutlinedButton.icon(
                       onPressed: () => _addMissingIngredientsToShopping(recipe),
                       icon: const Icon(Icons.shopping_cart_checkout_outlined),
-                      label: const Text('부족 재료 장보기 추가'),
+                      label: const Text('\uC7A5\uBCF4\uAE30\uC900\uBE44'),
                     ),
                   ],
                 ),

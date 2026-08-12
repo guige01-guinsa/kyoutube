@@ -12,7 +12,10 @@ import '../application/shopping_persistence_controllers.dart';
 import '../domain/shopping_review_drafts.dart';
 
 class ShoppingReviewPage extends ConsumerStatefulWidget {
-  const ShoppingReviewPage({super.key, required this.sourceRecipeReference});
+  const ShoppingReviewPage({
+    super.key,
+    required this.sourceRecipeReference,
+  });
 
   final String sourceRecipeReference;
 
@@ -24,12 +27,17 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
   ShoppingReviewDraft? _draft;
   ShoppingReviewDraftController? _draftController;
   Timer? _saveTimer;
+
   bool _loadingDraft = false;
   bool _submitting = false;
   bool _popping = false;
+
   String? _error;
-  final Map<String, TextEditingController> _nameControllers = {};
-  final Map<String, TextEditingController> _quantityControllers = {};
+
+  final Map<String, TextEditingController> _nameControllers =
+      <String, TextEditingController>{};
+  final Map<String, TextEditingController> _quantityControllers =
+      <String, TextEditingController>{};
 
   RecipeSourceReference get _source =>
       RecipeSourceReference.parse(widget.sourceRecipeReference);
@@ -37,57 +45,124 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
   @override
   void dispose() {
     _saveTimer?.cancel();
-    for (final controller in _nameControllers.values) {
+
+    for (final TextEditingController controller in _nameControllers.values) {
       controller.dispose();
     }
-    for (final controller in _quantityControllers.values) {
+
+    for (final TextEditingController controller
+        in _quantityControllers.values) {
       controller.dispose();
     }
+
     super.dispose();
   }
 
   Future<void> _loadDraft(Recipe recipe) async {
-    if (_loadingDraft || _draft != null) return;
+    if (_loadingDraft || _draft != null) {
+      return;
+    }
+
     _loadingDraft = true;
+
     try {
-      final controller =
+      final ShoppingReviewDraftController controller =
           await ref.read(shoppingReviewDraftControllerProvider.future);
-      final draft = await controller.getOrCreate(
+
+      final ShoppingReviewDraft loadedDraft = await controller.getOrCreate(
         sourceRecipeId: _source.value,
         initialItems: List<ShoppingReviewDraftItem>.generate(
           recipe.ingredients.length,
-          (index) => ShoppingReviewDraftItem(
-            localId: 'ingredient-$index',
-            ingredientText: recipe.ingredients[index],
-            name: '',
-            quantityInput: '',
-            quantity: null,
-            unit: null,
+          (int index) => _createInitialDraftItem(
+            index,
+            recipe.ingredients[index],
           ),
         ),
       );
-      if (!mounted) return;
-      for (final item in draft.items) {
+
+      final ShoppingReviewDraft draft =
+          _prefillEmptyIngredientNames(loadedDraft);
+
+      if (draft != loadedDraft) {
+        try {
+          await controller.save(draft);
+        } catch (_) {
+          // 이름 자동 채우기 저장 실패는 화면 표시를 막지 않습니다.
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      for (final ShoppingReviewDraftItem item in draft.items) {
         _nameControllers[item.localId] = TextEditingController(text: item.name);
         _quantityControllers[item.localId] =
             TextEditingController(text: item.quantityInput);
       }
+
       setState(() {
         _draftController = controller;
         _draft = draft;
         _loadingDraft = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _loadingDraft = false;
-        _error = '재료 검토 초안을 불러오지 못했습니다.';
+        _error = '재료 검토 초안을 불러올 수 없습니다.';
       });
     }
   }
 
-  ShoppingReviewDraft _replaceItems(List<ShoppingReviewDraftItem> items) {
-    final draft = _draft!;
+  ShoppingReviewDraftItem _createInitialDraftItem(
+    int index,
+    String rawIngredientText,
+  ) {
+    return ShoppingReviewDraftItem(
+      localId: 'ingredient-$index',
+      ingredientText: rawIngredientText,
+      name: _guessIngredientName(rawIngredientText),
+      quantityInput: '',
+      quantity: null,
+      unit: null,
+    );
+  }
+
+  ShoppingReviewDraft _prefillEmptyIngredientNames(ShoppingReviewDraft draft) {
+    var changed = false;
+
+    final List<ShoppingReviewDraftItem> items =
+        draft.items.map((ShoppingReviewDraftItem item) {
+      if (item.name.trim().isNotEmpty) {
+        return item;
+      }
+
+      final String guessedName = _guessIngredientName(item.ingredientText);
+
+      if (guessedName.trim().isEmpty) {
+        return item;
+      }
+
+      changed = true;
+
+      return ShoppingReviewDraftItem(
+        localId: item.localId,
+        ingredientText: item.ingredientText,
+        name: guessedName,
+        quantityInput: item.quantityInput,
+        quantity: item.quantity,
+        unit: item.unit,
+      );
+    }).toList(growable: false);
+
+    if (!changed) {
+      return draft;
+    }
+
     return ShoppingReviewDraft(
       schemaVersion: draft.schemaVersion,
       draftId: draft.draftId,
@@ -95,154 +170,286 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       createIdempotencyKey: draft.createIdempotencyKey,
       createdAt: draft.createdAt,
       updatedAt: DateTime.now().toUtc(),
-      items: List.unmodifiable(items),
+      items: List<ShoppingReviewDraftItem>.unmodifiable(items),
+    );
+  }
+
+  String _guessIngredientName(String rawIngredientText) {
+    var value = rawIngredientText.trim();
+
+    if (value.isEmpty) {
+      return '';
+    }
+
+    value = value.replaceAll(RegExp(r'^[\s\-•·]+'), '');
+
+    value = value.replaceAll(
+      RegExp(r'\([^)]*\)'),
+      ' ',
+    );
+
+    value = value.replaceAll(
+      RegExp(
+        r'\d+(?:\.\d+)?\s*(kg|g|ml|l|L|개|큰술|작은술|컵|대|쪽|알|장|봉|팩|줌|꼬집|cm)?',
+        caseSensitive: false,
+      ),
+      ' ',
+    );
+
+    value = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return value.isEmpty ? rawIngredientText.trim() : value;
+  }
+
+  ShoppingReviewDraft _replaceItems(List<ShoppingReviewDraftItem> items) {
+    final ShoppingReviewDraft draft = _draft!;
+
+    return ShoppingReviewDraft(
+      schemaVersion: draft.schemaVersion,
+      draftId: draft.draftId,
+      sourceRecipeId: draft.sourceRecipeId,
+      createIdempotencyKey: draft.createIdempotencyKey,
+      createdAt: draft.createdAt,
+      updatedAt: DateTime.now().toUtc(),
+      items: List<ShoppingReviewDraftItem>.unmodifiable(items),
     );
   }
 
   void _updateItem(int index, ShoppingReviewDraftItem item) {
-    final items = List<ShoppingReviewDraftItem>.from(_draft!.items);
+    final List<ShoppingReviewDraftItem> items =
+        List<ShoppingReviewDraftItem>.from(_draft!.items);
+
     items[index] = item;
-    setState(() => _draft = _replaceItems(items));
+
+    setState(() {
+      _draft = _replaceItems(items);
+    });
+
     _scheduleSave();
   }
 
   void _scheduleSave() {
     _saveTimer?.cancel();
+
     _saveTimer = Timer(const Duration(milliseconds: 450), () async {
-      final draft = _draft;
-      final controller = _draftController;
-      if (draft == null || controller == null) return;
+      final ShoppingReviewDraft? draft = _draft;
+      final ShoppingReviewDraftController? controller = _draftController;
+
+      if (draft == null || controller == null) {
+        return;
+      }
+
       try {
         await controller.save(draft);
       } catch (_) {
-        if (mounted) setState(() => _error = '초안을 저장하지 못했습니다.');
+        if (mounted) {
+          setState(() {
+            _error = '초안을 저장하지 못했습니다.';
+          });
+        }
       }
     });
   }
 
   Future<void> _saveNow() async {
     _saveTimer?.cancel();
-    final draft = _draft;
-    final controller = _draftController;
-    if (draft != null && controller != null) await controller.save(draft);
+
+    final ShoppingReviewDraft? draft = _draft;
+    final ShoppingReviewDraftController? controller = _draftController;
+
+    if (draft != null && controller != null) {
+      await controller.save(draft);
+    }
   }
 
   Future<void> _continueLater() async {
     try {
       await _saveNow();
-      if (mounted) {
-        setState(() => _popping = true);
-        context.pop();
+
+      if (!mounted) {
+        return;
       }
+
+      setState(() {
+        _popping = true;
+      });
+
+      context.pop();
     } catch (_) {
-      if (mounted) setState(() => _error = '초안을 저장하지 못했습니다.');
+      if (mounted) {
+        setState(() {
+          _error = '초안을 저장하지 못했습니다.';
+        });
+      }
     }
   }
 
   Future<void> _cancel() async {
-    final confirmed = await showDialog<bool>(
+    final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('검토 취소'),
-        content: const Text('저장된 검토 초안을 삭제할까요?'),
-        actions: <Widget>[
-          TextButton(
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('검토 취소'),
+          content: const Text('저장된 검토 초안을 삭제할까요?'),
+          actions: <Widget>[
+            TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('계속 검토')),
-          FilledButton(
+              child: const Text('계속 검토'),
+            ),
+            FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('삭제')),
-        ],
-      ),
+              child: const Text('삭제'),
+            ),
+          ],
+        );
+      },
     );
-    if (confirmed != true || !mounted) return;
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
     try {
       await _draftController?.cancel(_source.value);
-      if (mounted) {
-        setState(() => _popping = true);
-        context.pop();
+
+      if (!mounted) {
+        return;
       }
+
+      setState(() {
+        _popping = true;
+      });
+
+      context.pop();
     } catch (_) {
-      if (mounted) setState(() => _error = '초안을 삭제하지 못했습니다.');
+      if (mounted) {
+        setState(() {
+          _error = '초안을 삭제하지 못했습니다.';
+        });
+      }
     }
   }
 
   Future<void> _submit() async {
-    final draft = _draft;
-    if (draft == null || _submitting) return;
+    final ShoppingReviewDraft? draft = _draft;
+
+    if (draft == null || _submitting) {
+      return;
+    }
+
     try {
       draft.validate(forSubmission: true);
     } on FormatException catch (error) {
-      setState(() => _error = error.message);
+      setState(() {
+        _error = error.message;
+      });
       return;
     }
+
     setState(() {
       _submitting = true;
       _error = null;
     });
+
     try {
-      await _saveNow();
+      // 초안 저장 실패가 장보기 목록 생성을 막지 않도록 합니다.
+      try {
+        await _saveNow();
+      } catch (_) {
+        // 초안 저장 실패는 무시하고 현재 입력값으로 장보기 목록 생성을 진행합니다.
+      }
+
       final result = await ref.read(kitchenApiProvider).createShoppingList(
             sourceRecipeId: draft.sourceRecipeId,
             items: draft.items,
             idempotencyKey: draft.createIdempotencyKey,
           );
+
       if (result.idempotencyKey != draft.createIdempotencyKey) {
         throw const FormatException('Invalid shopping list create response');
       }
-      await _draftController?.cancel(_source.value);
-      if (!mounted) return;
+
+      try {
+        await _draftController?.cancel(_source.value);
+      } catch (_) {
+        // 장보기 목록 생성 후 초안 삭제 실패는 무시합니다.
+      }
+
+      if (!mounted) {
+        return;
+      }
+
       ref.invalidate(kitchenShoppingListsProvider);
+
       context.go('/kitchen?tab=shopping');
-    } catch (_) {
-      if (!mounted) return;
+    } catch (err) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _submitting = false;
-        _error = '장보기 목록 생성에 실패했습니다. 입력과 초안은 유지됩니다.';
+        _error = '장보기 목록 생성에 실패했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.\n$err';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final source = _source;
-    final recipeAsync = switch (source.type) {
+    final RecipeSourceReference source = _source;
+
+    final AsyncValue<Recipe?> recipeAsync = switch (source.type) {
       'public' => ref.watch(recipeByIdProvider(source.id)),
       'creator' => ref.watch(creatorRecipeByIdProvider(source.id)),
       _ => ref.watch(subscriberRecipeByIdProvider(source.id)),
     };
+
     return PopScope<void>(
       canPop: _popping,
-      onPopInvokedWithResult: (didPop, _) {
+      onPopInvokedWithResult: (bool didPop, _) {
         if (!didPop && !_popping) {
           unawaited(_continueLater());
         }
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('장보기 재료 검토'),
+          title: const Text('장보기 준비'),
           actions: <Widget>[
             TextButton(
-                onPressed: _submitting ? null : _continueLater,
-                child: const Text('나중에 계속')),
+              onPressed: _submitting ? null : _continueLater,
+              child: const Text('나중에 계속'),
+            ),
             IconButton(
-                onPressed: _submitting ? null : _cancel,
-                icon: const Icon(Icons.close),
-                tooltip: '취소'),
+              onPressed: _submitting ? null : _cancel,
+              icon: const Icon(Icons.close),
+              tooltip: '취소',
+            ),
           ],
         ),
         body: recipeAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, __) => const Center(child: Text('레시피를 불러오지 못했습니다.')),
-          data: (recipe) {
+          loading: () => const Center(
+            child: CircularProgressIndicator(),
+          ),
+          error: (_, __) => const Center(
+            child: Text('레시피를 불러올 수 없습니다.'),
+          ),
+          data: (Recipe? recipe) {
             if (recipe == null) {
-              return const Center(child: Text('레시피를 찾을 수 없습니다.'));
+              return const Center(
+                child: Text('레시피를 찾을 수 없습니다.'),
+              );
             }
-            WidgetsBinding.instance
-                .addPostFrameCallback((_) => _loadDraft(recipe));
+
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _loadDraft(recipe),
+            );
+
             if (_draft == null) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
             }
+
             return _buildForm(context);
           },
         ),
@@ -251,44 +458,58 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
   }
 
   Widget _buildForm(BuildContext context) {
-    final draft = _draft!;
-    final canSubmit = !_submitting && _isValid(draft);
+    final ShoppingReviewDraft draft = _draft!;
+    final bool canSubmit = !_submitting && _isValid(draft);
+
     return SafeArea(
       child: Column(
         children: <Widget>[
           if (_error != null)
-            MaterialBanner(content: Text(_error!), actions: <Widget>[
-              TextButton(
-                  onPressed: () => setState(() => _error = null),
-                  child: const Text('닫기'))
-            ]),
+            MaterialBanner(
+              content: Text(_error!),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _error = null;
+                    });
+                  },
+                  child: const Text('닫기'),
+                ),
+              ],
+            ),
           const Padding(
             padding: EdgeInsets.all(16),
             child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('원문 재료를 확인하고 이름·수량·단위를 입력하세요.')),
+              alignment: Alignment.centerLeft,
+              child: Text('원문 재료를 확인하고 이름·수량·단위를 입력하세요.'),
+            ),
           ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: draft.items.length,
-              itemBuilder: (context, index) =>
-                  _itemEditor(context, index, draft.items[index]),
+              itemBuilder: (BuildContext context, int index) {
+                return _itemEditor(context, index, draft.items[index]);
+              },
             ),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                    onPressed: canSubmit ? _submit : null,
-                    icon: _submitting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.playlist_add),
-                    label: const Text('장보기 목록 만들기'))),
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: canSubmit ? _submit : null,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.playlist_add),
+                label: const Text('장보기 목록 만들기'),
+              ),
+            ),
           ),
         ],
       ),
@@ -296,7 +517,10 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
   }
 
   Widget _itemEditor(
-      BuildContext context, int index, ShoppingReviewDraftItem item) {
+    BuildContext context,
+    int index,
+    ShoppingReviewDraftItem item,
+  ) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -317,10 +541,15 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
                       : () {
                           _nameControllers.remove(item.localId)?.dispose();
                           _quantityControllers.remove(item.localId)?.dispose();
-                          final items =
+
+                          final List<ShoppingReviewDraftItem> items =
                               List<ShoppingReviewDraftItem>.from(_draft!.items)
                                 ..removeAt(index);
-                          setState(() => _draft = _replaceItems(items));
+
+                          setState(() {
+                            _draft = _replaceItems(items);
+                          });
+
                           _scheduleSave();
                         },
                   icon: const Icon(Icons.delete_outline),
@@ -332,19 +561,23 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
             TextField(
               controller: _nameControllers[item.localId],
               decoration: const InputDecoration(
-                  labelText: '검토한 재료 이름', helperText: '필수'),
-              textInputAction: TextInputAction.next,
-              onChanged: (value) => _updateItem(
-                index,
-                ShoppingReviewDraftItem(
-                  localId: item.localId,
-                  ingredientText: item.ingredientText,
-                  name: value,
-                  quantityInput: item.quantityInput,
-                  quantity: item.quantity,
-                  unit: item.unit,
-                ),
+                labelText: '검토한 재료 이름',
+                helperText: '필수',
               ),
+              textInputAction: TextInputAction.next,
+              onChanged: (String value) {
+                _updateItem(
+                  index,
+                  ShoppingReviewDraftItem(
+                    localId: item.localId,
+                    ingredientText: item.ingredientText,
+                    name: value,
+                    quantityInput: item.quantityInput,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 8),
             Row(
@@ -352,45 +585,70 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
                 Expanded(
                   child: TextField(
                     controller: _quantityControllers[item.localId],
-                    decoration: const InputDecoration(labelText: '수량'),
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    textInputAction: TextInputAction.next,
-                    onChanged: (value) => _updateItem(
-                      index,
-                      ShoppingReviewDraftItem(
-                        localId: item.localId,
-                        ingredientText: item.ingredientText,
-                        name: item.name,
-                        quantityInput: value,
-                        quantity: double.tryParse(value.trim()),
-                        unit: item.unit,
-                      ),
+                    decoration: const InputDecoration(
+                      labelText: '수량',
                     ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.next,
+                    onChanged: (String value) {
+                      _updateItem(
+                        index,
+                        ShoppingReviewDraftItem(
+                          localId: item.localId,
+                          ingredientText: item.ingredientText,
+                          name: item.name,
+                          quantityInput: value,
+                          quantity: double.tryParse(value.trim()),
+                          unit: item.unit,
+                        ),
+                      );
+                    },
                   ),
                 ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     initialValue: item.unit,
-                    decoration: const InputDecoration(labelText: '단위'),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(value: 'g', child: Text('g')),
-                      DropdownMenuItem(value: 'kg', child: Text('kg')),
-                      DropdownMenuItem(value: 'ml', child: Text('ml')),
-                      DropdownMenuItem(value: 'l', child: Text('L')),
-                      DropdownMenuItem(value: 'ea', child: Text('개')),
-                    ],
-                    onChanged: (value) => _updateItem(
-                      index,
-                      ShoppingReviewDraftItem(
-                        localId: item.localId,
-                        ingredientText: item.ingredientText,
-                        name: item.name,
-                        quantityInput: item.quantityInput,
-                        quantity: item.quantity,
-                        unit: value,
-                      ),
+                    decoration: const InputDecoration(
+                      labelText: '단위',
                     ),
+                    items: const <DropdownMenuItem<String>>[
+                      DropdownMenuItem<String>(
+                        value: 'g',
+                        child: Text('g'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'kg',
+                        child: Text('kg'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'ml',
+                        child: Text('ml'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'l',
+                        child: Text('L'),
+                      ),
+                      DropdownMenuItem<String>(
+                        value: 'ea',
+                        child: Text('개'),
+                      ),
+                    ],
+                    onChanged: (String? value) {
+                      _updateItem(
+                        index,
+                        ShoppingReviewDraftItem(
+                          localId: item.localId,
+                          ingredientText: item.ingredientText,
+                          name: item.name,
+                          quantityInput: item.quantityInput,
+                          quantity: item.quantity,
+                          unit: value,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
