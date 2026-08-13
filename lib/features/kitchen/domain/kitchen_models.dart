@@ -196,6 +196,7 @@ class KitchenShoppingList {
     required this.title,
     required this.items,
     required this.openItemCount,
+    this.sourceRecipeId,
   });
 
   final String id;
@@ -203,6 +204,7 @@ class KitchenShoppingList {
   final String title;
   final List<KitchenShoppingItem> items;
   final int openItemCount;
+  final String? sourceRecipeId;
 
   factory KitchenShoppingList.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -223,12 +225,19 @@ class KitchenShoppingList {
       return 0;
     }
 
+    final rawSourceRecipeId = json['source_recipe_id'];
+    final sourceRecipeId =
+        rawSourceRecipeId is String && rawSourceRecipeId.trim().isNotEmpty
+            ? rawSourceRecipeId.trim()
+            : null;
+
     return KitchenShoppingList(
       id: (json['id'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       items: parsedItems,
       openItemCount: parseCount(json['open_item_count']),
+      sourceRecipeId: sourceRecipeId,
     );
   }
 }
