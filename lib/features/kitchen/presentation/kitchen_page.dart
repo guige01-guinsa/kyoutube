@@ -5,9 +5,17 @@ import 'package:go_router/go_router.dart';
 import '../../../core/widgets/centered_state_view.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../recipes/application/recipe_providers.dart';
+import '../../recipes/domain/recipe_source_reference.dart';
 import '../application/kitchen_providers.dart';
 import '../data/kitchen_api.dart';
 import '../domain/kitchen_models.dart';
+
+enum _ShoppingCompletionAction {
+  cook,
+  ingredients,
+  history,
+  home,
+}
 
 class KitchenPage extends ConsumerStatefulWidget {
   const KitchenPage({super.key, this.initialTab = 'ingredients'});
@@ -34,7 +42,8 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
     } else if (widget.initialTab == 'history') {
       tabIndex = 2;
     }
-    _tabController = TabController(length: 3, vsync: this, initialIndex: tabIndex);
+    _tabController =
+        TabController(length: 3, vsync: this, initialIndex: tabIndex);
   }
 
   @override
@@ -196,6 +205,144 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
     }
   }
 
+  String? _routeForRecipeSource(String? sourceRecipeId) {
+    final value = sourceRecipeId?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+
+    try {
+      final source = RecipeSourceReference.parse(value);
+      final encodedId = Uri.encodeComponent(source.id);
+
+      return switch (source.type) {
+        'public' => '/recipes/$encodedId',
+        'creator' => '/creator/$encodedId',
+        'user' => '/my-recipes/$encodedId',
+        _ => null,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _showShoppingCompletionActions(KitchenShoppingList list) async {
+    final recipeRoute = _routeForRecipeSource(list.sourceRecipeId);
+    final hasRecipeRoute = recipeRoute != null;
+
+    final action = await showModalBottomSheet<_ShoppingCompletionAction>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        final colorScheme = Theme.of(context).colorScheme;
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 44,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '장보기가 완료되었습니다',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  hasRecipeRoute
+                      ? '구매한 재료가 보유 재료에 반영되었습니다. 이제 요리를 시작해 보세요.'
+                      : '구매한 재료가 보유 재료에 반영되었습니다. 다음 작업을 선택해 주세요.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 20),
+                if (hasRecipeRoute) ...<Widget>[
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _ShoppingCompletionAction.cook,
+                    ),
+                    icon: const Icon(Icons.restaurant_menu_outlined),
+                    label: const Text('요리 시작하기'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _ShoppingCompletionAction.ingredients,
+                    ),
+                    icon: const Icon(Icons.kitchen_outlined),
+                    label: const Text('새 재료 확인하기'),
+                  ),
+                ] else ...<Widget>[
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _ShoppingCompletionAction.ingredients,
+                    ),
+                    icon: const Icon(Icons.kitchen_outlined),
+                    label: const Text('새 재료 확인하기'),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    _ShoppingCompletionAction.history,
+                  ),
+                  icon: const Icon(Icons.history),
+                  label: const Text('장보기 완료 내역 보기'),
+                ),
+                if (!hasRecipeRoute) ...<Widget>[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () => Navigator.pop(
+                      context,
+                      _ShoppingCompletionAction.home,
+                    ),
+                    icon: const Icon(Icons.home_outlined),
+                    label: const Text('홈으로'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) {
+      return;
+    }
+
+    switch (action) {
+      case _ShoppingCompletionAction.cook:
+        if (recipeRoute != null) {
+          context.go(recipeRoute);
+        }
+        break;
+      case _ShoppingCompletionAction.ingredients:
+        _tabController.animateTo(0);
+        break;
+      case _ShoppingCompletionAction.history:
+        _tabController.animateTo(2);
+        break;
+      case _ShoppingCompletionAction.home:
+        context.go('/');
+        break;
+    }
+  }
+
   Future<void> _completeShoppingList(KitchenShoppingList list) async {
     if (_completionProcessing || _itemProcessing.isNotEmpty) return;
     final confirmed = await _showCompletionDialog(list);
@@ -209,9 +356,7 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('장보기를 완료 처리했습니다.')),
-      );
+      await _showShoppingCompletionActions(list);
     } catch (error) {
       if (!mounted) {
         return;
