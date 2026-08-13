@@ -17,6 +17,26 @@ enum _ShoppingCompletionAction {
   home,
 }
 
+enum _KitchenWorkspaceMenuAction {
+  cleanup,
+  restoreRecent,
+}
+
+class _KitchenCleanupOptions {
+  const _KitchenCleanupOptions({
+    required this.clearIngredients,
+    required this.clearActiveShopping,
+    required this.clearCompletedHistory,
+  });
+
+  final bool clearIngredients;
+  final bool clearActiveShopping;
+  final bool clearCompletedHistory;
+
+  bool get hasSelection =>
+      clearIngredients || clearActiveShopping || clearCompletedHistory;
+}
+
 class KitchenPage extends ConsumerStatefulWidget {
   const KitchenPage({super.key, this.initialTab = 'ingredients'});
 
@@ -32,6 +52,7 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
   final TextEditingController _addController = TextEditingController();
   final Set<String> _itemProcessing = <String>{};
   bool _completionProcessing = false;
+  bool _cleanupProcessing = false;
 
   @override
   void initState() {
@@ -202,6 +223,383 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
       }
     } finally {
       if (mounted) setState(() => _itemProcessing.remove(item.id));
+    }
+  }
+
+  Future<void> _openKitchenCleanupDialog() async {
+    if (_cleanupProcessing) {
+      return;
+    }
+
+    bool clearIngredients = false;
+    bool clearActiveShopping = false;
+    bool clearCompletedHistory = false;
+
+    final options = await showDialog<_KitchenCleanupOptions>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setDialogState) {
+            final hasSelection = clearIngredients ||
+                clearActiveShopping ||
+                clearCompletedHistory;
+
+            return AlertDialog(
+              title: const Text('주방 정리'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Text(
+                      '정리할 항목을 선택하세요. 최근 정리 3건은 각각 30분 동안 되돌릴 수 있습니다.',
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: clearIngredients,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('보유 재료 삭제'),
+                      subtitle: const Text(
+                        '보유 재료와 유통기한 정보가 삭제됩니다. 되돌리기 전에는 복구할 수 있습니다.',
+                      ),
+                      onChanged: (bool? value) {
+                        setDialogState(() => clearIngredients = value ?? false);
+                      },
+                    ),
+                    CheckboxListTile(
+                      value: clearActiveShopping,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('진행 중 장보기 정리'),
+                      subtitle: const Text(
+                        '진행 중 목록과 미체크 항목이 숨겨집니다. 구매 완료로 처리되지는 않습니다.',
+                      ),
+                      onChanged: (bool? value) {
+                        setDialogState(
+                          () => clearActiveShopping = value ?? false,
+                        );
+                      },
+                    ),
+                    CheckboxListTile(
+                      value: clearCompletedHistory,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('장보기 완료 내역 정리'),
+                      subtitle: const Text(
+                        '완료된 장보기 기록이 히스토리에서 숨겨집니다.',
+                      ),
+                      onChanged: (bool? value) {
+                        setDialogState(
+                          () => clearCompletedHistory = value ?? false,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('취소'),
+                ),
+                FilledButton(
+                  onPressed: hasSelection
+                      ? () => Navigator.pop(
+                            dialogContext,
+                            _KitchenCleanupOptions(
+                              clearIngredients: clearIngredients,
+                              clearActiveShopping: clearActiveShopping,
+                              clearCompletedHistory: clearCompletedHistory,
+                            ),
+                          )
+                      : null,
+                  child: const Text('선택 항목 정리'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || options == null || !options.hasSelection) {
+      return;
+    }
+
+    final impacts = <String>[
+      if (options.clearIngredients) '보유 재료와 유통기한 정보',
+      if (options.clearActiveShopping) '진행 중 장보기와 미체크 항목',
+      if (options.clearCompletedHistory) '장보기 완료 내역',
+    ];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('주방 데이터를 정리할까요?'),
+        content: Text(
+          '${impacts.join(', ')}가 정리됩니다. 최근 정리 3건은 각각 30분 동안 되돌릴 수 있습니다.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('정리하기'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await _runKitchenCleanup(options);
+  }
+
+  Future<void> _runKitchenCleanup(_KitchenCleanupOptions options) async {
+    if (_cleanupProcessing) {
+      return;
+    }
+
+    setState(() => _cleanupProcessing = true);
+
+    try {
+      final result = await ref.read(kitchenApiProvider).cleanupWorkspace(
+            clearIngredients: options.clearIngredients,
+            clearActiveShopping: options.clearActiveShopping,
+            clearCompletedHistory: options.clearCompletedHistory,
+            idempotencyKey: KitchenApi.createIdempotencyKey(),
+          );
+
+      await _refreshAll();
+
+      if (!mounted) {
+        return;
+      }
+
+      final changes = <String>[
+        if (result.ingredientCount > 0) '재료 ${result.ingredientCount}개',
+        if (result.activeListCount > 0) '진행 중 장보기 ${result.activeListCount}개',
+        if (result.completedListCount > 0)
+          '완료 내역 ${result.completedListCount}개',
+      ];
+
+      final hasChanges = result.hasChanges;
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 30),
+          content: Text(
+            changes.isEmpty
+                ? '정리할 주방 데이터가 없습니다.'
+                : '${changes.join(', ')}를 정리했습니다. 30분 안에 되돌릴 수 있습니다.',
+          ),
+          action: hasChanges
+              ? SnackBarAction(
+                  label: '되돌리기',
+                  onPressed: () => _restoreKitchenCleanup(result.snapshotId),
+                )
+              : null,
+        ),
+      );
+    } on KitchenApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_shoppingErrorMessage(error))),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('주방 데이터를 정리하지 못했습니다. 다시 시도해 주세요.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _cleanupProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _restoreKitchenCleanup(String snapshotId) async {
+    if (_cleanupProcessing) {
+      return;
+    }
+
+    setState(() => _cleanupProcessing = true);
+
+    try {
+      final result = await ref
+          .read(kitchenApiProvider)
+          .restoreWorkspaceCleanup(snapshotId);
+
+      await _refreshAll();
+
+      if (!mounted) {
+        return;
+      }
+
+      final restored = <String>[
+        if (result.restoredIngredientCount > 0)
+          '재료 ${result.restoredIngredientCount}개',
+        if (result.restoredActiveListCount > 0)
+          '진행 중 장보기 ${result.restoredActiveListCount}개',
+        if (result.restoredCompletedListCount > 0)
+          '완료 내역 ${result.restoredCompletedListCount}개',
+      ];
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            restored.isEmpty
+                ? '되돌릴 주방 데이터가 없습니다.'
+                : '${restored.join(', ')}를 복구했습니다.',
+          ),
+        ),
+      );
+    } on KitchenApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_shoppingErrorMessage(error))),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('정리를 되돌리지 못했습니다. Undo 시간이 지났거나 데이터가 변경되었을 수 있습니다.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _cleanupProcessing = false);
+      }
+    }
+  }
+
+  Future<void> _showRecentCleanupRestores() async {
+    if (_cleanupProcessing) {
+      return;
+    }
+
+    setState(() => _cleanupProcessing = true);
+
+    try {
+      final snapshots =
+          await ref.read(kitchenApiProvider).listWorkspaceCleanupSnapshots();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (snapshots.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('되돌릴 수 있는 최근 주방 정리가 없습니다.')),
+        );
+        return;
+      }
+
+      final selected =
+          await showModalBottomSheet<KitchenWorkspaceCleanupSnapshot>(
+        context: context,
+        showDragHandle: true,
+        builder: (BuildContext context) {
+          return SafeArea(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+              itemCount: snapshots.length + 1,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (BuildContext context, int index) {
+                if (index == 0) {
+                  return const ListTile(
+                    title: Text('최근 정리 되돌리기'),
+                    subtitle: Text('최근 3건은 각각 정리 후 30분 동안 복구할 수 있습니다.'),
+                  );
+                }
+
+                final snapshot = snapshots[index - 1];
+                final remaining = snapshot.expiresAt
+                    .difference(DateTime.now())
+                    .inMinutes
+                    .clamp(0, 30);
+                final changes = <String>[
+                  if (snapshot.ingredientCount > 0)
+                    '재료 ${snapshot.ingredientCount}개',
+                  if (snapshot.activeListCount > 0)
+                    '진행 중 ${snapshot.activeListCount}개',
+                  if (snapshot.completedListCount > 0)
+                    '완료 내역 ${snapshot.completedListCount}개',
+                ];
+
+                return ListTile(
+                  leading: const Icon(Icons.restore_outlined),
+                  title: Text(
+                    changes.isEmpty ? '빈 정리 작업' : changes.join(', '),
+                  ),
+                  subtitle: Text('약 $remaining분 남음'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(context, snapshot),
+                );
+              },
+            ),
+          );
+        },
+      );
+
+      if (!mounted || selected == null) {
+        return;
+      }
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext dialogContext) => AlertDialog(
+          title: const Text('최근 정리를 되돌릴까요?'),
+          content: const Text('정리 후 새로 추가한 같은 이름의 재료가 있으면 복구할 수 없습니다.'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('되돌리기'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && mounted) {
+        setState(() => _cleanupProcessing = false);
+        await _restoreKitchenCleanup(selected.snapshotId);
+      }
+    } on KitchenApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_shoppingErrorMessage(error))),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('최근 주방 정리 목록을 불러오지 못했습니다.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _cleanupProcessing = false);
+      }
     }
   }
 
@@ -532,6 +930,39 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('주방'),
+        actions: <Widget>[
+          PopupMenuButton<_KitchenWorkspaceMenuAction>(
+            tooltip: '주방 메뉴',
+            enabled: !_cleanupProcessing,
+            onSelected: (_KitchenWorkspaceMenuAction action) async {
+              switch (action) {
+                case _KitchenWorkspaceMenuAction.cleanup:
+                  await _openKitchenCleanupDialog();
+                  break;
+                case _KitchenWorkspaceMenuAction.restoreRecent:
+                  await _showRecentCleanupRestores();
+                  break;
+              }
+            },
+            itemBuilder: (BuildContext context) =>
+                const <PopupMenuEntry<_KitchenWorkspaceMenuAction>>[
+              PopupMenuItem<_KitchenWorkspaceMenuAction>(
+                value: _KitchenWorkspaceMenuAction.cleanup,
+                child: ListTile(
+                  leading: Icon(Icons.cleaning_services_outlined),
+                  title: Text('주방 정리'),
+                ),
+              ),
+              PopupMenuItem<_KitchenWorkspaceMenuAction>(
+                value: _KitchenWorkspaceMenuAction.restoreRecent,
+                child: ListTile(
+                  leading: Icon(Icons.restore_outlined),
+                  title: Text('최근 정리 되돌리기'),
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const <Tab>[

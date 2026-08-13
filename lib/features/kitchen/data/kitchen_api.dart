@@ -116,6 +116,167 @@ class KitchenShoppingListCreateResult {
   }
 }
 
+class KitchenWorkspaceCleanupResult {
+  const KitchenWorkspaceCleanupResult({
+    required this.snapshotId,
+    required this.ingredientCount,
+    required this.activeListCount,
+    required this.completedListCount,
+    required this.openItemCount,
+    required this.expiresAt,
+    required this.replayed,
+  });
+
+  final String snapshotId;
+  final int ingredientCount;
+  final int activeListCount;
+  final int completedListCount;
+  final int openItemCount;
+  final DateTime expiresAt;
+  final bool replayed;
+
+  bool get hasChanges =>
+      ingredientCount > 0 || activeListCount > 0 || completedListCount > 0;
+
+  factory KitchenWorkspaceCleanupResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final snapshotId = json['snapshot_id'];
+    final ingredientCount = json['ingredient_count'];
+    final activeListCount = json['active_list_count'];
+    final completedListCount = json['completed_list_count'];
+    final openItemCount = json['open_item_count'];
+    final expiresAtValue = json['expires_at'];
+    final replayed = json['replayed'];
+    final expiresAt =
+        expiresAtValue is String ? DateTime.tryParse(expiresAtValue) : null;
+
+    if (snapshotId is! String ||
+        !KitchenApi._isUuid(snapshotId) ||
+        ingredientCount is! num ||
+        ingredientCount < 0 ||
+        activeListCount is! num ||
+        activeListCount < 0 ||
+        completedListCount is! num ||
+        completedListCount < 0 ||
+        openItemCount is! num ||
+        openItemCount < 0 ||
+        expiresAt == null ||
+        replayed is! bool) {
+      throw const FormatException('Invalid kitchen cleanup response');
+    }
+
+    return KitchenWorkspaceCleanupResult(
+      snapshotId: snapshotId,
+      ingredientCount: ingredientCount.toInt(),
+      activeListCount: activeListCount.toInt(),
+      completedListCount: completedListCount.toInt(),
+      openItemCount: openItemCount.toInt(),
+      expiresAt: expiresAt.toLocal(),
+      replayed: replayed,
+    );
+  }
+}
+
+class KitchenWorkspaceCleanupRestoreResult {
+  const KitchenWorkspaceCleanupRestoreResult({
+    required this.restoredIngredientCount,
+    required this.restoredActiveListCount,
+    required this.restoredCompletedListCount,
+  });
+
+  final int restoredIngredientCount;
+  final int restoredActiveListCount;
+  final int restoredCompletedListCount;
+
+  factory KitchenWorkspaceCleanupRestoreResult.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final ingredients = json['restored_ingredient_count'];
+    final activeLists = json['restored_active_list_count'];
+    final completedLists = json['restored_completed_list_count'];
+
+    if (ingredients is! num ||
+        ingredients < 0 ||
+        activeLists is! num ||
+        activeLists < 0 ||
+        completedLists is! num ||
+        completedLists < 0) {
+      throw const FormatException('Invalid kitchen cleanup restore response');
+    }
+
+    return KitchenWorkspaceCleanupRestoreResult(
+      restoredIngredientCount: ingredients.toInt(),
+      restoredActiveListCount: activeLists.toInt(),
+      restoredCompletedListCount: completedLists.toInt(),
+    );
+  }
+}
+
+class KitchenWorkspaceCleanupSnapshot {
+  const KitchenWorkspaceCleanupSnapshot({
+    required this.snapshotId,
+    required this.ingredientCount,
+    required this.activeListCount,
+    required this.completedListCount,
+    required this.openItemCount,
+    required this.createdAt,
+    required this.expiresAt,
+  });
+
+  final String snapshotId;
+  final int ingredientCount;
+  final int activeListCount;
+  final int completedListCount;
+  final int openItemCount;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+
+  bool get hasChanges =>
+      ingredientCount > 0 || activeListCount > 0 || completedListCount > 0;
+
+  factory KitchenWorkspaceCleanupSnapshot.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final snapshotId = json['snapshot_id'];
+    final ingredientCount = json['ingredient_count'];
+    final activeListCount = json['active_list_count'];
+    final completedListCount = json['completed_list_count'];
+    final openItemCount = json['open_item_count'];
+    final createdAtValue = json['created_at'];
+    final expiresAtValue = json['expires_at'];
+    final createdAt =
+        createdAtValue is String ? DateTime.tryParse(createdAtValue) : null;
+    final expiresAt =
+        expiresAtValue is String ? DateTime.tryParse(expiresAtValue) : null;
+
+    if (snapshotId is! String ||
+        !KitchenApi._isUuid(snapshotId) ||
+        ingredientCount is! num ||
+        ingredientCount < 0 ||
+        activeListCount is! num ||
+        activeListCount < 0 ||
+        completedListCount is! num ||
+        completedListCount < 0 ||
+        openItemCount is! num ||
+        openItemCount < 0 ||
+        createdAt == null ||
+        expiresAt == null) {
+      throw const FormatException('Invalid kitchen cleanup snapshot response');
+    }
+
+    return KitchenWorkspaceCleanupSnapshot(
+      snapshotId: snapshotId,
+      ingredientCount: ingredientCount.toInt(),
+      activeListCount: activeListCount.toInt(),
+      completedListCount: completedListCount.toInt(),
+      openItemCount: openItemCount.toInt(),
+      createdAt: createdAt.toLocal(),
+      expiresAt: expiresAt.toLocal(),
+    );
+  }
+}
+
 class KitchenApi {
   KitchenApi({
     SupabaseClient? client,
@@ -432,6 +593,113 @@ class KitchenApi {
       throw const FormatException('Invalid shopping list create response');
     }
     return result;
+  }
+
+  Future<KitchenWorkspaceCleanupResult> cleanupWorkspace({
+    required bool clearIngredients,
+    required bool clearActiveShopping,
+    required bool clearCompletedHistory,
+    required String idempotencyKey,
+  }) async {
+    final key = idempotencyKey.trim();
+    if (!_isUuid(key)) {
+      throw const KitchenApiException(
+        kind: KitchenApiErrorKind.badRequest,
+        statusCode: 400,
+        message: 'Idempotency key is invalid.',
+      );
+    }
+
+    if (!clearIngredients && !clearActiveShopping && !clearCompletedHistory) {
+      throw const KitchenApiException(
+        kind: KitchenApiErrorKind.badRequest,
+        statusCode: 400,
+        message: 'At least one cleanup option is required.',
+      );
+    }
+
+    final data = await _request(
+      method: 'POST',
+      query: const <String, String>{
+        'action': 'cleanup-kitchen-workspace',
+      },
+      extraHeaders: <String, String>{'Idempotency-Key': key},
+      body: <String, dynamic>{
+        'clear_ingredients': clearIngredients,
+        'clear_active_shopping': clearActiveShopping,
+        'clear_completed_history': clearCompletedHistory,
+      },
+    );
+
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid kitchen cleanup response');
+    }
+
+    return KitchenWorkspaceCleanupResult.fromJson(data);
+  }
+
+  Future<KitchenWorkspaceCleanupRestoreResult> restoreWorkspaceCleanup(
+    String snapshotId,
+  ) async {
+    final id = snapshotId.trim();
+    if (!_isUuid(id)) {
+      throw const KitchenApiException(
+        kind: KitchenApiErrorKind.badRequest,
+        statusCode: 400,
+        message: 'Cleanup snapshot id is invalid.',
+      );
+    }
+
+    final data = await _request(
+      method: 'POST',
+      query: const <String, String>{
+        'action': 'restore-kitchen-workspace-cleanup',
+      },
+      body: <String, dynamic>{'snapshot_id': id},
+    );
+
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid kitchen cleanup restore response');
+    }
+
+    return KitchenWorkspaceCleanupRestoreResult.fromJson(data);
+  }
+
+  Future<List<KitchenWorkspaceCleanupSnapshot>>
+      listWorkspaceCleanupSnapshots() async {
+    final data = await _request(
+      method: 'GET',
+      query: const <String, String>{
+        'view': 'cleanup-snapshots',
+      },
+    );
+
+    if (data is! List) {
+      throw const FormatException(
+          'Invalid kitchen cleanup snapshot list response');
+    }
+
+    return data
+        .whereType<Map<String, dynamic>>()
+        .map(KitchenWorkspaceCleanupSnapshot.fromJson)
+        .where((snapshot) => snapshot.hasChanges)
+        .toList(growable: false);
+  }
+
+  static String createIdempotencyKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((value) => value.toRadixString(16).padLeft(2, '0'))
+        .join();
+
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-'
+        '${hex(8, 10)}-${hex(10, 16)}';
   }
 
   static bool _isUuid(String value) => RegExp(

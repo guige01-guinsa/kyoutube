@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 type RecipePayload = {
   title: string;
@@ -1380,6 +1380,98 @@ async function createShoppingFromRecipe(req: Request, _userId: string): Promise<
   return okResponse({ list_id: listId, status, created, replayed, idempotency_key: responseIdempotencyKey }, created ? 201 : 200);
 }
 
+async function listKitchenCleanupSnapshots(req: Request): Promise<Response> {
+  const rpc = await userRpc(req, "list_kitchen_workspace_cleanup_snapshots", {});
+
+  if (!rpc.ok) {
+    if (rpc.status === 401 || rpc.status === 403) return errorResponse(401, "Unauthorized");
+    return errorResponse(422, "Kitchen cleanup snapshots could not be loaded", {
+      code: "kitchen_cleanup_snapshot_list_rejected",
+    });
+  }
+
+  const rows = await rpc.json().catch(() => null);
+  if (!Array.isArray(rows)) {
+    return errorResponse(500, "Kitchen cleanup snapshot list response was invalid");
+  }
+
+  return okResponse(rows, 200);
+}
+
+async function cleanupKitchenWorkspace(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const key = idempotencyKey(req);
+  if (!key) {
+    return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
+  }
+
+  const clearIngredients = body?.clear_ingredients === true;
+  const clearActiveShopping = body?.clear_active_shopping === true;
+  const clearCompletedHistory = body?.clear_completed_history === true;
+
+  if (!clearIngredients && !clearActiveShopping && !clearCompletedHistory) {
+    return errorResponse(400, "At least one cleanup option is required", { code: "cleanup_option_required" });
+  }
+
+  const rpc = await userRpc(req, "cleanup_kitchen_workspace", {
+    p_clear_ingredients: clearIngredients,
+    p_clear_active_shopping: clearActiveShopping,
+    p_clear_completed_history: clearCompletedHistory,
+    p_idempotency_key: key,
+  });
+
+  if (!rpc.ok) {
+    const details = await rpc.text().catch(() => '');
+    if (rpc.status === 401 || rpc.status === 403) return errorResponse(401, "Unauthorized");
+    return errorResponse(422, "Kitchen cleanup request was rejected", {
+      code: "kitchen_cleanup_rejected",
+    });
+  }
+
+  const rows = await rpc.json().catch(() => null);
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return errorResponse(500, "Kitchen cleanup response was invalid");
+  }
+
+  return okResponse(result, 200);
+}
+
+async function restoreKitchenWorkspaceCleanup(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const snapshotId = typeof body?.snapshot_id === "string" ? body.snapshot_id.trim() : "";
+
+  if (!uuidPattern.test(snapshotId)) {
+    return errorResponse(400, "A valid cleanup snapshot id is required", { code: "invalid_cleanup_snapshot_id" });
+  }
+
+  const rpc = await userRpc(req, "restore_kitchen_workspace_cleanup", {
+    p_snapshot_id: snapshotId,
+  });
+
+  if (!rpc.ok) {
+    const details = await rpc.text().catch(() => '');
+    if (rpc.status === 401 || rpc.status === 403) return errorResponse(401, "Unauthorized");
+    if (/not found/i.test(details)) return errorResponse(404, "Kitchen cleanup snapshot was not found");
+    if (/expired|already been restored|cannot restore/i.test(details)) {
+      return errorResponse(409, "Kitchen cleanup can no longer be restored", {
+        code: "kitchen_cleanup_restore_unavailable",
+      });
+    }
+    return errorResponse(422, "Kitchen cleanup restore was rejected", {
+      code: "kitchen_cleanup_restore_rejected",
+    });
+  }
+
+  const rows = await rpc.json().catch(() => null);
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return errorResponse(500, "Kitchen cleanup restore response was invalid");
+  }
+
+  return okResponse(result, 200);
+}
+
 async function patchShoppingItemLegacy(req: Request, id: string): Promise<Response> {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body) || typeof (body as Record<string, unknown>).is_checked !== "boolean") {
@@ -1489,6 +1581,9 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
     if (view === "cook-sessions") {
       return await listKitchenCookSessions(url, userId);
     }
+    if (view === "cleanup-snapshots") {
+      return await listKitchenCleanupSnapshots(req);
+    }
     return errorResponse(400, "Unsupported kitchen GET view", { view });
   }
 
@@ -1498,6 +1593,12 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
     }
     if (action === "create-shopping-from-recipe") {
       return await createShoppingFromRecipe(req, userId);
+    }
+    if (action === "cleanup-kitchen-workspace") {
+      return await cleanupKitchenWorkspace(req);
+    }
+    if (action === "restore-kitchen-workspace-cleanup") {
+      return await restoreKitchenWorkspaceCleanup(req);
     }
     if (action === "review-shopping-item" || action === "set-shopping-item-status") {
       if (id.length === 0) return errorResponse(400, "id query parameter is required for shopping item action");
@@ -1631,3 +1732,5 @@ serve(async (req) => {
     );
   }
 });
+
+
