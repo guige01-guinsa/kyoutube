@@ -1,4 +1,4 @@
-﻿class RecipeIdentity {
+class RecipeIdentity {
   const RecipeIdentity({
     required this.sourceType,
     required this.sourceId,
