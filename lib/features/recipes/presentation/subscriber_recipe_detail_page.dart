@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:go_router/go_router.dart';
+import 'widgets/unified_recipe_detail_layout.dart';
 import '../application/recipe_providers.dart';
 import '../domain/recipe.dart';
 
@@ -140,82 +141,123 @@ class _SubscriberRecipeDetailPageState
     }
   }
 
+  void _goShoppingReview(BuildContext context) {
+    final source = Uri.encodeQueryComponent('user:${widget.recipeId}');
+    context.push('/shopping-review?source=$source');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final recipeAsync = ref.watch(subscriberRecipeByIdProvider(widget.recipeId));
+    final recipeAsync = ref.watch(
+      subscriberRecipeByIdProvider(widget.recipeId),
+    );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('개인 레시피'),
-        actions: <Widget>[
-          recipeAsync.maybeWhen(
-            data: (Recipe? recipe) {
-              if (recipe == null) {
-                return const SizedBox.shrink();
-              }
-
-              return IconButton(
-                onPressed: () => _deleteRecipe(recipe),
-                icon: const Icon(Icons.delete_outline),
-                tooltip: '삭제',
-              );
-            },
-            orElse: () => const SizedBox.shrink(),
-          ),
-        ],
-      ),
-      body: recipeAsync.when(
-        data: (Recipe? recipe) {
-          if (recipe == null) {
-            return const Center(child: Text('레시피를 찾을 수 없습니다.'));
-          }
-
-          if (!_isSaving && _notesController.text != (recipe.notes ?? '')) {
-            _notesController.text = recipe.notes ?? '';
-          }
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              Text(recipe.title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 16),
-              Text('재료', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ...recipe.ingredients.map((String item) => Text('- $item')),
-              const SizedBox(height: 20),
-              Text('조리 순서', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ...recipe.steps
-                  .asMap()
-                  .entries
-                  .map((entry) => Text('${entry.key + 1}. ${entry.value}')),
-              const SizedBox(height: 20),
-              Text('내 메모', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _notesController,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  hintText: '조리 팁, 수정 포인트를 기록해 보세요.',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _isSaving ? null : _saveNotes,
-                child: Text(_isSaving ? '저장 중...' : '메모 저장'),
-              ),
-            ],
+    return recipeAsync.when(
+      data: (Recipe? recipe) {
+        if (recipe == null) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('레시피 상세'),
+            ),
+            body: const Center(
+              child: Text('레시피를 찾을 수 없습니다.'),
+            ),
           );
-        },
-        error: (Object err, StackTrace stack) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text('개인 레시피를 불러오지 못했습니다.\n$err'),
+        }
+
+        if (!_isSaving && _notesController.text != (recipe.notes ?? '')) {
+          _notesController.text = recipe.notes ?? '';
+        }
+
+        return UnifiedRecipeDetailLayout(
+          recipe: recipe,
+          appBarTitle: '레시피 상세',
+          appBarActions: <Widget>[
+            IconButton(
+              onPressed: () => _deleteRecipe(recipe),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '삭제',
+            ),
+          ],
+          primaryActions: <Widget>[
+            FilledButton.icon(
+              onPressed: () => _goShoppingReview(context),
+              icon: const Icon(Icons.shopping_cart_outlined),
+              label: const Text('장보기 준비'),
+            ),
+          ],
+          extraSections: <Widget>[
+            const _SubscriberExtraSectionTitle(
+              title: '개인 메모',
+              icon: Icons.note_alt_outlined,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _notesController,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                hintText: '조리 중 수정 사항이나 메모를 기록해 보세요.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _isSaving ? null : _saveNotes,
+              child: Text(_isSaving ? '저장 중...' : '메모 저장'),
+            ),
+          ],
+        );
+      },
+      error: (Object err, StackTrace _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('레시피 상세'),
           ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                '개인 레시피를 불러오지 못했습니다.\n$err',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => Scaffold(
+        appBar: AppBar(
+          title: const Text('레시피 상세'),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
       ),
+    );
+  }
+}
+
+class _SubscriberExtraSectionTitle extends StatelessWidget {
+  const _SubscriberExtraSectionTitle({
+    required this.title,
+    required this.icon,
+  });
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      ],
     );
   }
 }
