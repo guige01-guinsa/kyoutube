@@ -113,3 +113,29 @@ Do not run without explicit approval:
 - release build
 - package upgrades
 - destructive Git commands such as git reset --hard or git clean -fd
+
+## 2026-08-15 Public keyword search recovery
+
+### Issue
+
+In local app testing, public recipe search with a normal keyword query such as `감자` returned no results, while AI search returned relevant results.
+
+### Root cause
+
+The public keyword search path used strict token matching only. If strict keyword matching returned no rows from the fetched Food Safety Korea COOKRCP01 page set, the UI showed an empty result even though related recipes were available through ranked AI-style scoring.
+
+### Fix
+
+Updated `supabase/functions/recipe_api/index.ts` so keyword search preserves exact keyword results when available, but falls back to the existing ranking logic when strict keyword matching returns no results.
+
+### Verified
+
+- Normal public keyword search for `감자` now returns results in the app.
+- AI search for `감자` continues to return results.
+- Direct Edge Function checks returned HTTP 200 for both:
+  - `search_mode=keyword`
+  - `search_mode=ai`
+
+### Commit
+
+- `fd7f070 fix: improve public keyword search fallback`
