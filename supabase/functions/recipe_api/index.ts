@@ -1,4 +1,4 @@
-﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 type RecipePayload = {
   title: string;
@@ -568,8 +568,32 @@ async function listPublicRecipes(url: URL): Promise<Response> {
       matchesKeywordSearch(row, tokens)
     );
 
+    if (matched.length > 0 || tokens.length === 0) {
+      return okResponse(
+        matched.slice(offset, offset + effectiveLimit),
+        200,
+      );
+    }
+
+    const fallbackRanked = externalRows
+      .map((row) => ({
+        row,
+        score: scoreAiSearch(row, tokens),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => {
+        if (a.score === b.score) {
+          return String(b.row.created_at).localeCompare(
+            String(a.row.created_at),
+          );
+        }
+
+        return b.score - a.score;
+      })
+      .map((item) => item.row);
+
     return okResponse(
-      matched.slice(offset, offset + effectiveLimit),
+      fallbackRanked.slice(offset, offset + effectiveLimit),
       200,
     );
   }
