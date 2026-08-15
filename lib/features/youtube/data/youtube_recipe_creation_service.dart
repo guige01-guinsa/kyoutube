@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/config/env.dart';
+import '../domain/youtube_thumbnail_url.dart';
 
 class YoutubeRecipeDraftInput {
   const YoutubeRecipeDraftInput({
@@ -91,7 +92,7 @@ class YoutubeRecipeCreationService {
         ],
         'tips': '원본 YouTube 영상을 확인한 뒤 레시피 내용을 보완해 주세요.',
         'youtube_url': youtubeUrl,
-        'image_path': null,
+        'image_path': youtubeThumbnailUrlFromUrl(youtubeUrl),
         'is_published': false,
       }),
     );
