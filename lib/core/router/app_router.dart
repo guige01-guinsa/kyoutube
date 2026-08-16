@@ -8,7 +8,6 @@ import '../../features/kitchen/presentation/shopping_review_page.dart';
 import '../../features/recipes/presentation/bookmarked_recipes_page.dart';
 import '../../features/recipes/presentation/create_creator_recipe_page.dart';
 import '../../features/recipes/presentation/creator_recipe_detail_page.dart';
-import '../../features/recipes/presentation/creator_recipes_page.dart';
 import '../../features/recipes/presentation/my_recipes_page.dart';
 import '../../features/recipes/presentation/recipe_detail_page.dart';
 import '../../features/recipes/presentation/subscriber_recipe_detail_page.dart';
@@ -92,11 +91,12 @@ class AppRouter {
         },
       ),
 
-      // Creator recipes.
+      // Legacy creator list URL.
+      // 레시피 생성 방식과 관계없이 목록 출력은 내 레시피 관리로 통일한다.
       GoRoute(
         path: AppRoutes.creator,
-        builder: (BuildContext context, GoRouterState state) =>
-            const CreatorRecipesPage(),
+        redirect: (BuildContext context, GoRouterState state) =>
+            AppRoutes.myRecipes,
       ),
       GoRoute(
         path: AppRoutes.creatorNew,

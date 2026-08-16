@@ -76,7 +76,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 context.push('/login');
                 return;
               }
-              context.push('/creator');
+              context.push('/my-recipes');
             },
             icon: const Icon(Icons.menu_book_outlined),
             tooltip: '내 레시피',

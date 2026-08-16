@@ -214,7 +214,7 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
                   OutlinedButton.icon(
                     onPressed: () => _goMyRecipes(context),
                     icon: const Icon(Icons.menu_book_outlined),
-                    label: const Text('내 레시피 목록'),
+                    label: const Text('내 레시피 관리'),
                   ),
                 ],
               ),

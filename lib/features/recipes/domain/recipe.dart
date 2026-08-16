@@ -10,6 +10,7 @@ class Recipe {
     this.youtubeUrl,
     this.notes,
     this.visibility,
+    this.sourceType,
   });
 
   final String id;
@@ -22,4 +23,9 @@ class Recipe {
   final String? youtubeUrl;
   final String? notes;
   final String? visibility;
+
+  /// 레시피가 생성되거나 저장된 원천 정보.
+  ///
+  /// 예: manual, public_import, youtube_import, creator_copy
+  final String? sourceType;
 }

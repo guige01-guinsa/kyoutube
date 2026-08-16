@@ -11,6 +11,7 @@ import '../../cooking/application/voice_guide_service.dart';
 import '../../kitchen/application/kitchen_providers.dart';
 import '../../../core/widgets/centered_state_view.dart';
 import '../application/recipe_providers.dart';
+import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
 
 class RecipeDetailPage extends ConsumerStatefulWidget {
@@ -206,10 +207,21 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       if (!mounted) {
         return;
       }
+
+      // 기존 개인 레시피 목록과 통합 내 레시피 목록을 함께 갱신한다.
       ref.invalidate(subscriberRecipesProvider);
+      ref.invalidate(myUnifiedRecipesProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('내 요리 노트에 복사했습니다.')),
+        SnackBar(
+          content: const Text('내 레시피에 저장했습니다.'),
+          action: SnackBarAction(
+            label: '내 레시피 관리',
+            onPressed: () {
+              context.go('/my-recipes');
+            },
+          ),
+        ),
       );
     } catch (err) {
       if (!mounted) {

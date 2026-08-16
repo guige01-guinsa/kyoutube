@@ -74,6 +74,7 @@ class SupabaseRecipeRepository implements RecipeRepository {
       youtubeUrl: map['youtube_url'] as String?,
       notes: map['notes'] as String?,
       visibility: map['visibility'] as String?,
+      sourceType: map['source_type'] as String?,
     );
   }
 
@@ -142,13 +143,18 @@ class SupabaseRecipeRepository implements RecipeRepository {
           <String, dynamic>{
             'owner_id': userId,
             'title': source.title,
+            'summary': source.summary,
             'notes': notes,
+            'image_url': source.imageUrl,
+            'youtube_url': source.youtubeUrl,
+            'source_type': 'public_import',
             'ingredients': source.ingredients,
             'steps': source.steps,
             'visibility': 'private',
           },
         )
-        .select('id,title,notes,ingredients,steps,visibility')
+        .select(
+            'id,title,summary,notes,image_url,youtube_url,source_type,ingredients,steps,visibility')
         .single();
 
     return _mapRecipe(row);
@@ -389,7 +395,8 @@ class SupabaseRecipeRepository implements RecipeRepository {
 
     final row = await _client
         .from('recipes_user')
-        .select('id,title,notes,ingredients,steps,visibility')
+        .select(
+            'id,title,summary,notes,image_url,youtube_url,source_type,ingredients,steps,visibility')
         .eq('id', id)
         .maybeSingle();
 
@@ -470,7 +477,8 @@ class SupabaseRecipeRepository implements RecipeRepository {
 
     final rows = await _client
         .from('recipes_user')
-        .select('id,title,notes,ingredients,steps,visibility')
+        .select(
+            'id,title,summary,notes,image_url,youtube_url,source_type,ingredients,steps,visibility')
         .eq('owner_id', userId)
         .order('created_at', ascending: false)
         .limit(50);
@@ -636,7 +644,8 @@ class SupabaseRecipeRepository implements RecipeRepository {
           'updated_at': DateTime.now().toIso8601String(),
         })
         .eq('id', id)
-        .select('id,title,notes,ingredients,steps,visibility')
+        .select(
+            'id,title,summary,notes,image_url,youtube_url,source_type,ingredients,steps,visibility')
         .single();
 
     return _mapRecipe(row);

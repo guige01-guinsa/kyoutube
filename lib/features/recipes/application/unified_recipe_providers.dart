@@ -21,3 +21,14 @@ final unifiedRecipeByIdentityProvider =
     return repository.getRecipe(identity);
   },
 );
+
+final myUnifiedRecipesProvider =
+    FutureProvider.family<List<UnifiedRecipe>, String>(
+  (ref, String search) async {
+    final repository = ref.watch(unifiedRecipeRepositoryProvider);
+
+    return repository.listMyRecipes(
+      search: search.trim().isEmpty ? null : search.trim(),
+    );
+  },
+);
