@@ -38,7 +38,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Cooking Platform'),
+        title: const Text('playscout'),
         actions: <Widget>[
           if (Env.youtubeSearchEnabled)
             IconButton(

@@ -82,3 +82,6 @@ backups/
 .env.*
 .env*.json
 .vscode/launch.json
+
+# Google Play upload certificate
+/android/upload_certificate.pem

@@ -102,7 +102,7 @@ class KYoutubeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'AI Cooking Platform',
+      title: 'playscout',
       theme: AppTheme.light,
       routerConfig: AppRouter.router,
       builder: (BuildContext context, Widget? child) {

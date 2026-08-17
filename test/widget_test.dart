@@ -255,7 +255,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('AI Cooking Platform'), findsOneWidget);
+    expect(find.text('playscout'), findsOneWidget);
     expect(find.text('공개 레시피 검색'), findsOneWidget);
     expect(find.text('테스트 레시피'), findsOneWidget);
   });
