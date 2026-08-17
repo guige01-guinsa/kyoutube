@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'widgets/unified_recipe_detail_layout.dart';
+import '../../cooking/presentation/cooking_completion_feedback_card.dart';
 import '../application/recipe_providers.dart';
 import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
@@ -197,7 +198,16 @@ class _SubscriberRecipeDetailPageState
     }
   }
 
-  void _goShoppingReview(BuildContext context) {
+  void _goShoppingReview(BuildContext context, Recipe recipe) {
+    if (recipe.ingredients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('재료 정보가 없어 장보기 목록을 만들 수 없습니다.'),
+        ),
+      );
+      return;
+    }
+
     final source = Uri.encodeQueryComponent('user:${widget.recipeId}');
     context.push('/shopping-review?source=$source');
   }
@@ -273,12 +283,18 @@ class _SubscriberRecipeDetailPageState
               label: const Text('AI로 레시피 보강'),
             ),
             FilledButton.icon(
-              onPressed: () => _goShoppingReview(context),
+              onPressed: () => _goShoppingReview(context, recipe),
               icon: const Icon(Icons.shopping_cart_outlined),
               label: const Text('장보기 준비'),
             ),
           ],
           extraSections: <Widget>[
+            CookingCompletionFeedbackCard(
+              recipeType: 'user',
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            ),
+            const SizedBox(height: 24),
             const _SubscriberExtraSectionTitle(
               title: '개인 메모',
               icon: Icons.note_alt_outlined,

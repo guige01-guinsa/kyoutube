@@ -1367,6 +1367,12 @@ async function createShoppingFromRecipe(req: Request, _userId: string): Promise<
   const key = idempotencyKey(req);
   if (!key) return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
   const sourceRecipeId = typeof body?.source_recipe_id === "string" ? body.source_recipe_id.trim() : "";
+  const recipeTitle = typeof body?.recipe_title === "string"
+    ? body.recipe_title.trim()
+    : "장보기 목록";
+  if (!recipeTitle || recipeTitle.length > 120) {
+    return errorResponse(422, "Recipe title is required", { code: "invalid_recipe_title" });
+  }
   if (!Array.isArray(body?.items)) {
     return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
   }
@@ -1401,6 +1407,29 @@ async function createShoppingFromRecipe(req: Request, _userId: string): Promise<
   if (!listId || status !== "active" || typeof created !== "boolean" || typeof replayed !== "boolean" || !responseIdempotencyKey || responseIdempotencyKey !== key) {
     return errorResponse(500, "Shopping create result was invalid");
   }
+  const titleResponse = await userRestRequest(
+    req,
+    `/rest/v1/kitchen_shopping_lists?id=eq.${listId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        title: recipeTitle,
+        updated_at: new Date().toISOString(),
+      }),
+    },
+  );
+
+  if (!titleResponse.ok) {
+    return errorResponse(
+      500,
+      "Shopping list was created but its title could not be saved",
+      { code: "shopping_title_update_failed" },
+    );
+  }
+
   return okResponse({ list_id: listId, status, created, replayed, idempotency_key: responseIdempotencyKey }, created ? 201 : 200);
 }
 

@@ -69,6 +69,15 @@ final kitchenShoppingListsProvider = FutureProvider<List<KitchenShoppingList>>(
   },
 );
 
+/// 완료된 장보기 목록을 히스토리 화면에 표시합니다.
+final kitchenCompletedShoppingListsProvider =
+    FutureProvider<List<KitchenShoppingList>>(
+  (ref) async {
+    final api = ref.watch(kitchenApiProvider);
+    return api.listShoppingLists(status: 'completed');
+  },
+);
+
 final kitchenCookSessionsProvider = FutureProvider<List<KitchenCookSession>>(
   (ref) async {
     final api = ref.watch(kitchenApiProvider);

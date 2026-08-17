@@ -560,6 +560,7 @@ class KitchenApi {
     required String sourceRecipeId,
     required List<ShoppingReviewDraftItem> items,
     required String idempotencyKey,
+    String? recipeTitle,
   }) async {
     final key = idempotencyKey.trim();
     if (!_isUuid(key)) {
@@ -575,6 +576,8 @@ class KitchenApi {
       extraHeaders: <String, String>{'Idempotency-Key': key},
       body: <String, dynamic>{
         'source_recipe_id': sourceRecipeId,
+        if (recipeTitle != null && recipeTitle.trim().isNotEmpty)
+          'recipe_title': recipeTitle.trim(),
         'items': items
             .map((item) => <String, dynamic>{
                   'name': item.name.trim(),

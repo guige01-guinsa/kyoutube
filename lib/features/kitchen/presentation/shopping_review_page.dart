@@ -330,7 +330,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
     }
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(Recipe recipe) async {
     final ShoppingReviewDraft? draft = _draft;
 
     if (draft == null || _submitting) {
@@ -361,6 +361,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
 
       final result = await ref.read(kitchenApiProvider).createShoppingList(
             sourceRecipeId: draft.sourceRecipeId,
+            recipeTitle: recipe.title,
             items: draft.items,
             idempotencyKey: draft.createIdempotencyKey,
           );
@@ -450,14 +451,14 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
               );
             }
 
-            return _buildForm(context);
+            return _buildForm(context, recipe);
           },
         ),
       ),
     );
   }
 
-  Widget _buildForm(BuildContext context) {
+  Widget _buildForm(BuildContext context, Recipe recipe) {
     final ShoppingReviewDraft draft = _draft!;
     final bool canSubmit = !_submitting && _isValid(draft);
 
@@ -499,7 +500,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: canSubmit ? _submit : null,
+                onPressed: canSubmit ? () => _submit(recipe) : null,
                 icon: _submitting
                     ? const SizedBox(
                         width: 16,

@@ -78,6 +78,7 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
     ref.invalidate(kitchenSummaryProvider);
     ref.invalidate(kitchenIngredientsProvider);
     ref.invalidate(kitchenShoppingListsProvider);
+    ref.invalidate(kitchenCompletedShoppingListsProvider);
     ref.invalidate(kitchenCookSessionsProvider);
   }
 
@@ -866,8 +867,13 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
         ),
       ),
     );
+    // Dialog 종료 애니메이션 동안 TextField가 controller를 참조할 수 있으므로
+    // route가 완전히 정리된 뒤 controller를 dispose합니다.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
     nameController.dispose();
     quantityController.dispose();
+
     return result;
   }
 
@@ -1236,6 +1242,13 @@ class _ShoppingTab extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
+                      if ((list.sourceRecipeId ?? '').trim().isNotEmpty)
+                        _ShoppingRecipeLink(
+                          sourceRecipeReference: list.sourceRecipeId!,
+                          recipeTitle: list.title,
+                        ),
+                      if ((list.sourceRecipeId ?? '').trim().isNotEmpty)
+                        const SizedBox(height: 8),
                       ...list.items
                           .map((item) => _shoppingItemTile(context, item)),
                       const SizedBox(height: 4),
@@ -1374,64 +1387,227 @@ class _HistoryTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final historyAsync = ref.watch(kitchenCookSessionsProvider);
+    final completedShoppingAsync =
+        ref.watch(kitchenCompletedShoppingListsProvider);
+    final cookSessionsAsync = ref.watch(kitchenCookSessionsProvider);
 
-    return historyAsync.when(
-      data: (List<KitchenCookSession> sessions) {
-        if (sessions.isEmpty) {
-          return const Center(
-            child: Text('아직 조리 완료 기록이 없습니다.'),
-          );
-        }
-
-        return RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(kitchenCookSessionsProvider);
-            ref.invalidate(kitchenSummaryProvider);
-          },
-          child: ListView.separated(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: 24),
-            itemCount: sessions.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (BuildContext context, int index) {
-              final session = sessions[index];
-              final feedback = <String>[];
-
-              if (session.liked != null) {
-                feedback.add(session.liked == true ? '좋아요' : '아쉬워요');
-              }
-              if (session.rating != null) {
-                feedback.add('평점 ${session.rating}/5');
-              }
-
-              return ListTile(
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                title: Text(session.recipeTitle),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(session.createdAt
-                        .replaceFirst('T', ' ')
-                        .split('.')
-                        .first),
-                    if (feedback.isNotEmpty) Text(feedback.join(' · ')),
-                    if (session.note != null && session.note!.isNotEmpty)
-                      Text(session.note!),
-                  ],
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(kitchenCompletedShoppingListsProvider);
+        ref.invalidate(kitchenCookSessionsProvider);
+        ref.invalidate(kitchenSummaryProvider);
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: <Widget>[
+          Text(
+            '장보기 완료 내역',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
+          ),
+          const SizedBox(height: 8),
+          completedShoppingAsync.when(
+            data: (lists) {
+              if (lists.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('완료된 장보기 목록이 없습니다.'),
+                  ),
+                );
+              }
+
+              return Column(
+                children: lists.map((list) {
+                  final purchasedCount = list.items
+                      .where(
+                        (item) =>
+                            item.status == KitchenShoppingItemStatus.purchased,
+                      )
+                      .length;
+
+                  final skippedCount = list.items
+                      .where(
+                        (item) =>
+                            item.status == KitchenShoppingItemStatus.skipped,
+                      )
+                      .length;
+
+                  final unavailableCount = list.items
+                      .where(
+                        (item) =>
+                            item.status ==
+                            KitchenShoppingItemStatus.unavailable,
+                      )
+                      .length;
+
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.shopping_cart_checkout),
+                      title: Text(list.title),
+                      subtitle: Text(
+                        '구매함 $purchasedCount개'
+                        ' · 건너뜀 $skippedCount개'
+                        ' · 구매하지 못함 $unavailableCount개',
+                      ),
+                    ),
+                  );
+                }).toList(growable: false),
               );
             },
+            loading: () => const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+            error: (_, __) => const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('장보기 완료 내역을 불러오지 못했습니다.'),
+              ),
+            ),
           ),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (Object err, StackTrace _) => Center(
-        child: Text(
-          '히스토리를 불러오지 못했습니다.\n$err',
-          textAlign: TextAlign.center,
-        ),
+          const SizedBox(height: 28),
+          Text(
+            '조리 완료 기록',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 8),
+          cookSessionsAsync.when(
+            data: (sessions) {
+              if (sessions.isEmpty) {
+                return const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('아직 조리 완료 기록이 없습니다.'),
+                  ),
+                );
+              }
+
+              return Column(
+                children: sessions.map((session) {
+                  final feedback = <String>[
+                    if (session.liked != null)
+                      session.liked == true ? '좋아요' : '아쉬워요',
+                    if (session.rating != null) '평점 ${session.rating}/5',
+                  ];
+
+                  return Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.restaurant_menu_outlined),
+                      title: Text(session.recipeTitle),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            session.createdAt
+                                .replaceFirst('T', ' ')
+                                .split('.')
+                                .first,
+                          ),
+                          if (feedback.isNotEmpty) Text(feedback.join(' · ')),
+                          if (session.note != null && session.note!.isNotEmpty)
+                            Text(session.note!),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(growable: false),
+              );
+            },
+            loading: () => const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+            error: (_, __) => const Card(
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('조리 완료 기록을 불러오지 못했습니다.'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShoppingRecipeLink extends StatelessWidget {
+  const _ShoppingRecipeLink({
+    required this.sourceRecipeReference,
+    required this.recipeTitle,
+  });
+
+  final String sourceRecipeReference;
+  final String recipeTitle;
+
+  String? _routeForSource() {
+    try {
+      final source = RecipeSourceReference.parse(sourceRecipeReference);
+      final encodedId = Uri.encodeComponent(source.id);
+
+      return switch (source.type) {
+        'public' => '/recipes/$encodedId',
+        'creator' => '/creator/$encodedId',
+        'user' => '/my-recipes/$encodedId',
+        _ => null,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final route = _routeForSource();
+    final normalizedTitle = recipeTitle.trim();
+
+    final displayTitle = normalizedTitle.isEmpty || normalizedTitle == '장보기 목록'
+        ? '연결된 레시피'
+        : normalizedTitle;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: <Widget>[
+          const Icon(Icons.menu_book_outlined),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  '요리할 레시피',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  displayTitle,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          if (route != null)
+            TextButton(
+              onPressed: () => context.push(route),
+              child: const Text('레시피 보기'),
+            ),
+        ],
       ),
     );
   }
