@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -96,8 +98,39 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
   }
 }
 
-class KYoutubeApp extends StatelessWidget {
+class KYoutubeApp extends StatefulWidget {
   const KYoutubeApp({super.key});
+
+  @override
+  State<KYoutubeApp> createState() => _KYoutubeAppState();
+}
+
+class _KYoutubeAppState extends State<KYoutubeApp> {
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 실제 앱에서는 Supabase 초기화 이후 실행됩니다.
+    // Widget Test에서는 Supabase가 초기화되지 않을 수 있으므로 안전하게 무시합니다.
+    try {
+      _authSubscription =
+          Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        if (data.event == AuthChangeEvent.passwordRecovery) {
+          AppRouter.router.go(AppRoutes.resetPassword);
+        }
+      });
+    } catch (_) {
+      _authSubscription = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../application/auth_providers.dart';
@@ -22,6 +23,40 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isSignUp = false;
   bool _isSubmitting = false;
   String? _message;
+
+  String _friendlyAuthMessage(AuthException error) {
+    final message = error.message.toLowerCase();
+
+    if (message.contains('invalid login credentials') ||
+        message.contains('invalid credentials')) {
+      return '이메일 또는 비밀번호가 올바르지 않습니다.';
+    }
+
+    if (message.contains('user already registered') ||
+        message.contains('already registered')) {
+      return '이미 가입된 이메일입니다. 로그인해 주세요.';
+    }
+
+    if (message.contains('email not confirmed')) {
+      return '이메일 확인이 필요합니다. 이메일 인증을 완료해 주세요.';
+    }
+
+    if (message.contains('signup is disabled')) {
+      return '현재 회원가입을 사용할 수 없습니다.';
+    }
+
+    if (message.contains('rate limit')) {
+      return '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+    }
+
+    return error.message;
+  }
+
+  void _goHomeAfterAuthentication() {
+    if (mounted) {
+      context.go('/');
+    }
+  }
 
   @override
   void dispose() {
@@ -59,7 +94,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
 
       setState(() {
-        _message = error.message;
+        _message = _friendlyAuthMessage(error);
       });
     } catch (error) {
       if (!mounted) {
@@ -68,6 +103,61 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
       setState(() {
         _message = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendPasswordResetEmail() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() {
+        _message = '비밀번호를 재설정할 이메일을 입력해 주세요.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _message = null;
+    });
+
+    try {
+      final auth = ref.read(authClientProvider);
+
+      await auth.resetPasswordForEmail(
+        email,
+        redirectTo: _oauthRedirectTo,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = '비밀번호 재설정 이메일을 보냈습니다. 이메일의 링크를 열어 새 비밀번호를 설정해 주세요.';
+      });
+    } on AuthException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = _friendlyAuthMessage(error);
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = '비밀번호 재설정 이메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.';
       });
     } finally {
       if (mounted) {
@@ -92,25 +182,41 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     try {
       if (_isSignUp) {
-        await auth.signUp(
+        final response = await auth.signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+
         if (!mounted) return;
+
+        if (response.session != null) {
+          _goHomeAfterAuthentication();
+          return;
+        }
+
         setState(() {
-          _message = '회원가입이 완료되었습니다. 바로 로그인 상태가 될 수 있습니다.';
+          _message = '회원가입이 완료되었습니다. 이메일 확인 후 로그인해 주세요.';
         });
       } else {
-        await auth.signInWithPassword(
+        final response = await auth.signInWithPassword(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+
         if (!mounted) return;
-        Navigator.of(context).pop();
+
+        if (response.session != null) {
+          _goHomeAfterAuthentication();
+          return;
+        }
+
+        setState(() {
+          _message = '로그인 정보를 확인해 주세요.';
+        });
       }
     } on AuthException catch (error) {
       setState(() {
-        _message = error.message;
+        _message = _friendlyAuthMessage(error);
       });
     } catch (error) {
       setState(() {
@@ -127,6 +233,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authUserProvider, (_, next) {
+      final user = next.valueOrNull;
+
+      if (user != null && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _goHomeAfterAuthentication();
+          }
+        });
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_isSignUp ? '회원가입' : '로그인'),
@@ -142,7 +260,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 20 + MediaQuery.of(context).viewInsets.bottom,
               ),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
+                constraints:
+                    BoxConstraints(minHeight: constraints.maxHeight - 40),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
@@ -168,7 +287,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           TextFormField(
                             controller: _passwordController,
                             obscureText: true,
-                            decoration: const InputDecoration(labelText: '비밀번호'),
+                            decoration:
+                                const InputDecoration(labelText: '비밀번호'),
                             validator: (String? value) {
                               if ((value ?? '').length < 8) {
                                 return '비밀번호는 8자 이상이어야 합니다.';
@@ -190,6 +310,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   _isSubmitting ? null : _signInWithGoogle,
                               icon: const Icon(Icons.login),
                               label: const Text('Google로 로그인'),
+                            ),
+                            TextButton(
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : _sendPasswordResetEmail,
+                              child: const Text('비밀번호를 잊으셨나요?'),
                             ),
                           ],
                           TextButton(
