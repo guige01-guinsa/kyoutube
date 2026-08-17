@@ -55,6 +55,20 @@ class _FakeRecipeRepository implements RecipeRepository {
   Future<void> deleteCreatorRecipe(String id) async {}
 
   @override
+  Future<Recipe> promoteSubscriberRecipeToCreator({
+    required String id,
+  }) async {
+    return Recipe(
+      id: 'promoted-$id',
+      title: '승격된 테스트 레시피',
+      summary: '테스트용 편집 가능한 내 레시피',
+      ingredients: const <String>['테스트 재료'],
+      steps: const <String>['테스트 조리 단계'],
+      tips: '테스트 팁',
+    );
+  }
+
+  @override
   Future<void> deleteSubscriberRecipe(String id) async {}
 
   @override

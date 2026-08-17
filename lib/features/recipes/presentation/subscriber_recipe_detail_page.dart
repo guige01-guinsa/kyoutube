@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'widgets/unified_recipe_detail_layout.dart';
 import '../application/recipe_providers.dart';
+import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
+import 'recipe_enrichment_page.dart';
 
 class SubscriberRecipeDetailPage extends ConsumerStatefulWidget {
   const SubscriberRecipeDetailPage({super.key, required this.recipeId});
@@ -19,10 +21,10 @@ class _SubscriberRecipeDetailPageState
     extends ConsumerState<SubscriberRecipeDetailPage> {
   final TextEditingController _notesController = TextEditingController();
   bool _isSaving = false;
+  bool _isPromoting = false;
 
   Future<void> _deleteRecipe(Recipe recipe) async {
     final repository = ref.read(recipeRepositoryProvider);
-    final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
 
     final confirmed = await showDialog<bool>(
@@ -52,40 +54,23 @@ class _SubscriberRecipeDetailPageState
     try {
       await repository.deleteSubscriberRecipe(recipe.id);
       ref.invalidate(subscriberRecipesProvider);
+      ref.invalidate(myUnifiedRecipesProvider);
 
       if (!mounted) {
         return;
       }
 
+      // 이전 화면의 안내가 하단 버튼을 가리지 않도록 기존 SnackBar를 제거합니다.
+      messenger.clearSnackBars();
+
       messenger.showSnackBar(
-        SnackBar(
-          content: const Text('개인 레시피를 삭제했습니다.'),
-          action: SnackBarAction(
-            label: '되돌리기',
-            onPressed: () async {
-              try {
-                await repository.createSubscriberRecipeFromPublic(
-                  source: recipe,
-                  notes: recipe.notes,
-                );
-                container.invalidate(subscriberRecipesProvider);
-                messenger.showSnackBar(
-                  const SnackBar(content: Text('삭제를 되돌렸습니다.')),
-                );
-              } catch (undoErr) {
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text('삭제 되돌리기에 실패했습니다.\n$undoErr'),
-                  ),
-                );
-              }
-            },
-          ),
-          duration: const Duration(seconds: 8),
+        const SnackBar(
+          content: Text('개인 레시피를 삭제했습니다.'),
+          duration: Duration(seconds: 3),
         ),
       );
 
-      Navigator.of(context).pop(true);
+      context.go('/my-recipes');
     } catch (err) {
       if (!mounted) {
         return;
@@ -116,6 +101,7 @@ class _SubscriberRecipeDetailPageState
       );
       ref.invalidate(subscriberRecipeByIdProvider(widget.recipeId));
       ref.invalidate(subscriberRecipesProvider);
+      ref.invalidate(myUnifiedRecipesProvider);
 
       if (!mounted) {
         return;
@@ -136,6 +122,76 @@ class _SubscriberRecipeDetailPageState
       if (mounted) {
         setState(() {
           _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _promoteToEditableRecipe(Recipe recipe) async {
+    if (_isPromoting) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('내 레시피로 편집'),
+          content: const Text(
+            '이 레시피를 편집 가능한 내 레시피로 만들까요?\n원본 저장 레시피는 유지됩니다.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('만들기'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isPromoting = true;
+    });
+
+    try {
+      final repository = ref.read(recipeRepositoryProvider);
+
+      final promoted = await repository.promoteSubscriberRecipeToCreator(
+        id: recipe.id,
+      );
+
+      ref.invalidate(subscriberRecipesProvider);
+      ref.invalidate(creatorRecipesProvider);
+      ref.invalidate(myUnifiedRecipesProvider);
+
+      if (!mounted) {
+        return;
+      }
+
+      context.go('/creator/${Uri.encodeComponent(promoted.id)}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('편집 가능한 내 레시피를 만들지 못했습니다.\n$error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPromoting = false;
         });
       }
     }
@@ -174,12 +230,48 @@ class _SubscriberRecipeDetailPageState
           appBarTitle: '레시피 상세',
           appBarActions: <Widget>[
             IconButton(
-              onPressed: () => _deleteRecipe(recipe),
+              onPressed:
+                  _isPromoting ? null : () => _promoteToEditableRecipe(recipe),
+              icon: _isPromoting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.edit_outlined),
+              tooltip: '내 레시피로 편집',
+            ),
+            IconButton(
+              onPressed: _isPromoting ? null : () => _deleteRecipe(recipe),
               icon: const Icon(Icons.delete_outline),
               tooltip: '삭제',
             ),
           ],
           primaryActions: <Widget>[
+            OutlinedButton.icon(
+              onPressed: () async {
+                final createdRecipeId =
+                    await Navigator.of(context).push<Object?>(
+                  MaterialPageRoute<Object?>(
+                    builder: (_) => RecipeEnrichmentPage(recipe: recipe),
+                  ),
+                );
+
+                if (createdRecipeId is String &&
+                    createdRecipeId.trim().isNotEmpty &&
+                    context.mounted) {
+                  ref.invalidate(subscriberRecipesProvider);
+                  ref.invalidate(creatorRecipesProvider);
+                  ref.invalidate(myUnifiedRecipesProvider);
+
+                  context.go(
+                    '/creator/',
+                  );
+                }
+              },
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('AI로 레시피 보강'),
+            ),
             FilledButton.icon(
               onPressed: () => _goShoppingReview(context),
               icon: const Icon(Icons.shopping_cart_outlined),

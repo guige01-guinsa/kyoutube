@@ -1,0 +1,147 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../core/config/env.dart';
+import '../domain/recipe.dart';
+import '../domain/recipe_enrichment_suggestion.dart';
+
+class RecipeEnrichmentException implements Exception {
+  const RecipeEnrichmentException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class RecipeEnrichmentService {
+  RecipeEnrichmentService({
+    SupabaseClient? supabaseClient,
+    http.Client? httpClient,
+  })  : _supabaseClient = supabaseClient ?? Supabase.instance.client,
+        _httpClient = httpClient ?? http.Client();
+
+  final SupabaseClient _supabaseClient;
+  final http.Client _httpClient;
+
+  Future<RecipeEnrichmentSuggestion> createSuggestion({
+    required Recipe recipe,
+    required List<Recipe> references,
+  }) async {
+    if (references.isEmpty) {
+      throw const RecipeEnrichmentException(
+        '참고할 레시피를 하나 이상 선택해 주세요.',
+      );
+    }
+
+    final session = _supabaseClient.auth.currentSession;
+
+    if (session == null) {
+      throw const RecipeEnrichmentException('로그인이 필요합니다.');
+    }
+
+    final uri = Uri.parse(
+      '${Env.supabaseUrl}/functions/v1/ai_recipe_assistant',
+    );
+
+    final response = await _httpClient.post(
+      uri,
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        'apikey': Env.supabaseAnonKey,
+        'Authorization': 'Bearer ${session.accessToken}',
+      },
+      body: jsonEncode(
+        <String, dynamic>{
+          'recipe': _recipePayload(recipe),
+          'references': references
+              .map(
+                (reference) => <String, dynamic>{
+                  'type': 'public',
+                  'id': reference.id,
+                  'title': reference.title,
+                  'summary': reference.summary,
+                  'ingredients': reference.ingredients,
+                  'steps': reference.steps,
+                  'youtubeUrl': reference.youtubeUrl,
+                },
+              )
+              .toList(growable: false),
+        },
+      ),
+    );
+
+    Object? decoded;
+
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw RecipeEnrichmentException(
+        _extractMessage(decoded) ?? 'AI 레시피 보강을 처리하지 못했습니다.',
+      );
+    }
+
+    if (decoded is! Map<String, dynamic>) {
+      throw const RecipeEnrichmentException(
+        'AI 레시피 보강 응답 형식이 올바르지 않습니다.',
+      );
+    }
+
+    if (decoded['status'] != 'ok') {
+      throw RecipeEnrichmentException(
+        _extractMessage(decoded) ?? 'AI 레시피 보강을 처리하지 못했습니다.',
+      );
+    }
+
+    final data = decoded['data'];
+
+    if (data is! Map<String, dynamic>) {
+      throw const RecipeEnrichmentException(
+        'AI 레시피 보강 결과가 올바르지 않습니다.',
+      );
+    }
+
+    final suggestion = RecipeEnrichmentSuggestion.fromJson(data);
+
+    if (suggestion.summary.isEmpty ||
+        suggestion.ingredients.isEmpty ||
+        suggestion.steps.isEmpty) {
+      throw const RecipeEnrichmentException(
+        'AI가 충분한 레시피 정보를 만들지 못했습니다.',
+      );
+    }
+
+    return suggestion;
+  }
+
+  Map<String, dynamic> _recipePayload(Recipe recipe) {
+    return <String, dynamic>{
+      'title': recipe.title,
+      'summary': recipe.summary,
+      'ingredients': recipe.ingredients,
+      'steps': recipe.steps,
+      'tips': recipe.tips,
+      'youtubeUrl': recipe.youtubeUrl,
+    };
+  }
+
+  String? _extractMessage(Object? payload) {
+    if (payload is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final message = payload['message'];
+
+    if (message is String && message.trim().isNotEmpty) {
+      return message.trim();
+    }
+
+    return null;
+  }
+}

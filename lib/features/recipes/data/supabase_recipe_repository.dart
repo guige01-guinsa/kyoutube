@@ -261,6 +261,39 @@ class SupabaseRecipeRepository implements RecipeRepository {
   }
 
   @override
+  Future<Recipe> promoteSubscriberRecipeToCreator({
+    required String id,
+  }) async {
+    await _requireUserId();
+
+    final response = await _client.rpc(
+      'promote_subscriber_recipe_to_creator',
+      params: <String, dynamic>{
+        'p_recipe_user_id': id,
+        'p_delete_source': false,
+        'p_include_summary': true,
+        'p_include_youtube_url': true,
+        'p_include_image_url': true,
+        'p_include_notes_as_tips': true,
+      },
+    );
+
+    final dynamic raw = response;
+
+    final Map<String, dynamic> row;
+
+    if (raw is List<dynamic> && raw.isNotEmpty && raw.first is Map) {
+      row = Map<String, dynamic>.from(raw.first as Map);
+    } else if (raw is Map) {
+      row = Map<String, dynamic>.from(raw);
+    } else {
+      throw StateError('편집 가능한 내 레시피를 만들지 못했습니다.');
+    }
+
+    return _mapRecipe(row);
+  }
+
+  @override
   Future<bool> isBookmarked({
     required String recipeType,
     required String recipeId,
