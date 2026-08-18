@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/config/env.dart';
+import '../../youtube/data/youtube_recipe_context_service.dart';
 import '../domain/recipe.dart';
 import '../domain/recipe_enrichment_suggestion.dart';
 
@@ -114,6 +115,106 @@ class RecipeEnrichmentService {
         suggestion.steps.isEmpty) {
       throw const RecipeEnrichmentException(
         'AI가 충분한 레시피 정보를 만들지 못했습니다.',
+      );
+    }
+
+    return suggestion;
+  }
+
+  Future<RecipeEnrichmentSuggestion> createSuggestionFromYoutubeDescription({
+    required Recipe recipe,
+  }) async {
+    final youtubeUrl = (recipe.youtubeUrl ?? '').trim();
+
+    if (youtubeUrl.isEmpty) {
+      throw const RecipeEnrichmentException(
+        'YouTube 영상 링크가 없는 레시피입니다.',
+      );
+    }
+
+    final session = _supabaseClient.auth.currentSession;
+
+    if (session == null) {
+      throw const RecipeEnrichmentException('로그인이 필요합니다.');
+    }
+
+    final context = await YoutubeRecipeContextService(
+      httpClient: _httpClient,
+      supabaseClient: _supabaseClient,
+    ).loadFromYoutubeUrl(youtubeUrl);
+
+    if (!context.hasDescription) {
+      throw const RecipeEnrichmentException(
+        '이 영상의 설명란에 레시피 보강에 사용할 정보가 없습니다.',
+      );
+    }
+
+    final response = await _httpClient.post(
+      Uri.parse('${Env.supabaseUrl}/functions/v1/ai_recipe_assistant'),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        'apikey': Env.supabaseAnonKey,
+        'Authorization': 'Bearer ${session.accessToken}',
+      },
+      body: jsonEncode(
+        <String, dynamic>{
+          'recipe': _recipePayload(recipe),
+          'references': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'type': 'youtube_description',
+              'videoId': context.videoId,
+              'title': context.title,
+              'channelName': context.channelTitle,
+              'youtubeUrl': context.youtubeUrl,
+              'description': context.description,
+              'confidence': 'medium',
+            },
+          ],
+        },
+      ),
+    );
+
+    Object? decoded;
+
+    try {
+      decoded = jsonDecode(response.body);
+    } catch (_) {
+      decoded = null;
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw RecipeEnrichmentException(
+        _extractMessage(decoded) ?? '영상 설명란 기반 AI 보강을 처리하지 못했습니다.',
+      );
+    }
+
+    if (decoded is! Map<String, dynamic>) {
+      throw const RecipeEnrichmentException(
+        '영상 설명란 AI 보강 응답 형식이 올바르지 않습니다.',
+      );
+    }
+
+    if (decoded['status'] != 'ok') {
+      throw RecipeEnrichmentException(
+        _extractMessage(decoded) ?? '영상 설명란 AI 보강을 처리하지 못했습니다.',
+      );
+    }
+
+    final data = decoded['data'];
+
+    if (data is! Map<String, dynamic>) {
+      throw const RecipeEnrichmentException(
+        '영상 설명란 AI 보강 결과가 올바르지 않습니다.',
+      );
+    }
+
+    final suggestion = RecipeEnrichmentSuggestion.fromJson(data);
+
+    if (suggestion.summary.isEmpty ||
+        suggestion.ingredients.isEmpty ||
+        suggestion.steps.isEmpty) {
+      throw const RecipeEnrichmentException(
+        '영상 설명란에서 충분한 레시피 정보를 찾지 못했습니다.',
       );
     }
 

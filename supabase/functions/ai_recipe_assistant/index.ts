@@ -18,7 +18,7 @@ type RecipeInput = {
 };
 
 type EnrichmentReference = {
-  type: "public" | "youtube";
+  type: "public" | "youtube" | "youtube_description" | "user_transcript";
   id?: string;
   title: string;
   summary?: string | null;
@@ -26,6 +26,9 @@ type EnrichmentReference = {
   steps?: string[];
   channelName?: string | null;
   youtubeUrl?: string | null;
+  videoId?: string | null;
+  description?: string | null;
+  confidence?: "high" | "medium" | "low";
 };
 
 type EnrichmentRequest = {
@@ -91,7 +94,14 @@ function normalizeReference(value: unknown): EnrichmentReference | null {
   }
 
   const source = value as Record<string, unknown>;
-  const type = source.type === "youtube" ? "youtube" : "public";
+  const type =
+    source.type === "youtube_description"
+      ? "youtube_description"
+      : source.type === "user_transcript"
+      ? "user_transcript"
+      : source.type === "youtube"
+      ? "youtube"
+      : "public";
   const title = sanitizeText(source.title, 120);
 
   if (!title) {
@@ -107,6 +117,14 @@ function normalizeReference(value: unknown): EnrichmentReference | null {
     steps: sanitizeTextList(source.steps, 40, 500),
     channelName: sanitizeText(source.channelName, 120) || null,
     youtubeUrl: sanitizeText(source.youtubeUrl, 500) || null,
+    videoId: sanitizeText(source.videoId, 160) || null,
+    description: sanitizeText(source.description, 6000) || null,
+    confidence:
+      source.confidence === "high" ||
+      source.confidence === "medium" ||
+      source.confidence === "low"
+        ? source.confidence
+        : "medium",
   };
 }
 
@@ -180,6 +198,9 @@ function buildPrompt(input: EnrichmentRequest): string {
 - 재료 분량이 근거 없이 확정적일 경우 warnings에 "분량은 참고용입니다."를 포함하세요.
 - 생고기, 해산물, 알레르기 가능 재료가 있으면 warnings에 안전 주의사항을 넣으세요.
 - 참고 자료가 부족하면 추측하지 말고 warnings에 부족한 정보를 알려주세요.
+- YouTube 설명란은 영상 제작자가 제공한 참고 자료입니다.
+- 설명란에 없는 계량값, 조리 시간, 양념 비율을 사실처럼 확정하지 마세요.
+- 불확실한 정보는 warnings에 "영상 확인 필요" 또는 "분량은 참고용입니다."를 포함하세요.
 - 반드시 한국어로 응답하세요.
 
 반드시 아래 JSON 객체만 반환하세요.
@@ -344,6 +365,8 @@ serve(async (req) => {
           title: reference.title,
           channelName: reference.channelName ?? null,
           youtubeUrl: reference.youtubeUrl ?? null,
+          videoId: reference.videoId ?? null,
+          confidence: reference.confidence ?? "medium",
         })),
       },
     });

@@ -101,6 +101,13 @@ class _RecipeEnrichmentPageState extends ConsumerState<RecipeEnrichmentPage> {
         .toList(growable: false);
 
     if (references.isEmpty) {
+      final youtubeUrl = (widget.recipe.youtubeUrl ?? '').trim();
+
+      if (youtubeUrl.isNotEmpty) {
+        await _generateSuggestionFromYoutubeDescription();
+        return;
+      }
+
       setState(() {
         _errorMessage = '참고할 공공 레시피를 하나 이상 선택해 주세요.';
       });
@@ -142,6 +149,51 @@ class _RecipeEnrichmentPageState extends ConsumerState<RecipeEnrichmentPage> {
 
       setState(() {
         _errorMessage = 'AI 레시피 보강 중 오류가 발생했습니다.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _generateSuggestionFromYoutubeDescription() async {
+    setState(() {
+      _isGenerating = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final service = RecipeEnrichmentService();
+
+      final suggestion = await service.createSuggestionFromYoutubeDescription(
+        recipe: widget.recipe,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _suggestion = suggestion;
+      });
+    } on RecipeEnrichmentException catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = error.message;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = '영상 설명란 기반 AI 보강 중 오류가 발생했습니다.';
       });
     } finally {
       if (mounted) {
@@ -391,6 +443,13 @@ class _CandidateSelectionView extends StatelessWidget {
               child: Column(
                 children: <Widget>[
                   const Text('유사한 공공 레시피를 찾지 못했습니다.'),
+                  if ((recipe.youtubeUrl ?? '').trim().isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 12),
+                    const Text(
+                      '원본 YouTube 영상의 설명란을 참고해 AI 보강 초안을 만들 수 있습니다.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   OutlinedButton(
                     onPressed: onReload,
@@ -446,7 +505,12 @@ class _CandidateSelectionView extends StatelessWidget {
                 )
               : const Icon(Icons.auto_awesome),
           label: Text(
-            isGenerating ? 'AI 보강 제안 생성 중...' : 'AI 보강 제안 만들기',
+            isGenerating
+                ? 'AI 보강 제안 생성 중...'
+                : (candidates.isEmpty &&
+                        (recipe.youtubeUrl ?? '').trim().isNotEmpty
+                    ? '영상 설명란으로 레시피 보강'
+                    : 'AI 보강 제안 만들기'),
           ),
         ),
       ],
