@@ -117,8 +117,15 @@ class _KYoutubeAppState extends State<KYoutubeApp> {
     try {
       _authSubscription =
           Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-        if (data.event == AuthChangeEvent.passwordRecovery) {
-          AppRouter.router.go(AppRoutes.resetPassword);
+        switch (data.event) {
+          case AuthChangeEvent.passwordRecovery:
+            AppRouter.router.go(AppRoutes.resetPassword);
+            break;
+          case AuthChangeEvent.signedIn:
+            AppRouter.router.go(AppRoutes.home);
+            break;
+          default:
+            break;
         }
       });
     } catch (_) {

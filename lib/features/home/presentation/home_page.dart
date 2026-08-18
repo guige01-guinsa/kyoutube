@@ -81,6 +81,14 @@ class _HomePageState extends ConsumerState<HomePage> {
             icon: const Icon(Icons.menu_book_outlined),
             tooltip: '내 레시피',
           ),
+          if (currentUser != null)
+            IconButton(
+              onPressed: () {
+                context.push('/account');
+              },
+              icon: const Icon(Icons.account_circle_outlined),
+              tooltip: '계정 관리',
+            ),
           IconButton(
             onPressed: () async {
               if (currentUser == null) {

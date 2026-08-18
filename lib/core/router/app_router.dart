@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/auth/presentation/account_page.dart';
 import '../../features/auth/presentation/reset_password_page.dart';
 import '../../features/home/presentation/home_page.dart';
 import '../../features/kitchen/presentation/kitchen_page.dart';
@@ -20,6 +21,7 @@ class AppRoutes {
   static const String home = '/';
   static const String login = '/login';
   static const String resetPassword = '/reset-password';
+  static const String account = '/account';
   static const String youtube = '/youtube';
   static const String bookmarks = '/bookmarks';
   static const String creator = '/creator';
@@ -73,6 +75,11 @@ class AppRouter {
         path: AppRoutes.login,
         builder: (BuildContext context, GoRouterState state) =>
             const LoginPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.account,
+        builder: (BuildContext context, GoRouterState state) =>
+            const AccountPage(),
       ),
       GoRoute(
         path: AppRoutes.resetPassword,
