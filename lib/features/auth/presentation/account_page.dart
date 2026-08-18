@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../application/account_service.dart';
 import '../application/auth_providers.dart';
@@ -14,7 +15,35 @@ class AccountPage extends ConsumerStatefulWidget {
 }
 
 class _AccountPageState extends ConsumerState<AccountPage> {
+  static final Uri _privacyPolicyUri = Uri.parse(
+    'https://www.ka-part.com/privacy',
+  );
+  static final Uri _deleteAccountGuideUri = Uri.parse(
+    'https://www.ka-part.com/delete-account',
+  );
+
   bool _isProcessing = false;
+
+  Future<void> _openExternalUrl(Uri uri) async {
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('웹페이지를 열 수 없습니다.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('웹페이지를 열 수 없습니다: $error')),
+        );
+      }
+    }
+  }
 
   Future<void> _signOut() async {
     setState(() {
@@ -125,9 +154,30 @@ class _AccountPageState extends ConsumerState<AccountPage> {
       return Scaffold(
         appBar: AppBar(title: const Text('계정 관리')),
         body: Center(
-          child: FilledButton(
-            onPressed: () => context.go('/login'),
-            child: const Text('로그인하기'),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                FilledButton(
+                  onPressed: () => context.go('/login'),
+                  child: const Text('로그인하기'),
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => _openExternalUrl(_privacyPolicyUri),
+                  icon: const Icon(Icons.privacy_tip_outlined),
+                  label: const Text('개인정보 처리방침'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _openExternalUrl(_deleteAccountGuideUri),
+                  icon: const Icon(Icons.person_remove_outlined),
+                  label: const Text('계정 삭제 안내'),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -174,6 +224,22 @@ class _AccountPageState extends ConsumerState<AccountPage> {
             '회원탈퇴 시 계정 복구가 어려울 수 있습니다.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 24),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.privacy_tip_outlined),
+            title: const Text('개인정보 처리방침'),
+            subtitle: const Text('playscout 개인정보 처리방침을 확인합니다.'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => _openExternalUrl(_privacyPolicyUri),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_remove_outlined),
+            title: const Text('계정 삭제 안내'),
+            subtitle: const Text('계정 및 데이터 삭제 방법을 확인합니다.'),
+            trailing: const Icon(Icons.open_in_new),
+            onTap: () => _openExternalUrl(_deleteAccountGuideUri),
           ),
         ],
       ),
