@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../application/auth_providers.dart';
+import '../application/password_policy.dart';
+import 'widgets/password_strength_panel.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -18,10 +20,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   bool _isSignUp = false;
   bool _isSubmitting = false;
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
   String? _message;
 
   String _friendlyAuthMessage(AuthException error) {
@@ -62,6 +67,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -261,6 +267,39 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
+                          if (_isSignUp) ...<Widget>[
+                            Card(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer
+                                  .withValues(alpha: 0.45),
+                              child: const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Row(
+                                      children: <Widget>[
+                                        Icon(Icons.info_outline),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          '회원가입 안내',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 8),
+                                    Text('이메일 주소가 로그인 아이디로 사용됩니다.'),
+                                    SizedBox(height: 4),
+                                    Text('가입 후 이메일 인증이 필요할 수 있습니다.'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
@@ -281,18 +320,76 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(height: 12),
                           TextFormField(
                             controller: _passwordController,
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: '비밀번호',
-                            ),
-                            validator: (String? value) {
-                              if ((value ?? '').length < 8) {
-                                return '비밀번호는 8자 이상이어야 합니다.';
+                            obscureText: !_isPasswordVisible,
+                            onChanged: (_) {
+                              if (_isSignUp) {
+                                setState(() {});
                               }
-
-                              return null;
                             },
+                            decoration: InputDecoration(
+                              labelText: '비밀번호',
+                              helperText:
+                                  _isSignUp ? '8자 이상, 영문과 숫자를 포함해 주세요.' : null,
+                              suffixIcon: IconButton(
+                                tooltip:
+                                    _isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 보기',
+                                onPressed: () {
+                                  setState(() {
+                                    _isPasswordVisible = !_isPasswordVisible;
+                                  });
+                                },
+                                icon: Icon(
+                                  _isPasswordVisible
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                ),
+                              ),
+                            ),
+                            validator: _isSignUp
+                                ? PasswordPolicy.validateForSignUp
+                                : PasswordPolicy.validateForLogin,
                           ),
+                          if (_isSignUp) ...<Widget>[
+                            const SizedBox(height: 12),
+                            PasswordStrengthPanel(
+                              password: _passwordController.text,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _confirmPasswordController,
+                              obscureText: !_isConfirmPasswordVisible,
+                              decoration: InputDecoration(
+                                labelText: '비밀번호 확인',
+                                suffixIcon: IconButton(
+                                  tooltip: _isConfirmPasswordVisible
+                                      ? '비밀번호 숨기기'
+                                      : '비밀번호 보기',
+                                  onPressed: () {
+                                    setState(() {
+                                      _isConfirmPasswordVisible =
+                                          !_isConfirmPasswordVisible;
+                                    });
+                                  },
+                                  icon: Icon(
+                                    _isConfirmPasswordVisible
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                  ),
+                                ),
+                              ),
+                              validator: (String? value) {
+                                if ((value ?? '').isEmpty) {
+                                  return '비밀번호를 한 번 더 입력해 주세요.';
+                                }
+
+                                if (value != _passwordController.text) {
+                                  return '비밀번호가 일치하지 않습니다.';
+                                }
+
+                                return null;
+                              },
+                            ),
+                          ],
                           const SizedBox(height: 20),
                           FilledButton(
                             onPressed: _isSubmitting ? null : _submit,
@@ -315,6 +412,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   ? null
                                   : _sendPasswordResetEmail,
                               child: const Text('비밀번호를 잊으셨나요?'),
+                            ),
+                            TextButton.icon(
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () {
+                                      showDialog<void>(
+                                        context: context,
+                                        builder: (BuildContext context) {
+                                          return AlertDialog(
+                                            title: const Text('아이디를 잊으셨나요?'),
+                                            content: const Text(
+                                              '가입할 때 사용한 이메일 주소가 로그인 아이디입니다.\n\n'
+                                              '이메일 주소가 기억나지 않으면 가입에 사용한 메일함을 확인해 주세요.',
+                                            ),
+                                            actions: <Widget>[
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.of(context).pop(),
+                                                child: const Text('확인'),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                    },
+                              icon: const Icon(Icons.help_outline),
+                              label: const Text('아이디를 잊으셨나요?'),
                             ),
                           ],
                           TextButton(
