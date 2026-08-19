@@ -85,3 +85,6 @@ backups/
 
 # Google Play upload certificate
 /android/upload_certificate.pem
+
+# Local recovery / manual backup files
+/recovery_backup/
