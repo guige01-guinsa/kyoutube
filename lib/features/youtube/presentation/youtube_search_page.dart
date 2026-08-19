@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_recipe_search/youtube_recipe_search.dart';
 
@@ -40,12 +41,21 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     _creationService = widget.creationService ?? YoutubeRecipeCreationService();
   }
 
+  bool _isAuthenticated() {
+    try {
+      return Supabase.instance.client.auth.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _openYoutubeUrl(String rawUrl) async {
     if (!widget.enabled) {
       return;
     }
 
     final uri = Uri.tryParse(rawUrl);
+
     if (uri == null || !_isAllowedYoutubeUri(uri)) {
       _showMessage('이 YouTube 링크를 열 수 없습니다.');
       return;
@@ -126,6 +136,42 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     );
   }
 
+  Widget _buildLoginRequiredScreen(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('YouTube'),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                const Icon(
+                  Icons.lock_outline,
+                  size: 52,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'YouTube 레시피 검색은 로그인 후 사용할 수 있습니다.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => context.go('/login'),
+                  child: const Text('로그인하기'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!widget.enabled) {
@@ -137,12 +183,16 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
-              'YouTube search is currently unavailable.',
+              'YouTube 검색 기능은 현재 사용할 수 없습니다.',
               textAlign: TextAlign.center,
             ),
           ),
         ),
       );
+    }
+
+    if (!_isAuthenticated()) {
+      return _buildLoginRequiredScreen(context);
     }
 
     return Scaffold(

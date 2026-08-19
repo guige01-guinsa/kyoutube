@@ -28,8 +28,9 @@ class _FakeClient extends http.BaseClient {
 }
 
 void main() {
-  test('sends GET request to youtube_search with expected parameters',
-      () async {
+  const userAccessToken = 'test-user-access-token';
+
+  test('sends authenticated GET request to youtube_search', () async {
     final client = _FakeClient(
       (_) async => http.Response(
         jsonEncode(<String, Object?>{
@@ -47,6 +48,7 @@ void main() {
       httpClient: client,
       supabaseUrl: 'https://project.supabase.co',
       supabaseAnonKey: 'anon-key',
+      accessTokenProvider: () => userAccessToken,
     );
 
     final response = await transport.get(
@@ -62,6 +64,7 @@ void main() {
     expect(request.method, 'GET');
     expect(request.url.host, 'project.supabase.co');
     expect(request.url.path, '/functions/v1/youtube_search');
+
     expect(
       request.url.queryParameters,
       <String, String>{
@@ -69,11 +72,16 @@ void main() {
         'limit': '10',
       },
     );
+
     expect(request.headers['apikey'], 'anon-key');
-    expect(request.headers['Authorization'], 'Bearer anon-key');
+    expect(
+      request.headers['Authorization'],
+      'Bearer test-user-access-token',
+    );
   });
 
-  test('returns safe transport error when the request fails', () async {
+  test('returns safe transport error when authenticated request fails',
+      () async {
     final client = _FakeClient(
       (_) async => throw Exception('private network failure'),
     );
@@ -82,6 +90,7 @@ void main() {
       httpClient: client,
       supabaseUrl: 'https://project.supabase.co',
       supabaseAnonKey: 'anon-key',
+      accessTokenProvider: () => userAccessToken,
     );
 
     final response = await transport.get(
@@ -92,7 +101,42 @@ void main() {
     expect(
       response.body,
       <String, Object?>{
+        'status': 'error',
         'errorCode': 'youtube_transport_error',
+        'httpStatus': 503,
+      },
+    );
+  });
+
+  test('returns 401 without a logged-in user access token', () async {
+    var requestWasSent = false;
+
+    final client = _FakeClient(
+      (_) async {
+        requestWasSent = true;
+        return http.Response('unexpected request', 500);
+      },
+    );
+
+    final transport = SupabaseYoutubeSearchTransport(
+      httpClient: client,
+      supabaseUrl: 'https://project.supabase.co',
+      supabaseAnonKey: 'anon-key',
+      accessTokenProvider: () => null,
+    );
+
+    final response = await transport.get(
+      const YoutubeSearchRequest(query: 'pasta'),
+    );
+
+    expect(requestWasSent, isFalse);
+    expect(response.statusCode, 401);
+    expect(
+      response.body,
+      <String, Object?>{
+        'status': 'error',
+        'errorCode': 'youtube_auth_required',
+        'httpStatus': 401,
       },
     );
   });
