@@ -236,6 +236,26 @@ class FirebaseMessagingService {
     }
   }
 
+  static Future<void> deleteDeviceToken() async {
+    if (!isSupportedPlatform) {
+      return;
+    }
+
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+
+      debugState.value = debugState.value.copyWith(
+        clearTokenPreview: true,
+        clearErrorMessage: true,
+      );
+    } catch (error) {
+      // FCM token 삭제 실패가 로그아웃/회원탈퇴를 막으면 안 된다.
+      debugState.value = debugState.value.copyWith(
+        errorMessage: OpsMonitorService.redact(error.toString()),
+      );
+    }
+  }
+
   static Future<void> dispose() async {
     await _tokenRefreshSubscription?.cancel();
     await _foregroundSubscription?.cancel();

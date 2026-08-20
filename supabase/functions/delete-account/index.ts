@@ -4,7 +4,10 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+const creatorRecipeImagesBucket = "creator-recipe-images";
 
 function jsonResponse(
   body: Record<string, unknown>,
@@ -17,6 +20,100 @@ function jsonResponse(
       "Content-Type": "application/json; charset=utf-8",
     },
   });
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+async function deleteCreatorRecipeImages(
+  adminClient: any,
+  userId: string,
+): Promise<void> {
+  const imagePaths: string[] = [];
+  const pageSize = 100;
+  let offset = 0;
+
+  while (true) {
+    const {
+      data: entries,
+      error: listError,
+    } = await adminClient.storage
+      .from(creatorRecipeImagesBucket)
+      .list(userId, {
+        limit: pageSize,
+        offset,
+        sortBy: {
+          column: "name",
+          order: "asc",
+        },
+      });
+
+    if (listError != null) {
+      throw new Error(`storage_list_failed:${listError.message}`);
+    }
+
+    // Supabase Storage list result always has a string name.
+    const pageEntries = (entries ?? []) as Array<{
+      id?: string | null;
+      name: string;
+    }>;
+
+    const pagePaths = pageEntries
+      .filter(
+        (entry) =>
+          entry.id != null &&
+          entry.name !== ".emptyFolderPlaceholder",
+      )
+      .map((entry) => `${userId}/${entry.name}`);
+
+    imagePaths.push(...pagePaths);
+
+    if (pageEntries.length < pageSize) {
+      break;
+    }
+
+    offset += pageSize;
+  }
+
+  for (const paths of chunk(imagePaths, 100)) {
+    const { error: removeError } = await adminClient.storage
+      .from(creatorRecipeImagesBucket)
+      .remove(paths);
+
+    if (removeError != null) {
+      throw new Error(`storage_remove_failed:${removeError.message}`);
+    }
+  }
+}
+
+async function deleteUserApplicationData(
+  adminClient: any,
+  userId: string,
+): Promise<void> {
+  const cleanupTables = [
+    "ai_assistant_feedback",
+    "ai_usage_logs",
+  ] as const;
+
+  for (const table of cleanupTables) {
+    const { error } = await adminClient
+      .from(table)
+      .delete()
+      .eq("user_id", userId);
+
+    if (error != null) {
+      throw new Error(
+        `application_data_delete_failed:${table}:${error.message}`,
+      );
+    }
+  }
 }
 
 Deno.serve(async (request: Request) => {
@@ -57,16 +154,17 @@ Deno.serve(async (request: Request) => {
     supabaseAnonKey == null ||
     serviceRoleKey == null
   ) {
+    console.error("delete_account_server_configuration_missing");
+
     return jsonResponse(
       {
         error: "server_configuration_error",
-        message: "Supabase 서버 환경 설정이 누락되었습니다.",
+        message: "회원탈퇴를 처리할 수 없습니다.",
       },
       500,
     );
   }
 
-  // 요청 토큰으로 현재 로그인 사용자를 검증한다.
   const authClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
       headers: {
@@ -90,8 +188,6 @@ Deno.serve(async (request: Request) => {
     );
   }
 
-  // service_role은 Edge Function 서버 안에서만 사용한다.
-  // Flutter 앱 코드나 env/local.json에는 절대 넣지 않는다.
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -99,22 +195,45 @@ Deno.serve(async (request: Request) => {
     },
   });
 
-  const { error: deleteError } = await adminClient.auth.admin.deleteUser(
-    user.id,
-  );
+  try {
+    // Auth 계정 삭제 전에 공개 Storage 파일과 사용자 AI 데이터를 먼저 제거한다.
+    await deleteCreatorRecipeImages(adminClient, user.id);
+    await deleteUserApplicationData(adminClient, user.id);
 
-  if (deleteError != null) {
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(
+      user.id,
+    );
+
+    if (deleteError != null) {
+      console.error("delete_account_auth_delete_failed", {
+        code: deleteError.code,
+        message: deleteError.message,
+      });
+
+      return jsonResponse(
+        {
+          error: "delete_failed",
+          message: "회원탈퇴를 완료하지 못했습니다.",
+        },
+        500,
+      );
+    }
+
+    return jsonResponse({
+      success: true,
+      message: "회원탈퇴가 완료되었습니다.",
+    });
+  } catch (error) {
+    console.error("delete_account_cleanup_failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+
     return jsonResponse(
       {
         error: "delete_failed",
-        message: deleteError.message,
+        message: "회원탈퇴를 완료하지 못했습니다.",
       },
-      400,
+      500,
     );
   }
-
-  return jsonResponse({
-    success: true,
-    message: "회원탈퇴가 완료되었습니다.",
-  });
 });

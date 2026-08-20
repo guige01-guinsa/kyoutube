@@ -36,10 +36,10 @@ class _AccountPageState extends ConsumerState<AccountPage> {
           const SnackBar(content: Text('웹페이지를 열 수 없습니다.')),
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('웹페이지를 열 수 없습니다: $error')),
+          const SnackBar(content: Text('웹페이지를 열 수 없습니다.')),
         );
       }
     }
@@ -51,15 +51,15 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     });
 
     try {
-      await ref.read(authClientProvider).signOut();
+      await ref.read(accountServiceProvider).signOutCurrentAccount();
 
       if (mounted) {
         context.go('/login');
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('로그아웃에 실패했습니다: $error')),
+          const SnackBar(content: Text('로그아웃에 실패했습니다. 잠시 후 다시 시도해 주세요.')),
         );
       }
     } finally {
@@ -125,16 +125,16 @@ class _AccountPageState extends ConsumerState<AccountPage> {
       );
 
       context.go('/login');
-    } on FunctionException catch (error) {
+    } on FunctionException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('회원탈퇴에 실패했습니다: $error')),
+          const SnackBar(content: Text('회원탈퇴를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.')),
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('회원탈퇴에 실패했습니다: $error')),
+          const SnackBar(content: Text('회원탈퇴를 완료하지 못했습니다. 잠시 후 다시 시도해 주세요.')),
         );
       }
     } finally {
