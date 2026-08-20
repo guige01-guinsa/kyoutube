@@ -3,10 +3,6 @@ import '../domain/bookmarked_recipe.dart';
 
 abstract class RecipeRepository {
   Future<Map<String, int>> getKitchenSummary();
-  Future<int> createKitchenShoppingFromRecipe({
-    required String recipeType,
-    required Recipe recipe,
-  });
   Future<Recipe> createSubscriberRecipeFromPublic({
     required Recipe source,
     String? notes,
@@ -22,6 +18,12 @@ abstract class RecipeRepository {
   });
   Future<void> deleteCreatorRecipe(String id);
   Future<void> deleteSubscriberRecipe(String id);
+
+  /// 내 저장 레시피를 편집 가능한 내 레시피(creator)로 승격합니다.
+  Future<Recipe> promoteSubscriberRecipeToCreator({
+    required String id,
+  });
+
   Future<Recipe?> getCreatorRecipeById(String id);
   Future<Recipe?> getSubscriberRecipeById(String id);
   Future<bool> isBookmarked({required String recipeType, required String recipeId});

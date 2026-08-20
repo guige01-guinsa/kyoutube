@@ -56,6 +56,24 @@ function Assert-RequiredValue {
     }
 }
 
+function Assert-ConfiguredValue {
+    param(
+        [string]$Name,
+        [string]$Value,
+        [string]$Hint
+    )
+
+    Assert-RequiredValue -Name $Name -Value $Value -Hint $Hint
+
+    $normalized = $Value.Trim().ToLowerInvariant()
+    if ($normalized.StartsWith("replace-with") -or
+        $normalized.Contains("your-") -or
+        $normalized.Contains("placeholder") -or
+        $normalized.Contains("example")) {
+        throw "Invalid placeholder value: $Name`nHint: $Hint"
+    }
+}
+
 function Assert-PathExists {
     param(
         [string]$Path,
@@ -158,12 +176,12 @@ if ($isCi -and $LocalVerification.IsPresent) {
     throw "LocalVerification is not allowed in CI. Remove -LocalVerification and use strict release signing."
 }
 
-Assert-RequiredValue -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction -Hint "Pass -SupabaseUrlProduction https://<your-project-ref>.supabase.co"
-Assert-RequiredValue -Name "SupabaseAnonKeyProduction" -Value $SupabaseAnonKeyProduction -Hint "Pass -SupabaseAnonKeyProduction <YOUR_PRODUCTION_ANON_KEY>"
+Assert-ConfiguredValue -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction -Hint "Pass a real production Supabase URL."
+Assert-ConfiguredValue -Name "SupabaseAnonKeyProduction" -Value $SupabaseAnonKeyProduction -Hint "Pass a real production Supabase anon key."
 
 if (-not $SkipPublicRecipeSyncSmoke.IsPresent) {
-    Assert-RequiredValue -Name "PublicRecipeSyncFunctionUrl" -Value $PublicRecipeSyncFunctionUrl -Hint "Pass -PublicRecipeSyncFunctionUrl https://<project-ref>.supabase.co/functions/v1/public_recipe_sync"
-    Assert-RequiredValue -Name "PublicRecipeSyncWorkerSecret" -Value $PublicRecipeSyncWorkerSecret -Hint "Pass -PublicRecipeSyncWorkerSecret <PUBLIC_RECIPE_SYNC_WORKER_SECRET>"
+    Assert-ConfiguredValue -Name "PublicRecipeSyncFunctionUrl" -Value $PublicRecipeSyncFunctionUrl -Hint "Pass the public_recipe_sync production function URL."
+    Assert-ConfiguredValue -Name "PublicRecipeSyncWorkerSecret" -Value $PublicRecipeSyncWorkerSecret -Hint "Pass a real public_recipe_sync worker secret."
 }
 
 Write-Host "[1/6] Checking Flutter SDK path..."
@@ -201,6 +219,9 @@ Assert-PathExists -Path "android/app/google-services.json" -Hint "Download from 
 
 Write-Host "[4/6] Building signed release appbundle..."
 $buildArgs = @("build", "appbundle")
+
+# Prevent intermittent Windows host failures from Flutter engine version git checks.
+$buildArgs += "--no-version-check"
 
 if ($LocalVerification.IsPresent) {
     $buildArgs += "-PallowDebugSigningForRelease=true"

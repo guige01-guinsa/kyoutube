@@ -1,12 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
+import '../../../core/config/env.dart';
 import '../../../core/firebase/firebase_messaging_service.dart';
 import '../../../core/widgets/operations_status_card.dart';
+import '../../auth/application/account_service.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../recipes/application/recipe_providers.dart';
 import '../../recipes/domain/recipe.dart';
@@ -33,10 +34,31 @@ class _HomePageState extends ConsumerState<HomePage> {
     final authUserAsync = ref.watch(authUserProvider);
     final currentUser = authUserAsync.valueOrNull;
 
+    const showFcmDebugPanel = !kReleaseMode;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Cooking Platform'),
+        title: const Text('playscout'),
         actions: <Widget>[
+          if (Env.youtubeSearchEnabled)
+            IconButton(
+              onPressed: () {
+                context.push('/youtube');
+              },
+              icon: const Icon(Icons.ondemand_video_outlined),
+              tooltip: 'YouTube',
+            ),
+          IconButton(
+            onPressed: () {
+              if (currentUser == null) {
+                context.push('/login');
+                return;
+              }
+              context.push('/kitchen?tab=shopping');
+            },
+            icon: const Icon(Icons.shopping_cart_outlined),
+            tooltip: '장보기',
+          ),
           IconButton(
             onPressed: () {
               if (currentUser == null) {
@@ -54,18 +76,26 @@ class _HomePageState extends ConsumerState<HomePage> {
                 context.push('/login');
                 return;
               }
-              context.push('/creator');
+              context.push('/my-recipes');
             },
             icon: const Icon(Icons.menu_book_outlined),
             tooltip: '내 레시피',
           ),
+          if (currentUser != null)
+            IconButton(
+              onPressed: () {
+                context.push('/account');
+              },
+              icon: const Icon(Icons.account_circle_outlined),
+              tooltip: '계정 관리',
+            ),
           IconButton(
             onPressed: () async {
               if (currentUser == null) {
                 context.push('/login');
                 return;
               }
-              await Supabase.instance.client.auth.signOut();
+              await ref.read(accountServiceProvider).signOutCurrentAccount();
             },
             icon: Icon(currentUser == null ? Icons.login : Icons.logout),
             tooltip: currentUser == null ? '로그인' : '로그아웃',
@@ -78,11 +108,17 @@ class _HomePageState extends ConsumerState<HomePage> {
             initialQuery: _searchQuery,
             useAiSearch: _useAiSearch,
             onQueryChanged: (String value) {
+              if (!mounted) {
+                return;
+              }
               setState(() {
                 _searchQuery = value;
               });
             },
             onAiSearchChanged: (bool enabled) {
+              if (!mounted) {
+                return;
+              }
               setState(() {
                 _useAiSearch = enabled;
               });
@@ -91,6 +127,21 @@ class _HomePageState extends ConsumerState<HomePage> {
           Expanded(
             child: recipesAsync.when(
               data: (List<Recipe> recipes) {
+                if (recipes.isEmpty) {
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      ref.invalidate(publicRecipesProvider(publicQuery));
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const <Widget>[
+                        SizedBox(height: 96),
+                        Center(child: Text('조건에 맞는 공개 레시피가 없습니다.')),
+                      ],
+                    ),
+                  );
+                }
+
                 return RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(publicRecipesProvider(publicQuery));
@@ -99,35 +150,36 @@ class _HomePageState extends ConsumerState<HomePage> {
                   child: ListView.separated(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: recipes.length + 3,
+                    itemCount: recipes.length + 2 + (showFcmDebugPanel ? 1 : 0),
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (BuildContext context, int index) {
-                      if (index == 0) {
-                        return const OperationsStatusCard();
+                      if (index < recipes.length) {
+                        final recipe = recipes[index];
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          leading: RecipeThumbnail(imageUrl: recipe.imageUrl),
+                          title: Text(recipe.title),
+                          subtitle: Text(recipe.summary ?? '요약 없음'),
+                          trailing: Text('${recipe.ingredients.length}개 재료'),
+                          onTap: () {
+                            context.push('/recipes/${recipe.id}');
+                          },
+                        );
                       }
 
-                      if (index == 1) {
-                        return const _FcmDebugPanel();
-                      }
-
-                      if (index == 2) {
+                      final diagnosticIndex = index - recipes.length;
+                      if (diagnosticIndex == 0) {
                         return const _KitchenSummaryCard();
                       }
 
-                      final recipe = recipes[index - 3];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        leading: RecipeThumbnail(imageUrl: recipe.imageUrl),
-                        title: Text(recipe.title),
-                        subtitle: Text(recipe.summary ?? '요약 없음'),
-                        trailing: Text('${recipe.ingredients.length}개 재료'),
-                        onTap: () {
-                          context.push('/recipes/${recipe.id}');
-                        },
-                      );
+                      if (showFcmDebugPanel && diagnosticIndex == 1) {
+                        return const _FcmDebugPanel();
+                      }
+
+                      return const OperationsStatusCard();
                     },
                   ),
                 );
@@ -279,6 +331,9 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
   void _emitQuery(String value) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) {
+        return;
+      }
       widget.onQueryChanged(value);
     });
   }
@@ -315,6 +370,13 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
             onChanged: (String value) {
               setState(() {});
               _emitQuery(value);
+            },
+            onSubmitted: (String value) {
+              _debounce?.cancel();
+              if (!mounted) {
+                return;
+              }
+              widget.onQueryChanged(value);
             },
           ),
           const SizedBox(height: 8),
@@ -356,11 +418,12 @@ class _FcmDebugPanel extends StatelessWidget {
                       : '현재 플랫폼은 FCM 디버그 대상이 아닙니다. Android 또는 iOS에서 확인하세요.',
                 ),
                 const SizedBox(height: 8),
-                SelectableText(
-                  '토큰: ${state.token ?? '아직 없음'}',
+                Text(
+                  '토큰: ${state.tokenPreview ?? '아직 없음'}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-                if (state.lastMessageTitle != null || state.lastMessageBody != null) ...<Widget>[
+                if (state.lastMessageTitle != null ||
+                    state.lastMessageBody != null) ...<Widget>[
                   const SizedBox(height: 8),
                   Text('마지막 알림 제목: ${state.lastMessageTitle ?? '-'}'),
                   const SizedBox(height: 4),
@@ -370,7 +433,8 @@ class _FcmDebugPanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     '오류: ${state.errorMessage}',
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -379,7 +443,7 @@ class _FcmDebugPanel extends StatelessWidget {
                   runSpacing: 8,
                   children: <Widget>[
                     OutlinedButton(
-                      onPressed: state.isSupportedPlatform
+                      onPressed: state.isSupportedPlatform && !kReleaseMode
                           ? () => FirebaseMessagingService.requestPermission()
                           : null,
                       child: const Text('권한 요청'),

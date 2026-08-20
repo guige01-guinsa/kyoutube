@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-
+import 'widgets/unified_recipe_detail_layout.dart';
+import '../../cooking/presentation/cooking_completion_feedback_card.dart';
 import '../application/recipe_providers.dart';
+import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
 import 'create_creator_recipe_page.dart';
+import 'recipe_enrichment_page.dart';
 
 class CreatorRecipeDetailPage extends ConsumerWidget {
   const CreatorRecipeDetailPage({
@@ -17,6 +20,7 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
 
   Future<void> _openYoutubeUrl(BuildContext context, String url) async {
     final uri = Uri.tryParse(url);
+
     if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -26,10 +30,14 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
       return;
     }
 
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('링크를 열지 못했습니다.')),
+        const SnackBar(content: Text('YouTube 링크를 열 수 없습니다.')),
       );
     }
   }
@@ -65,6 +73,7 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
 
     final repository = ref.read(recipeRepositoryProvider);
     final imageService = ref.read(recipeImageServiceProvider);
+
     await repository.deleteCreatorRecipe(recipeId);
 
     final imageUrl = recipe.imageUrl;
@@ -72,139 +81,243 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
       try {
         await imageService.deleteCreatorRecipeImageByUrl(imageUrl!);
       } catch (_) {
-        // Keep recipe deletion successful even if storage cleanup is best-effort.
+        // 이미지 삭제 실패는 레시피 삭제 성공을 막지 않습니다.
       }
     }
 
     ref.invalidate(creatorRecipesProvider);
+    ref.invalidate(creatorRecipeByIdProvider(recipeId));
+    ref.invalidate(myUnifiedRecipesProvider);
 
     if (context.mounted) {
-      context.pop();
+      context.go('/my-recipes');
     }
+  }
+
+  Future<void> _edit(
+    BuildContext context,
+    WidgetRef ref,
+    Recipe recipe,
+  ) async {
+    final updated = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => CreateCreatorRecipePage(
+          initialRecipe: recipe,
+          editRecipeId: recipe.id,
+        ),
+      ),
+    );
+
+    if (updated == true) {
+      ref.invalidate(creatorRecipeByIdProvider(recipeId));
+      ref.invalidate(creatorRecipesProvider);
+      ref.invalidate(myUnifiedRecipesProvider);
+    }
+  }
+
+  void _goHome(BuildContext context) {
+    context.go('/');
+  }
+
+  void _goMyRecipes(BuildContext context) {
+    context.go('/my-recipes');
+  }
+
+  void _goShoppingReview(BuildContext context, Recipe recipe) {
+    if (recipe.ingredients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('재료 정보가 없어 장보기 목록을 만들 수 없습니다.'),
+        ),
+      );
+      return;
+    }
+
+    final source = Uri.encodeQueryComponent('creator:$recipeId');
+    context.push('/shopping-review?source=$source');
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recipeAsync = ref.watch(creatorRecipeByIdProvider(recipeId));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('내 레시피 상세'),
-        actions: <Widget>[
-          recipeAsync.maybeWhen(
-            data: (Recipe? recipe) {
-              if (recipe == null) {
-                return const SizedBox.shrink();
-              }
+    return recipeAsync.when(
+      data: (Recipe? recipe) {
+        if (recipe == null) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('레시피 상세'),
+            ),
+            body: const Center(
+              child: Text('레시피를 찾을 수 없습니다.'),
+            ),
+          );
+        }
 
-              return IconButton(
-                onPressed: () async {
-                  final updated = await Navigator.of(context).push<bool>(
-                    MaterialPageRoute<bool>(
-                      builder: (_) =>
-                          CreateCreatorRecipePage(initialRecipe: recipe),
-                    ),
-                  );
-                  if (updated == true) {
-                    ref.invalidate(creatorRecipeByIdProvider(recipeId));
-                    ref.invalidate(creatorRecipesProvider);
-                  }
-                },
-                icon: const Icon(Icons.edit_outlined),
-                tooltip: '수정',
-              );
-            },
-            orElse: () => const SizedBox.shrink(),
-          ),
-          recipeAsync.maybeWhen(
-            data: (Recipe? recipe) {
-              if (recipe == null) {
-                return const SizedBox.shrink();
-              }
-
-              return IconButton(
-                onPressed: () => _delete(context, ref, recipe),
-                icon: const Icon(Icons.delete_outline),
-                tooltip: '삭제',
-              );
-            },
-            orElse: () => const SizedBox.shrink(),
-          ),
-        ],
-      ),
-      body: recipeAsync.when(
-        data: (Recipe? recipe) {
-          if (recipe == null) {
-            return const Center(child: Text('레시피를 찾을 수 없습니다.'));
-          }
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              if ((recipe.imageUrl ?? '').isNotEmpty) ...<Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      recipe.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) {
-                        return const ColoredBox(
-                          color: Color(0x11000000),
-                          child: Center(child: Text('이미지를 불러오지 못했습니다.')),
-                        );
-                      },
-                    ),
+        return UnifiedRecipeDetailLayout(
+          recipe: recipe,
+          appBarTitle: '레시피 상세',
+          appBarActions: <Widget>[
+            IconButton(
+              onPressed: () => _edit(context, ref, recipe),
+              icon: const Icon(Icons.edit_outlined),
+              tooltip: '수정',
+            ),
+            IconButton(
+              onPressed: () => _delete(context, ref, recipe),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '삭제',
+            ),
+          ],
+          primaryActions: <Widget>[
+            OutlinedButton.icon(
+              onPressed: () async {
+                final createdRecipeId =
+                    await Navigator.of(context).push<Object?>(
+                  MaterialPageRoute<Object?>(
+                    builder: (_) => RecipeEnrichmentPage(recipe: recipe),
                   ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Text(
-                recipe.title,
-                style: Theme.of(context).textTheme.headlineSmall,
+                );
+
+                if (createdRecipeId is String &&
+                    createdRecipeId.trim().isNotEmpty &&
+                    context.mounted) {
+                  ref.invalidate(creatorRecipesProvider);
+                  ref.invalidate(myUnifiedRecipesProvider);
+
+                  context.go(
+                    '/creator/',
+                  );
+                }
+              },
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('AI로 레시피 보강'),
+            ),
+            FilledButton.icon(
+              onPressed: () => _goShoppingReview(context, recipe),
+              icon: const Icon(Icons.shopping_cart_outlined),
+              label: const Text('장보기 준비'),
+            ),
+          ],
+          extraSections: <Widget>[
+            CookingCompletionFeedbackCard(
+              recipeType: 'creator',
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            ),
+            const SizedBox(height: 24),
+            if ((recipe.tips ?? '').trim().isNotEmpty) ...<Widget>[
+              const _CreatorExtraSectionTitle(
+                title: '팁',
+                icon: Icons.tips_and_updates_outlined,
               ),
               const SizedBox(height: 8),
-              Text(recipe.summary ?? '요약 정보가 없습니다.'),
-              const SizedBox(height: 20),
-              Text('재료', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ...recipe.ingredients.map((String item) => Text('- $item')),
-              const SizedBox(height: 20),
-              Text('조리 순서', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ...recipe.steps.asMap().entries.map(
-                    (entry) => Text('${entry.key + 1}. ${entry.value}'),
-                  ),
-              if ((recipe.tips ?? '').trim().isNotEmpty) ...<Widget>[
-                const SizedBox(height: 20),
-                Text('팁', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text(recipe.tips!),
-              ],
-              if ((recipe.youtubeUrl ?? '').isNotEmpty) ...<Widget>[
-                const SizedBox(height: 20),
-                Text('YouTube', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _openYoutubeUrl(context, recipe.youtubeUrl!),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('YouTube 열기'),
-                ),
-                const SizedBox(height: 8),
-                SelectableText(recipe.youtubeUrl!),
-              ],
+              Text(recipe.tips!),
+              const SizedBox(height: 24),
             ],
-          );
-        },
-        error: (Object err, StackTrace stack) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text('상세를 불러오지 못했습니다.\n$err'),
+            if ((recipe.youtubeUrl ?? '').trim().isNotEmpty) ...<Widget>[
+              const _CreatorExtraSectionTitle(
+                title: 'YouTube',
+                icon: Icons.ondemand_video_outlined,
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => _openYoutubeUrl(
+                  context,
+                  recipe.youtubeUrl!,
+                ),
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('YouTube 열기'),
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                recipe.youtubeUrl!,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+          footer: Card(
+            elevation: 0,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Text(
+                    '다음 작업',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => _goHome(context),
+                    icon: const Icon(Icons.home_outlined),
+                    label: const Text('홈으로 이동'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _goMyRecipes(context),
+                    icon: const Icon(Icons.menu_book_outlined),
+                    label: const Text('내 레시피 관리'),
+                  ),
+                ],
+              ),
+            ),
           ),
+        );
+      },
+      error: (Object err, StackTrace _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('레시피 상세'),
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Text(
+                '상세 정보를 불러오지 못했습니다.\n$err',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        );
+      },
+      loading: () => Scaffold(
+        appBar: AppBar(
+          title: const Text('레시피 상세'),
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
       ),
+    );
+  }
+}
+
+class _CreatorExtraSectionTitle extends StatelessWidget {
+  const _CreatorExtraSectionTitle({
+    required this.title,
+    required this.icon,
+  });
+
+  final String title;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      ],
     );
   }
 }

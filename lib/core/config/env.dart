@@ -1,6 +1,24 @@
+import 'package:flutter/foundation.dart';
+
 class Env {
-  static const String appEnv =
-      String.fromEnvironment('APP_ENV', defaultValue: 'local');
+  static const bool youtubeSearchEnabled = bool.fromEnvironment(
+    'YOUTUBE_SEARCH_ENABLED',
+    defaultValue: false,
+  );
+  static const String _rawAppEnv =
+      String.fromEnvironment('APP_ENV', defaultValue: '');
+
+  static String get appEnv {
+    final normalized = _rawAppEnv.trim().toLowerCase();
+    switch (normalized) {
+      case 'local':
+      case 'staging':
+      case 'production':
+        return normalized;
+      default:
+        return kReleaseMode ? 'production' : 'local';
+    }
+  }
 
   static const String _supabaseUrl =
       String.fromEnvironment('SUPABASE_URL', defaultValue: '');
@@ -57,12 +75,6 @@ class Env {
   }
 
   static void validate() {
-    if (appEnv != 'local' && appEnv != 'staging' && appEnv != 'production') {
-      throw StateError(
-        'APP_ENV must be one of: local, staging, production.',
-      );
-    }
-
     if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
       throw StateError(
         'Supabase runtime values are required for the selected APP_ENV. '

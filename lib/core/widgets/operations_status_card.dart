@@ -141,16 +141,23 @@ class OperationsStatusCard extends StatelessWidget {
                       child: const Text('리포트 복사'),
                     ),
                     OutlinedButton(
-                      onPressed: state.recentErrors.isEmpty
-                          ? null
-                          : () async {
-                              await OpsMonitorService.clearRecentErrors();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('최근 오류를 지웠습니다.')),
-                                );
-                              }
-                            },
+                      onPressed: () async {
+                        if (state.recentErrors.isEmpty) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('지울 최근 오류가 없습니다.')),
+                            );
+                          }
+                          return;
+                        }
+
+                        await OpsMonitorService.clearRecentErrors();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('최근 오류를 지웠습니다.')),
+                          );
+                        }
+                      },
                       child: const Text('최근 오류 지우기'),
                     ),
                   ],

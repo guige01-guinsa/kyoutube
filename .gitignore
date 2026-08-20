@@ -24,6 +24,7 @@ migrate_working_dir/
 #.vscode/
 
 # Flutter/Dart/Pub related
+.fvm/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -52,7 +53,38 @@ app.*.map.json
 # Supabase function local environment
 /supabase/functions/.env
 
+# Local developer environment overrides
+/.env
+/.env.local
+/.env.development
+/supabase/functions/.env
+
+# Local release/test artifacts
+/.artifacts/
+/ci_artifacts/
+/tmp_device_apk_extract/
+/tmp_device_base.apk
+/tmp_device_ui.xml
+/device*.png
+/ui*.xml
+/supabase/.temp/
+/.local-backups/
+
 # Android release signing
 /android/key.properties
 *.jks
 *.keystore
+
+# Local backups and secrets
+*.bak
+backups/
+.env
+.env.*
+.env*.json
+.vscode/launch.json
+
+# Google Play upload certificate
+/android/upload_certificate.pem
+
+# Local recovery / manual backup files
+/recovery_backup/

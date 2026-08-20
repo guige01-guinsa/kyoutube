@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/env.dart';
+import 'core/debug/runtime_diagnostics_overlay.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/firebase/firebase_messaging_service.dart';
 import 'core/router/app_router.dart';
@@ -26,17 +29,28 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
 
   Future<void> _initializeApp() async {
     try {
-      await OpsMonitorService.markPhase('Firebase 초기화');
-      await FirebaseBootstrap.initialize();
-
-      await OpsMonitorService.markPhase('FCM 초기화');
-      await FirebaseMessagingService.initialize();
-
+      // Supabase는 로그인/레시피/계정 관리의 핵심 서비스이므로 먼저 초기화한다.
       await OpsMonitorService.markPhase('Supabase 초기화');
       await Supabase.initialize(
         url: Env.supabaseUrl,
         publishableKey: Env.supabaseAnonKey,
       );
+
+      // Firebase/FCM은 부가 기능이다.
+      // 초기화 실패가 핵심 앱 기능의 시작을 막으면 안 된다.
+      try {
+        await OpsMonitorService.markPhase('Firebase 초기화');
+        await FirebaseBootstrap.initialize();
+
+        await OpsMonitorService.markPhase('FCM 초기화');
+        await FirebaseMessagingService.initialize();
+      } catch (error, stackTrace) {
+        OpsMonitorService.recordError(
+          error,
+          source: 'firebase_startup',
+          stackTrace: stackTrace,
+        );
+      }
 
       await OpsMonitorService.markReady();
     } catch (error, stackTrace) {
@@ -64,6 +78,11 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            builder: (BuildContext context, Widget? child) {
+              return RuntimeDiagnosticsOverlay(
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const _BootstrapLoadingScreen(),
           );
         }
@@ -72,6 +91,11 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            builder: (BuildContext context, Widget? child) {
+              return RuntimeDiagnosticsOverlay(
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: _BootstrapErrorScreen(
               error: snapshot.error.toString(),
               onRetry: _retry,
@@ -85,15 +109,58 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
   }
 }
 
-class KYoutubeApp extends StatelessWidget {
+class KYoutubeApp extends StatefulWidget {
   const KYoutubeApp({super.key});
+
+  @override
+  State<KYoutubeApp> createState() => _KYoutubeAppState();
+}
+
+class _KYoutubeAppState extends State<KYoutubeApp> {
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 실제 앱에서는 Supabase 초기화 이후 실행됩니다.
+    // Widget Test에서는 Supabase가 초기화되지 않을 수 있으므로 안전하게 무시합니다.
+    try {
+      _authSubscription =
+          Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        switch (data.event) {
+          case AuthChangeEvent.passwordRecovery:
+            AppRouter.router.go(AppRoutes.resetPassword);
+            break;
+          case AuthChangeEvent.signedIn:
+            AppRouter.router.go(AppRoutes.home);
+            break;
+          default:
+            break;
+        }
+      });
+    } catch (_) {
+      _authSubscription = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'AI Cooking Platform',
+      title: 'playscout',
       theme: AppTheme.light,
       routerConfig: AppRouter.router,
+      builder: (BuildContext context, Widget? child) {
+        return RuntimeDiagnosticsOverlay(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }
@@ -188,6 +255,11 @@ class BootstrapFailureApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      builder: (BuildContext context, Widget? child) {
+        return RuntimeDiagnosticsOverlay(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: Scaffold(
         body: SafeArea(
           child: Center(

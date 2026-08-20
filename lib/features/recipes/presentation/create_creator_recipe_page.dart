@@ -12,9 +12,18 @@ class CreateCreatorRecipePage extends ConsumerStatefulWidget {
   const CreateCreatorRecipePage({
     super.key,
     this.initialRecipe,
+    this.editRecipeId,
+    this.returnCreatedRecipeId = false,
   });
 
   final Recipe? initialRecipe;
+
+  /// 기존 creator 레시피 수정 시에만 전달됩니다.
+  /// null이면 initialRecipe가 있어도 새 레시피 생성 모드입니다.
+  final String? editRecipeId;
+
+  /// true이면 새 레시피 저장 후 bool 대신 생성된 Recipe ID를 반환합니다.
+  final bool returnCreatedRecipeId;
 
   @override
   ConsumerState<CreateCreatorRecipePage> createState() =>
@@ -42,7 +51,7 @@ class _CreateCreatorRecipePageState
   Uint8List? _selectedImageBytes;
   String _selectedImageExtension = 'jpg';
 
-  bool get _isEditMode => widget.initialRecipe != null;
+  bool get _isEditMode => widget.editRecipeId != null;
 
   @override
   void initState() {
@@ -166,9 +175,11 @@ class _CreateCreatorRecipePageState
         imagePath = uploadedImageUrl;
       }
 
+      final Recipe savedRecipe;
+
       if (_isEditMode) {
-        await repository.updateCreatorRecipe(
-          id: widget.initialRecipe!.id,
+        savedRecipe = await repository.updateCreatorRecipe(
+          id: widget.editRecipeId!,
           title: _titleController.text.trim(),
           summary: summary,
           ingredients: ingredients,
@@ -178,7 +189,7 @@ class _CreateCreatorRecipePageState
           youtubeUrl: youtubeUrl,
         );
       } else {
-        await repository.createCreatorRecipe(
+        savedRecipe = await repository.createCreatorRecipe(
           title: _titleController.text.trim(),
           summary: summary,
           ingredients: ingredients,
@@ -200,7 +211,10 @@ class _CreateCreatorRecipePageState
       if (!mounted) {
         return;
       }
-      Navigator.of(context).pop(true);
+      final result =
+          !_isEditMode && widget.returnCreatedRecipeId ? savedRecipe.id : true;
+
+      Navigator.of(context).pop(result);
     } catch (error) {
       if (uploadedImageUrl != null) {
         try {
@@ -226,12 +240,12 @@ class _CreateCreatorRecipePageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditMode ? '크리에이터 레시피 수정' : '새 크리에이터 레시피')),
+      appBar: AppBar(title: Text(_isEditMode ? '내 레시피 수정' : '새 내 레시피')),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
             children: <Widget>[
               TextFormField(
                 controller: _titleController,

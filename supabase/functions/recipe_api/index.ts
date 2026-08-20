@@ -429,9 +429,8 @@ async function getAuthenticatedUserId(req: Request): Promise<{ userId?: string; 
   });
 
   if (!response.ok) {
-    const details = await response.text();
     return {
-      error: errorResponse(401, "Invalid or expired access token", details)
+      error: errorResponse(401, "Invalid or expired access token")
     };
   }
 
@@ -524,29 +523,14 @@ async function listPublicRecipes(url: URL): Promise<Response> {
   const tokens = tokenizeSearch(search);
   const effectiveLimit = tokens.length === 0 ? limit : Math.min(limit, 5);
 
-  if (tokens.length === 0) {
-    const params = new URLSearchParams();
-    params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-    params.set("order", "created_at.desc");
-    params.set("limit", String(effectiveLimit));
-    params.set("offset", String(offset));
-
-    const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
-      method: "GET"
-    });
-
-    if (!response.ok) {
-      const details = await response.text();
-      return errorResponse(500, "Failed to fetch public recipes", details);
-    }
-
-    const data = await response.json();
-    return okResponse(data, 200);
-  }
-
+  // Public recipes must come only from Food Safety Korea COOKRCP01.
+  // Do not query recipes_public here.
   const externalRows: PublicRecipeRow[] = [];
   const pageSize = 300;
-  const maxPages = 40;
+
+  const maxPages = tokens.length === 0
+    ? Math.max(1, Math.ceil((offset + effectiveLimit) / pageSize))
+    : 40;
 
   try {
     for (let page = 0; page < maxPages; page += 1) {
@@ -565,14 +549,57 @@ async function listPublicRecipes(url: URL): Promise<Response> {
       }
     }
   } catch (error) {
-    return errorResponse(502, "Failed to fetch COOKRCP01 recipes", String(error));
+    return errorResponse(
+      502,
+      "Failed to fetch COOKRCP01 recipes",
+      String(error),
+    );
+  }
+
+  if (tokens.length === 0) {
+    return okResponse(
+      externalRows.slice(offset, offset + effectiveLimit),
+      200,
+    );
   }
 
   if (searchMode === "keyword") {
-    const matched = externalRows.filter((row) => matchesKeywordSearch(row, tokens));
-    return okResponse(matched.slice(offset, offset + effectiveLimit), 200);
+    const matched = externalRows.filter((row) =>
+      matchesKeywordSearch(row, tokens)
+    );
+
+    if (matched.length > 0 || tokens.length === 0) {
+      return okResponse(
+        matched.slice(offset, offset + effectiveLimit),
+        200,
+      );
+    }
+
+    const fallbackRanked = externalRows
+      .map((row) => ({
+        row,
+        score: scoreAiSearch(row, tokens),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => {
+        if (a.score === b.score) {
+          return String(b.row.created_at).localeCompare(
+            String(a.row.created_at),
+          );
+        }
+
+        return b.score - a.score;
+      })
+      .map((item) => item.row);
+
+    return okResponse(
+      fallbackRanked.slice(offset, offset + effectiveLimit),
+      200,
+    );
   }
 
+  // AI search mode ranks only Food Safety Korea results.
+  // It does not call another recipe or image service.
   const ranked = externalRows
     .map((row) => ({
       row,
@@ -580,67 +607,50 @@ async function listPublicRecipes(url: URL): Promise<Response> {
     }))
     .filter((item) => item.score > 0)
     .sort((a, b) => {
-      if (a.score == b.score) {
-        return String(b.row.created_at).localeCompare(String(a.row.created_at));
+      if (a.score === b.score) {
+        return String(b.row.created_at).localeCompare(
+          String(a.row.created_at),
+        );
       }
+
       return b.score - a.score;
     })
     .map((item) => item.row);
 
-  return okResponse(ranked.slice(offset, offset + effectiveLimit), 200);
+  return okResponse(
+    ranked.slice(offset, offset + effectiveLimit),
+    200,
+  );
 }
-
 async function getPublicRecipeDetail(id: string): Promise<Response> {
-  const params = new URLSearchParams();
-  params.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-  params.set("id", `eq.${id}`);
-  params.set("limit", "1");
+  const sourceId = id.trim();
 
-  const response = await restRequest(`/rest/v1/recipes_public?${params.toString()}`, {
-    method: "GET"
-  });
-
-  if (!response.ok) {
-    const details = await response.text();
-    return errorResponse(500, "Failed to fetch recipe detail", details);
+  if (sourceId.length === 0) {
+    return errorResponse(400, "Public recipe id is required");
   }
 
-  const rows = await response.json();
-  if (Array.isArray(rows) && rows.length > 0) {
-    return okResponse(rows[0], 200);
-  }
-
-  const sourceParams = new URLSearchParams();
-  sourceParams.set("select", "id,source_id,title,summary,ingredients,steps,calories,image_url,created_at,updated_at");
-  sourceParams.set("source_id", `eq.${id}`);
-  sourceParams.set("limit", "1");
-
-  const sourceResponse = await restRequest(`/rest/v1/recipes_public?${sourceParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!sourceResponse.ok) {
-    const details = await sourceResponse.text();
-    return errorResponse(500, "Failed to fetch recipe detail", details);
-  }
-
-  const sourceRows = await sourceResponse.json();
-  if (Array.isArray(sourceRows) && sourceRows.length > 0) {
-    return okResponse(sourceRows[0], 200);
-  }
-
+  // Public recipe detail must come only from Food Safety Korea COOKRCP01.
+  // Do not query recipes_public here.
   try {
-    const external = await fetchPublicRecipeBySourceId(id);
+    const external = await fetchPublicRecipeBySourceId(sourceId);
+
     if (external) {
       return okResponse(external, 200);
     }
   } catch (error) {
-    return errorResponse(502, "Failed to fetch COOKRCP01 recipe detail", String(error));
+    return errorResponse(
+      502,
+      "Failed to fetch COOKRCP01 recipe detail",
+      String(error),
+    );
   }
 
-  return errorResponse(404, "Public recipe not found", { id });
+  return errorResponse(
+    404,
+    "Public recipe not found",
+    { id: sourceId },
+  );
 }
-
 async function listCreatorRecipes(url: URL, userId: string): Promise<Response> {
   const { limit, offset, error } = parsePagination(url);
   if (error) {
@@ -991,7 +1001,43 @@ async function listKitchenIngredients(url: URL, userId: string): Promise<Respons
   return okResponse(await response.json(), 200);
 }
 
-async function listKitchenShoppingLists(url: URL, userId: string): Promise<Response> {
+function toShoppingItemResponse(row: Record<string, unknown>): Record<string, unknown> | null {
+  const id = typeof row.id === "string" ? row.id.trim() : "";
+  const listId = typeof row.list_id === "string" ? row.list_id.trim() : "";
+  const name = typeof row.name === "string" ? row.name : "";
+  const ingredientText = typeof row.ingredient_text === "string" ? row.ingredient_text : "";
+  const status = typeof row.status === "string" ? row.status : "";
+  const reviewStatus = typeof row.review_status === "string" ? row.review_status : "";
+  const revision = typeof row.revision === "number" && Number.isInteger(row.revision) ? row.revision : null;
+  if (!id || !listId || !name || !ingredientText || !status || !reviewStatus || revision === null) return null;
+  return {
+    id,
+    list_id: listId,
+    name,
+    ingredient_text: ingredientText,
+    quantity: row.quantity ?? null,
+    unit: row.unit ?? null,
+    status,
+    review_status: reviewStatus,
+    needs_review: reviewStatus === "required",
+    is_checked: row.is_checked === true,
+    revision,
+    updated_at: typeof row.updated_at === "string" ? row.updated_at : null,
+  };
+}
+
+async function getShoppingItem(req: Request, id: string): Promise<Record<string, unknown> | null> {
+  const params = new URLSearchParams();
+  params.set("select", "id,list_id,name,ingredient_text,quantity,unit,status,review_status,is_checked,revision,updated_at");
+  params.set("id", `eq.${id}`);
+  const response = await userRestRequest(req, `/rest/v1/kitchen_shopping_items?${params.toString()}`, { method: "GET" });
+  if (!response.ok) return null;
+  const rows = await response.json().catch(() => null);
+  if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || typeof rows[0] !== "object") return null;
+  return toShoppingItemResponse(rows[0] as Record<string, unknown>);
+}
+
+async function listKitchenShoppingLists(req: Request, url: URL, userId: string): Promise<Response> {
   const { limit, offset, error } = parsePagination(url);
   if (error) {
     return error;
@@ -1012,13 +1058,12 @@ async function listKitchenShoppingLists(url: URL, userId: string): Promise<Respo
   listParams.set("limit", String(limit));
   listParams.set("offset", String(offset));
 
-  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
+  const listResponse = await userRestRequest(req, `/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
     method: "GET"
   });
 
   if (!listResponse.ok) {
-    const details = await listResponse.text();
-    return errorResponse(500, "Failed to fetch shopping lists", details);
+    return errorResponse(500, "Failed to fetch shopping lists");
   }
 
   const listsRaw = await listResponse.json();
@@ -1037,22 +1082,23 @@ async function listKitchenShoppingLists(url: URL, userId: string): Promise<Respo
   }
 
   const itemParams = new URLSearchParams();
-  itemParams.set("select", "id,list_id,owner_id,name,normalized_name,quantity,unit,is_checked,created_at,updated_at");
+  itemParams.set("select", "id,list_id,name,ingredient_text,quantity,unit,status,review_status,is_checked,revision,updated_at");
   itemParams.set("owner_id", `eq.${userId}`);
   itemParams.set("list_id", `in.(${listIds.join(",")})`);
   itemParams.set("order", "created_at.asc");
 
-  const itemResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
+  const itemResponse = await userRestRequest(req, `/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
     method: "GET"
   });
 
   if (!itemResponse.ok) {
-    const details = await itemResponse.text();
-    return errorResponse(500, "Failed to fetch shopping items", details);
+    return errorResponse(500, "Failed to fetch shopping items");
   }
 
   const itemsRaw = await itemResponse.json();
-  const items = Array.isArray(itemsRaw) ? itemsRaw as Array<Record<string, unknown>> : [];
+  const items = Array.isArray(itemsRaw)
+    ? itemsRaw.map((row) => row && typeof row === "object" ? toShoppingItemResponse(row as Record<string, unknown>) : null).filter((row): row is Record<string, unknown> => row !== null)
+    : [];
   const itemMap = new Map<string, Array<Record<string, unknown>>>();
 
   for (const item of items) {
@@ -1197,262 +1243,309 @@ async function deleteKitchenIngredient(id: string, userId: string): Promise<Resp
   return okResponse({ deleted: rows[0] }, 200);
 }
 
-async function createShoppingFromRecipe(req: Request, userId: string): Promise<Response> {
-  const body = await req.json().catch(() => null);
-  const recipeType = typeof body?.recipe_type === "string" ? body.recipe_type.trim() : "";
-  const recipeId = typeof body?.recipe_id === "string" ? body.recipe_id.trim() : "";
-  const recipeTitle = typeof body?.recipe_title === "string" ? body.recipe_title.trim() : "";
-  const requiredIngredients = Array.isArray(body?.required_ingredients)
-    ? body.required_ingredients.map((value: unknown) => String(value ?? "").trim()).filter((value: string) => value.length > 0)
-    : [];
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const createManagedShoppingItemFields = new Set([
+  "id", "list_id", "owner_id", "normalized_name", "status", "is_checked", "review_status",
+  "needs_review", "revision", "updated_at", "completed_at", "inventory_change_count"
+]);
+const managedShoppingItemFields = new Set([
+  "id", "list_id", "owner_id", "normalized_name", "status", "is_checked", "review_status",
+  "needs_review", "revision", "updated_at", "completed_at", "inventory_change_count", "ingredient_text"
+]);
+const statusManagedShoppingItemFields = new Set([
+  "id", "list_id", "owner_id", "normalized_name", "is_checked", "review_status",
+  "needs_review", "revision", "updated_at", "completed_at", "inventory_change_count", "ingredient_text"
+]);
+const canonicalShoppingUnits = new Set(["g", "kg", "ml", "l", "ea"]);
+const canonicalShoppingStatuses = new Set(["pending", "purchased", "skipped", "unavailable"]);
 
-  if (recipeType.length === 0 || recipeId.length === 0 || requiredIngredients.length === 0) {
-    return errorResponse(400, "recipe_type, recipe_id, required_ingredients are required");
-  }
+function idempotencyKey(req: Request): string | null {
+  const key = (req.headers.get("Idempotency-Key") ?? "").trim();
+  return uuidPattern.test(key) ? key : null;
+}
 
-  const ingredientParams = new URLSearchParams();
-  ingredientParams.set("select", "normalized_name");
-  ingredientParams.set("owner_id", `eq.${userId}`);
-  const ingredientResponse = await restRequest(`/rest/v1/kitchen_ingredients?${ingredientParams.toString()}`, {
-    method: "GET"
+async function userRestRequest(req: Request, path: string, init: RequestInit): Promise<Response> {
+  const token = getBearerToken(req);
+  if (!token) return new Response(null, { status: 401 });
+  const { supabaseUrl, anonKey } = getSupabaseConfig();
+  const headers = new Headers(init.headers ?? {});
+  headers.set("apikey", anonKey);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
+  return fetch(`${supabaseUrl}${path}`, { ...init, headers });
+}
+
+async function userRpc(req: Request, rpcName: string, body: Record<string, unknown>): Promise<Response> {
+  const token = getBearerToken(req);
+  if (!token) return errorResponse(401, "Authorization Bearer token is required");
+  const { supabaseUrl, anonKey } = getSupabaseConfig();
+  return fetch(`${supabaseUrl}/rest/v1/rpc/${rpcName}`, {
+    method: "POST",
+    headers: { apikey: anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
+}
 
-  if (!ingredientResponse.ok) {
-    const details = await ingredientResponse.text();
-    return errorResponse(500, "Failed to load kitchen ingredients", details);
+async function shoppingRpcError(response: Response): Promise<Response> {
+  if (response.status === 401 || response.status === 403) return errorResponse(401, "Unauthorized");
+  if (response.status === 404) return errorResponse(404, "Shopping list not found");
+  const details = await response.text().catch(() => "");
+  if (/shopping item not found|not found for the authenticated user/i.test(details)) return errorResponse(404, "Shopping item not found");
+  if (/revision conflict/i.test(details)) return errorResponse(409, "Shopping item revision conflict", { code: "shopping_item_conflict" });
+  if (/not active|active shopping list/i.test(details)) return errorResponse(409, "Shopping list is not active", { code: "shopping_list_inactive" });
+  return errorResponse(422, "Shopping request was rejected", { code: "shopping_request_rejected" });
+}
+
+function validateExpectedRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function validateReviewPayload(body: unknown): { name: string; quantity: number | null; unit: string | null; expectedRevision: number } | Response {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse(400, "Review payload is invalid", { code: "invalid_review_payload" });
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((field) => managedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted", { code: "managed_shopping_field" });
+  const name = typeof value.name === "string" ? value.name.trim() : "";
+  const expectedRevision = value.expected_revision;
+  const quantity = value.quantity === null || value.quantity === undefined ? null : value.quantity;
+  const rawUnit = value.unit === null || value.unit === undefined ? null : value.unit;
+  const rawCanonicalUnit = rawUnit === null ? null : typeof rawUnit === "string" ? rawUnit.trim().toLowerCase() : "__invalid__";
+  const unit = rawCanonicalUnit === "개" ? "ea" : rawCanonicalUnit;
+  if (!name || name.length > 200 || !validateExpectedRevision(expectedRevision) ||
+      (quantity !== null && (typeof quantity !== "number" || !Number.isFinite(quantity) || quantity <= 0)) ||
+      (unit !== null && !canonicalShoppingUnits.has(unit))) {
+    return errorResponse(422, "Review payload is invalid", { code: "invalid_review_payload" });
   }
+  if ((quantity === null) !== (unit === null)) return errorResponse(422, "Review quantity and unit must be provided together", { code: "invalid_review_payload" });
+  return { name, quantity: quantity as number | null, unit, expectedRevision };
+}
 
-  const ownedRows = await ingredientResponse.json();
-  const ownedSet = new Set(
-    (Array.isArray(ownedRows) ? ownedRows : [])
-      .map((row: Record<string, unknown>) => String(row.normalized_name ?? "").trim())
-      .filter((value: string) => value.length > 0)
+function validateStatusPayload(body: unknown): { status: string; expectedRevision: number } | Response {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return errorResponse(400, "Status payload is invalid", { code: "invalid_status_payload" });
+  const value = body as Record<string, unknown>;
+  if (Object.keys(value).some((field) => statusManagedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted", { code: "managed_shopping_field" });
+  const status = typeof value.status === "string" ? value.status.trim().toLowerCase() : "";
+  if (!canonicalShoppingStatuses.has(status) || !validateExpectedRevision(value.expected_revision)) return errorResponse(422, "Status payload is invalid", { code: "invalid_status_payload" });
+  return { status, expectedRevision: value.expected_revision };
+}
+
+async function updateShoppingItemByRpc(req: Request, id: string, rpcName: string, body: Record<string, unknown>): Promise<Response> {
+  if (!uuidPattern.test(id)) return errorResponse(400, "Shopping item id must be a UUID");
+  const rpc = await userRpc(req, rpcName, body);
+  if (!rpc.ok) return await shoppingRpcError(rpc);
+  const item = await getShoppingItem(req, id);
+  if (!item) return errorResponse(500, "Shopping item response was invalid");
+  return okResponse(item, 200);
+}
+
+async function reviewShoppingItem(req: Request, id: string): Promise<Response> {
+  const body = await req.json().catch(() => null);
+  const parsed = validateReviewPayload(body);
+  if (parsed instanceof Response) return parsed;
+  const item = await updateShoppingItemByRpc(req, id, "review_kitchen_shopping_item", {
+    p_item_id: id,
+    p_name: parsed.name,
+    p_quantity: parsed.quantity,
+    p_unit: parsed.unit,
+    p_expected_revision: parsed.expectedRevision,
+  });
+  return item;
+}
+
+async function setShoppingItemStatus(req: Request, id: string, bodyOverride: unknown = undefined): Promise<Response> {
+  const body = bodyOverride === undefined ? await req.json().catch(() => null) : bodyOverride;
+  const parsed = validateStatusPayload(body);
+  if (parsed instanceof Response) return parsed;
+  return await updateShoppingItemByRpc(req, id, "set_kitchen_shopping_item_status", {
+    p_item_id: id,
+    p_status: parsed.status,
+    p_expected_revision: parsed.expectedRevision,
+  });
+}
+
+async function createShoppingFromRecipe(req: Request, _userId: string): Promise<Response> {
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const key = idempotencyKey(req);
+  if (!key) return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
+  const sourceRecipeId = typeof body?.source_recipe_id === "string" ? body.source_recipe_id.trim() : "";
+  const recipeTitle = typeof body?.recipe_title === "string"
+    ? body.recipe_title.trim()
+    : "장보기 목록";
+  if (!recipeTitle || recipeTitle.length > 120) {
+    return errorResponse(422, "Recipe title is required", { code: "invalid_recipe_title" });
+  }
+  if (!Array.isArray(body?.items)) {
+    return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
+  }
+  if (sourceRecipeId.length === 0 || !/^(public|creator|user):.+/.test(sourceRecipeId)) {
+    return errorResponse(400, "source_recipe_id is required");
+  }
+  const items = body.items;
+  const names = new Set<string>();
+  for (const item of items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
+    const value = item as Record<string, unknown>;
+    if (Object.keys(value).some((field) => createManagedShoppingItemFields.has(field))) return errorResponse(400, "Server-managed shopping fields are not accepted");
+    const name = typeof value.name === "string" ? value.name.trim() : "";
+    const text = typeof value.ingredient_text === "string" ? value.ingredient_text : "";
+    if (!name || !text.trim() || name.length > 200 || text.length > 500 || (value.quantity !== null && value.quantity !== undefined && (typeof value.quantity !== "number" || !Number.isFinite(value.quantity) || value.quantity <= 0)) || (value.unit !== null && value.unit !== undefined && (typeof value.unit !== "string" || !value.unit.trim() || value.unit.trim().length > 32))) return errorResponse(422, "Structured ingredient review is required", { code: "ingredient_review_required" });
+    const canonical = name.toLowerCase();
+    if (names.has(canonical)) return errorResponse(422, "Duplicate canonical ingredient names require review", { code: "ingredient_review_required" });
+    names.add(canonical);
+  }
+  const rpc = await userRpc(req, "create_kitchen_shopping_list", { p_source_recipe_id: sourceRecipeId, p_items: items, p_idempotency_key: key });
+  if (!rpc.ok) return await shoppingRpcError(rpc);
+  const rows: unknown = await rpc.json().catch(() => null);
+  if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || typeof rows[0] !== "object" || Array.isArray(rows[0])) {
+    return errorResponse(500, "Shopping create response shape was invalid");
+  }
+  const result = rows[0] as Record<string, unknown>;
+  const listId = typeof result.list_id === "string" ? result.list_id.trim() : "";
+  const status = typeof result.status === "string" ? result.status : "";
+  const created = result.created;
+  const replayed = result.replayed;
+  const responseIdempotencyKey = typeof result.idempotency_key === "string" ? result.idempotency_key.trim() : "";
+  if (!listId || status !== "active" || typeof created !== "boolean" || typeof replayed !== "boolean" || !responseIdempotencyKey || responseIdempotencyKey !== key) {
+    return errorResponse(500, "Shopping create result was invalid");
+  }
+  const titleResponse = await userRestRequest(
+    req,
+    `/rest/v1/kitchen_shopping_lists?id=eq.${listId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        title: recipeTitle,
+        updated_at: new Date().toISOString(),
+      }),
+    },
   );
 
-  const deduped = new Map<string, string>();
-  for (const ingredient of requiredIngredients) {
-    const normalized = normalizeIngredientName(ingredient);
-    if (normalized.length > 0 && !deduped.has(normalized)) {
-      deduped.set(normalized, ingredient);
-    }
+  if (!titleResponse.ok) {
+    return errorResponse(
+      500,
+      "Shopping list was created but its title could not be saved",
+      { code: "shopping_title_update_failed" },
+    );
   }
 
-  const missing = [...deduped.entries()]
-    .filter(([normalized]) => !ownedSet.has(normalized))
-    .map(([normalized, original]) => ({ normalized, original }));
-
-  const listResponse = await restRequest("/rest/v1/kitchen_shopping_lists", {
-    method: "POST",
-    headers: {
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({
-      owner_id: userId,
-      status: "active",
-      title: recipeTitle.length > 0 ? `${recipeTitle} 장보기` : "AI generated shopping list",
-      source_recipe_id: `${recipeType}:${recipeId}`,
-    })
-  });
-
-  if (!listResponse.ok) {
-    const details = await listResponse.text();
-    return errorResponse(500, "Failed to create shopping list", details);
-  }
-
-  const listRows = await listResponse.json();
-  if (!Array.isArray(listRows) || listRows.length === 0) {
-    return errorResponse(500, "Shopping list creation returned empty response");
-  }
-
-  const createdList = listRows[0] as Record<string, unknown>;
-  let createdItems: unknown[] = [];
-
-  if (missing.length > 0) {
-    const itemPayload = missing.map((item) => ({
-      list_id: createdList.id,
-      owner_id: userId,
-      name: item.original,
-      normalized_name: item.normalized,
-      quantity: null,
-      unit: null,
-      is_checked: false,
-    }));
-
-    const itemResponse = await restRequest("/rest/v1/kitchen_shopping_items", {
-      method: "POST",
-      headers: {
-        Prefer: "return=representation"
-      },
-      body: JSON.stringify(itemPayload)
-    });
-
-    if (!itemResponse.ok) {
-      const details = await itemResponse.text();
-      return errorResponse(500, "Failed to create shopping items", details);
-    }
-
-    const itemRows = await itemResponse.json();
-    createdItems = Array.isArray(itemRows) ? itemRows : [];
-  }
-
-  return okResponse({
-    shopping_list: createdList,
-    items: createdItems,
-    missing_count: missing.length,
-  }, 201);
+  return okResponse({ list_id: listId, status, created, replayed, idempotency_key: responseIdempotencyKey }, created ? 201 : 200);
 }
 
-async function patchShoppingItem(req: Request, id: string, userId: string): Promise<Response> {
+async function listKitchenCleanupSnapshots(req: Request): Promise<Response> {
+  const rpc = await userRpc(req, "list_kitchen_workspace_cleanup_snapshots", {});
+
+  if (!rpc.ok) {
+    if (rpc.status === 401 || rpc.status === 403) return errorResponse(401, "Unauthorized");
+    return errorResponse(422, "Kitchen cleanup snapshots could not be loaded", {
+      code: "kitchen_cleanup_snapshot_list_rejected",
+    });
+  }
+
+  const rows = await rpc.json().catch(() => null);
+  if (!Array.isArray(rows)) {
+    return errorResponse(500, "Kitchen cleanup snapshot list response was invalid");
+  }
+
+  return okResponse(rows, 200);
+}
+
+async function cleanupKitchenWorkspace(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const key = idempotencyKey(req);
+  if (!key) {
+    return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
+  }
+
+  const clearIngredients = body?.clear_ingredients === true;
+  const clearActiveShopping = body?.clear_active_shopping === true;
+  const clearCompletedHistory = body?.clear_completed_history === true;
+
+  if (!clearIngredients && !clearActiveShopping && !clearCompletedHistory) {
+    return errorResponse(400, "At least one cleanup option is required", { code: "cleanup_option_required" });
+  }
+
+  const rpc = await userRpc(req, "cleanup_kitchen_workspace", {
+    p_clear_ingredients: clearIngredients,
+    p_clear_active_shopping: clearActiveShopping,
+    p_clear_completed_history: clearCompletedHistory,
+    p_idempotency_key: key,
+  });
+
+  if (!rpc.ok) {
+    const details = await rpc.text().catch(() => '');
+    if (rpc.status === 401 || rpc.status === 403) return errorResponse(401, "Unauthorized");
+    return errorResponse(422, "Kitchen cleanup request was rejected", {
+      code: "kitchen_cleanup_rejected",
+    });
+  }
+
+  const rows = await rpc.json().catch(() => null);
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return errorResponse(500, "Kitchen cleanup response was invalid");
+  }
+
+  return okResponse(result, 200);
+}
+
+async function restoreKitchenWorkspaceCleanup(req: Request): Promise<Response> {
+  const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const snapshotId = typeof body?.snapshot_id === "string" ? body.snapshot_id.trim() : "";
+
+  if (!uuidPattern.test(snapshotId)) {
+    return errorResponse(400, "A valid cleanup snapshot id is required", { code: "invalid_cleanup_snapshot_id" });
+  }
+
+  const rpc = await userRpc(req, "restore_kitchen_workspace_cleanup", {
+    p_snapshot_id: snapshotId,
+  });
+
+  if (!rpc.ok) {
+    const details = await rpc.text().catch(() => '');
+    if (rpc.status === 401 || rpc.status === 403) return errorResponse(401, "Unauthorized");
+    if (/not found/i.test(details)) return errorResponse(404, "Kitchen cleanup snapshot was not found");
+    if (/expired|already been restored|cannot restore/i.test(details)) {
+      return errorResponse(409, "Kitchen cleanup can no longer be restored", {
+        code: "kitchen_cleanup_restore_unavailable",
+      });
+    }
+    return errorResponse(422, "Kitchen cleanup restore was rejected", {
+      code: "kitchen_cleanup_restore_rejected",
+    });
+  }
+
+  const rows = await rpc.json().catch(() => null);
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return errorResponse(500, "Kitchen cleanup restore response was invalid");
+  }
+
+  return okResponse(result, 200);
+}
+
+async function patchShoppingItemLegacy(req: Request, id: string): Promise<Response> {
   const body = await req.json().catch(() => null);
-  if (typeof body?.is_checked !== "boolean") {
-    return errorResponse(400, "is_checked(boolean) is required");
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof (body as Record<string, unknown>).is_checked !== "boolean") {
+    return errorResponse(400, "is_checked(boolean) and expected_revision are required", { code: "invalid_status_payload" });
   }
-
-  const params = new URLSearchParams();
-  params.set("id", `eq.${id}`);
-  params.set("owner_id", `eq.${userId}`);
-
-  const response = await restRequest(`/rest/v1/kitchen_shopping_items?${params.toString()}`, {
-    method: "PATCH",
-    headers: {
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({
-      is_checked: body.is_checked,
-      updated_at: new Date().toISOString(),
-    })
+  const value = body as Record<string, unknown>;
+  return await setShoppingItemStatus(req, id, {
+    status: value.is_checked ? "purchased" : "pending",
+    expected_revision: value.expected_revision,
   });
-
-  if (!response.ok) {
-    const details = await response.text();
-    return errorResponse(500, "Failed to update shopping item", details);
-  }
-
-  const rows = await response.json();
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return errorResponse(404, "Shopping item not found", { id });
-  }
-
-  return okResponse(rows[0], 200);
 }
 
-async function completeShoppingList(id: string, userId: string): Promise<Response> {
-  const listParams = new URLSearchParams();
-  listParams.set("select", "id,status");
-  listParams.set("id", `eq.${id}`);
-  listParams.set("owner_id", `eq.${userId}`);
-  listParams.set("limit", "1");
-
-  const listResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${listParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!listResponse.ok) {
-    const details = await listResponse.text();
-    return errorResponse(500, "Failed to load shopping list", details);
-  }
-
-  const listRows = await listResponse.json();
-  if (!Array.isArray(listRows) || listRows.length === 0) {
-    return errorResponse(404, "Shopping list not found", { id });
-  }
-
-  const itemParams = new URLSearchParams();
-  itemParams.set("select", "id,name,normalized_name,quantity,unit");
-  itemParams.set("owner_id", `eq.${userId}`);
-  itemParams.set("list_id", `eq.${id}`);
-  itemParams.set("is_checked", "eq.true");
-
-  const checkedResponse = await restRequest(`/rest/v1/kitchen_shopping_items?${itemParams.toString()}`, {
-    method: "GET"
-  });
-
-  if (!checkedResponse.ok) {
-    const details = await checkedResponse.text();
-    return errorResponse(500, "Failed to load shopping items", details);
-  }
-
-  const checkedItems = await checkedResponse.json();
-  const checkedRows = Array.isArray(checkedItems) ? checkedItems as Array<Record<string, unknown>> : [];
-
-  for (const item of checkedRows) {
-    const normalizedName = String(item.normalized_name ?? "").trim();
-    const name = String(item.name ?? "").trim();
-    if (normalizedName.length === 0 || name.length === 0) {
-      continue;
-    }
-
-    const ingredientParams = new URLSearchParams();
-    ingredientParams.set("select", "id,quantity");
-    ingredientParams.set("owner_id", `eq.${userId}`);
-    ingredientParams.set("normalized_name", `eq.${normalizedName}`);
-    ingredientParams.set("limit", "1");
-
-    const existingResponse = await restRequest(`/rest/v1/kitchen_ingredients?${ingredientParams.toString()}`, {
-      method: "GET"
-    });
-
-    if (!existingResponse.ok) {
-      continue;
-    }
-
-    const existingRows = await existingResponse.json();
-    const itemQuantity = typeof item.quantity === "number" ? item.quantity : null;
-
-    if (Array.isArray(existingRows) && existingRows.length > 0) {
-      const existing = existingRows[0] as Record<string, unknown>;
-      const existingQuantity = typeof existing.quantity === "number" ? existing.quantity : null;
-      const mergedQuantity = itemQuantity !== null && existingQuantity !== null
-        ? existingQuantity + itemQuantity
-        : existingQuantity ?? itemQuantity;
-
-      const updateParams = new URLSearchParams();
-      updateParams.set("id", `eq.${String(existing.id)}`);
-      updateParams.set("owner_id", `eq.${userId}`);
-
-      await restRequest(`/rest/v1/kitchen_ingredients?${updateParams.toString()}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          quantity: mergedQuantity,
-          unit: typeof item.unit === "string" ? item.unit : null,
-          updated_at: new Date().toISOString(),
-        })
-      });
-    } else {
-      await restRequest("/rest/v1/kitchen_ingredients", {
-        method: "POST",
-        body: JSON.stringify({
-          owner_id: userId,
-          name,
-          normalized_name: normalizedName,
-          quantity: itemQuantity,
-          unit: typeof item.unit === "string" ? item.unit : null,
-        })
-      });
-    }
-  }
-
-  const completeParams = new URLSearchParams();
-  completeParams.set("id", `eq.${id}`);
-  completeParams.set("owner_id", `eq.${userId}`);
-  const completeResponse = await restRequest(`/rest/v1/kitchen_shopping_lists?${completeParams.toString()}`, {
-    method: "PATCH",
-    headers: {
-      Prefer: "return=representation"
-    },
-    body: JSON.stringify({
-      status: "completed",
-      updated_at: new Date().toISOString(),
-    })
-  });
-
-  if (!completeResponse.ok) {
-    const details = await completeResponse.text();
-    return errorResponse(500, "Failed to complete shopping list", details);
-  }
-
-  const summary = await buildKitchenSummary(userId);
-  return okResponse({ completed_list_id: id, summary }, 200);
+async function completeShoppingList(req: Request, id: string, _userId: string): Promise<Response> {
+  const key = idempotencyKey(req);
+  if (!key) return errorResponse(400, "A valid Idempotency-Key header is required", { code: "invalid_idempotency_key" });
+  if (!uuidPattern.test(id)) return errorResponse(400, "Shopping list id must be a UUID");
+  const rpc = await userRpc(req, "complete_kitchen_shopping_list", { p_list_id: id, p_idempotency_key: key });
+  if (!rpc.ok) return await shoppingRpcError(rpc);
+  const rows = await rpc.json();
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  return okResponse({ shopping_list: result }, 200);
 }
 
 async function listKitchenCookSessions(url: URL, userId: string): Promise<Response> {
@@ -1536,10 +1629,13 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
       return await listKitchenIngredients(url, userId);
     }
     if (view === "shopping-lists") {
-      return await listKitchenShoppingLists(url, userId);
+      return await listKitchenShoppingLists(req, url, userId);
     }
     if (view === "cook-sessions") {
       return await listKitchenCookSessions(url, userId);
+    }
+    if (view === "cleanup-snapshots") {
+      return await listKitchenCleanupSnapshots(req);
     }
     return errorResponse(400, "Unsupported kitchen GET view", { view });
   }
@@ -1551,11 +1647,22 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
     if (action === "create-shopping-from-recipe") {
       return await createShoppingFromRecipe(req, userId);
     }
+    if (action === "cleanup-kitchen-workspace") {
+      return await cleanupKitchenWorkspace(req);
+    }
+    if (action === "restore-kitchen-workspace-cleanup") {
+      return await restoreKitchenWorkspaceCleanup(req);
+    }
+    if (action === "review-shopping-item" || action === "set-shopping-item-status") {
+      if (id.length === 0) return errorResponse(400, "id query parameter is required for shopping item action");
+      if (action === "review-shopping-item") return await reviewShoppingItem(req, id);
+      return await setShoppingItemStatus(req, id);
+    }
     if (action === "complete-shopping-list") {
       if (id.length === 0) {
         return errorResponse(400, "id query parameter is required for complete-shopping-list");
       }
-      return await completeShoppingList(id, userId);
+      return await completeShoppingList(req, id, userId);
     }
     if (action === "complete-cook") {
       return await completeCook(req, userId);
@@ -1571,7 +1678,7 @@ async function handleKitchenRequest(req: Request, url: URL, userId: string): Pro
       return await patchKitchenIngredient(req, id, userId);
     }
     if (view === "shopping-item") {
-      return await patchShoppingItem(req, id, userId);
+      return await patchShoppingItemLegacy(req, id);
     }
     return errorResponse(400, "Unsupported kitchen PATCH view", { view });
   }
@@ -1674,8 +1781,7 @@ serve(async (req) => {
   } catch (error) {
     return errorResponse(
       500,
-      "Unexpected server error",
-      error instanceof Error ? error.message : String(error)
+      "Unexpected server error"
     );
   }
 });

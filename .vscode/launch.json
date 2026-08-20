@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "k_youtube (local)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.env.local",
+        "--dart-define=APP_ENV=local"
+      ]
+    },
+    {
+      "name": "k_youtube (staging)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.env.local",
+        "--dart-define=APP_ENV=staging"
+      ]
+    },
+    {
+      "name": "k_youtube (production)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define-from-file=.env.local",
+        "--dart-define=APP_ENV=production"
+      ]
+    }
+  ]
+}

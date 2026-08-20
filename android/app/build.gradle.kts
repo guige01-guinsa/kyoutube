@@ -26,7 +26,7 @@ val hasReleaseSigning =
 
 android {
     namespace = "com.kyoutube.app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
