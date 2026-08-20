@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/firebase/firebase_messaging_service.dart';
+
 import '../application/account_service.dart';
 import '../application/auth_providers.dart';
 
@@ -69,6 +71,28 @@ class _AccountPageState extends ConsumerState<AccountPage> {
         });
       }
     }
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    await FirebaseMessagingService.requestPermission();
+
+    if (!mounted) {
+      return;
+    }
+
+    final state = FirebaseMessagingService.debugState.value;
+    final isGranted = state.permissionStatus == 'authorized' ||
+        state.permissionStatus == 'provisional';
+
+    final message = state.errorMessage != null
+        ? '알림 설정을 열지 못했습니다. 잠시 후 다시 시도해 주세요.'
+        : isGranted
+            ? '알림이 활성화되었습니다.'
+            : '알림 권한이 허용되지 않았습니다. 필요하면 기기 설정에서 변경해 주세요.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Future<void> _confirmAndDeleteAccount() async {
@@ -226,6 +250,13 @@ class _AccountPageState extends ConsumerState<AccountPage> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 24),
+          ListTile(
+            leading: const Icon(Icons.notifications_active_outlined),
+            title: const Text('알림 설정'),
+            subtitle: const Text('새 레시피와 서비스 알림을 받을 수 있습니다.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _isProcessing ? null : _requestNotificationPermission,
+          ),
           const Divider(),
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),

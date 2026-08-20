@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/config/env.dart';
 import '../../../core/firebase/firebase_messaging_service.dart';
 import '../../../core/widgets/operations_status_card.dart';
+import '../../auth/application/account_service.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../recipes/application/recipe_providers.dart';
 import '../../recipes/domain/recipe.dart';
@@ -95,7 +95,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 context.push('/login');
                 return;
               }
-              await Supabase.instance.client.auth.signOut();
+              await ref.read(accountServiceProvider).signOutCurrentAccount();
             },
             icon: Icon(currentUser == null ? Icons.login : Icons.logout),
             tooltip: currentUser == null ? '로그인' : '로그아웃',

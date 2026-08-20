@@ -89,6 +89,13 @@ class FirebaseMessagingService {
         defaultTargetPlatform == TargetPlatform.iOS;
   }
 
+  static bool _isNotificationAuthorized(
+    NotificationSettings settings,
+  ) {
+    return settings.authorizationStatus == AuthorizationStatus.authorized ||
+        settings.authorizationStatus == AuthorizationStatus.provisional;
+  }
+
   static String? tokenPreviewForDiagnostics(String? token) {
     if (token == null || token.isEmpty) {
       return null;
@@ -116,13 +123,15 @@ class FirebaseMessagingService {
 
       final messaging = FirebaseMessaging.instance;
       final initialMessage = await messaging.getInitialMessage();
-      final settings = await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-      final token = await messaging.getToken();
+
+      // 앱 시작 시 시스템 권한 팝업을 띄우지 않는다.
+      // 권한 요청은 사용자가 앱 설정에서 알림을 직접 선택할 때만 실행한다.
+      final settings = await messaging.getNotificationSettings();
+
+      String? token;
+      if (_isNotificationAuthorized(settings)) {
+        token = await messaging.getToken();
+      }
 
       debugState.value = FirebaseMessagingDebugState(
         isSupportedPlatform: true,
@@ -198,6 +207,7 @@ class FirebaseMessagingService {
       final messaging = FirebaseMessaging.instance;
       await messaging.deleteToken();
       final token = await messaging.getToken();
+
       debugState.value = debugState.value.copyWith(
         isSupportedPlatform: true,
         isInitialized: true,
@@ -217,16 +227,25 @@ class FirebaseMessagingService {
     }
 
     try {
-      final settings = await FirebaseMessaging.instance.requestPermission(
+      final messaging = FirebaseMessaging.instance;
+
+      final settings = await messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
         provisional: false,
       );
+
+      String? token;
+      if (_isNotificationAuthorized(settings)) {
+        token = await messaging.getToken();
+      }
+
       debugState.value = debugState.value.copyWith(
         isSupportedPlatform: true,
         isInitialized: true,
         permissionStatus: settings.authorizationStatus.name,
+        tokenPreview: tokenPreviewForDiagnostics(token),
         clearErrorMessage: true,
       );
     } catch (error) {

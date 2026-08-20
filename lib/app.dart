@@ -29,17 +29,28 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
 
   Future<void> _initializeApp() async {
     try {
-      await OpsMonitorService.markPhase('Firebase 초기화');
-      await FirebaseBootstrap.initialize();
-
-      await OpsMonitorService.markPhase('FCM 초기화');
-      await FirebaseMessagingService.initialize();
-
+      // Supabase는 로그인/레시피/계정 관리의 핵심 서비스이므로 먼저 초기화한다.
       await OpsMonitorService.markPhase('Supabase 초기화');
       await Supabase.initialize(
         url: Env.supabaseUrl,
         publishableKey: Env.supabaseAnonKey,
       );
+
+      // Firebase/FCM은 부가 기능이다.
+      // 초기화 실패가 핵심 앱 기능의 시작을 막으면 안 된다.
+      try {
+        await OpsMonitorService.markPhase('Firebase 초기화');
+        await FirebaseBootstrap.initialize();
+
+        await OpsMonitorService.markPhase('FCM 초기화');
+        await FirebaseMessagingService.initialize();
+      } catch (error, stackTrace) {
+        OpsMonitorService.recordError(
+          error,
+          source: 'firebase_startup',
+          stackTrace: stackTrace,
+        );
+      }
 
       await OpsMonitorService.markReady();
     } catch (error, stackTrace) {
