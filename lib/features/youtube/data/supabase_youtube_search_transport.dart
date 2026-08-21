@@ -6,12 +6,33 @@ import 'package:youtube_recipe_search/youtube_recipe_search.dart';
 
 import '../../../core/config/env.dart';
 
+class YoutubeSearchLocaleProfile {
+  const YoutubeSearchLocaleProfile({
+    required this.languageCode,
+    required this.regionCode,
+  });
+
+  final String languageCode;
+  final String regionCode;
+
+  static const korean = YoutubeSearchLocaleProfile(
+    languageCode: 'ko',
+    regionCode: 'KR',
+  );
+
+  static const englishUnitedStates = YoutubeSearchLocaleProfile(
+    languageCode: 'en',
+    regionCode: 'US',
+  );
+}
+
 class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
   SupabaseYoutubeSearchTransport({
     http.Client? httpClient,
     String? supabaseUrl,
     String? supabaseAnonKey,
     String? Function()? accessTokenProvider,
+    YoutubeSearchLocaleProfile Function()? localeProfileProvider,
   })  : _httpClient = httpClient ?? http.Client(),
         _supabaseUrl = supabaseUrl ?? Env.supabaseUrl,
         _supabaseAnonKey = supabaseAnonKey ?? Env.supabaseAnonKey,
@@ -23,12 +44,15 @@ class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
               } catch (_) {
                 return null;
               }
-            });
+            }),
+        _localeProfileProvider =
+            localeProfileProvider ?? (() => YoutubeSearchLocaleProfile.korean);
 
   final http.Client _httpClient;
   final String _supabaseUrl;
   final String _supabaseAnonKey;
   final String? Function() _accessTokenProvider;
+  final YoutubeSearchLocaleProfile Function() _localeProfileProvider;
 
   @override
   Future<YoutubeTransportResponse> get(
@@ -47,12 +71,16 @@ class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
       );
     }
 
+    final locale = _localeProfileProvider();
+
     final uri = Uri.parse(
       '$_supabaseUrl/functions/v1/youtube_search',
     ).replace(
       queryParameters: <String, String>{
         'q': request.query.trim(),
         'limit': request.limit.clamp(1, 10).toString(),
+        'lang': locale.languageCode,
+        'region': locale.regionCode,
       },
     );
 
