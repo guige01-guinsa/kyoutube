@@ -70,6 +70,8 @@ void main() {
       <String, String>{
         'q': 'pasta recipe',
         'limit': '10',
+        'lang': 'ko',
+        'region': 'KR',
       },
     );
 
@@ -139,5 +141,37 @@ void main() {
         'httpStatus': 401,
       },
     );
+  });
+  test('supports a future English locale profile without changing auth flow',
+      () async {
+    final client = _FakeClient(
+      (_) async => http.Response(
+        jsonEncode(<String, Object?>{
+          'status': 'ok',
+          'data': <String, Object?>{
+            'items': <Object?>[],
+            'nextPageToken': null,
+          },
+        }),
+        200,
+      ),
+    );
+
+    final transport = SupabaseYoutubeSearchTransport(
+      httpClient: client,
+      supabaseUrl: 'https://project.supabase.co',
+      supabaseAnonKey: 'anon-key',
+      accessTokenProvider: () => userAccessToken,
+      localeProfileProvider: () =>
+          YoutubeSearchLocaleProfile.englishUnitedStates,
+    );
+
+    await transport.get(
+      const YoutubeSearchRequest(query: 'pasta'),
+    );
+
+    final request = client.lastRequest!;
+    expect(request.url.queryParameters['lang'], 'en');
+    expect(request.url.queryParameters['region'], 'US');
   });
 }

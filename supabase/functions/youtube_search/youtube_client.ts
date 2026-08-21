@@ -111,6 +111,18 @@ function durationSeconds(value: string | null): number | null {
   return (hours * 3600) + (minutes * 60) + seconds;
 }
 
+export type YoutubeSearchLocale = {
+  languageCode: string;
+  regionCode: string;
+  cookingQuerySuffix: string;
+};
+
+export const koreanYoutubeSearchLocale: YoutubeSearchLocale = {
+  languageCode: "ko",
+  regionCode: "KR",
+  cookingQuerySuffix: "\uC694\uB9AC \uB808\uC2DC\uD53C",
+};
+
 type SearchCandidate = {
   videoId: string;
   title: string;
@@ -126,14 +138,18 @@ function candidateLimit(limit: number): number {
   );
 }
 
-function cookingRecipeQuery(query: string): string {
-  return `${query} 요리 레시피`;
+function cookingRecipeQuery(
+  query: string,
+  locale: YoutubeSearchLocale,
+): string {
+  return `${query} ${locale.cookingQuerySuffix}`;
 }
 
 export async function searchYoutube({
   apiKey,
   query,
   limit,
+  locale = koreanYoutubeSearchLocale,
   fetcher = fetch,
   sleep = (milliseconds: number) =>
     new Promise<void>((resolve) => setTimeout(resolve, milliseconds)),
@@ -142,6 +158,7 @@ export async function searchYoutube({
   apiKey: string;
   query: string;
   limit: number;
+  locale?: YoutubeSearchLocale;
   fetcher?: FetchLike;
   sleep?: Sleep;
   timeoutSignal?: TimeoutSignalFactory;
@@ -154,12 +171,12 @@ export async function searchYoutube({
     const [key, value] of Object.entries({
       part: "snippet",
       type: "video",
-      q: cookingRecipeQuery(query),
+      q: cookingRecipeQuery(query, locale),
       maxResults: String(candidateLimit(limit)),
       videoCategoryId: "26",
       videoDuration: "short",
-      relevanceLanguage: "ko",
-      regionCode: "KR",
+      relevanceLanguage: locale.languageCode,
+      regionCode: locale.regionCode,
       key: apiKey,
     })
   ) {

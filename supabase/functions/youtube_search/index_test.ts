@@ -75,3 +75,42 @@ Deno.test("timeout response and safe error body contain no secret values", async
       !body.includes("private-url"),
   );
 });
+Deno.test("uses English locale profile only for supported lang and region", async () => {
+  let receivedLocale: unknown;
+
+  const response = await handler(async ({ locale }) => {
+    receivedLocale = locale;
+    return [result];
+  })(
+    new Request(
+      "http://local/youtube_search?q=pasta&lang=en&region=GB",
+    ),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(receivedLocale, {
+    languageCode: "en",
+    regionCode: "GB",
+    cookingQuerySuffix: "cooking recipe",
+  });
+});
+
+Deno.test("falls back to Korean locale profile for unsupported locale values", async () => {
+  let receivedLocale: unknown;
+
+  const response = await handler(async ({ locale }) => {
+    receivedLocale = locale;
+    return [result];
+  })(
+    new Request(
+      "http://local/youtube_search?q=pasta&lang=fr&region=FR",
+    ),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(receivedLocale, {
+    languageCode: "ko",
+    regionCode: "KR",
+    cookingQuerySuffix: "요리 레시피",
+  });
+});
