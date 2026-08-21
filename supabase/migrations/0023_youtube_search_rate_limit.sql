@@ -1,4 +1,4 @@
-﻿-- YouTube 검색 API quota 보호를 위한 사용자별 rate limit
+-- YouTube 검색 API quota 보호를 위한 사용자별 rate limit
 -- 검색어 원문은 저장하지 않고, 사용자 ID / 시간 구간 / 요청 횟수만 저장한다.
 
 create table if not exists public.youtube_search_rate_windows (
