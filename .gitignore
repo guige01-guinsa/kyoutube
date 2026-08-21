@@ -88,3 +88,5 @@ backups/
 
 # Local recovery / manual backup files
 /recovery_backup/
+# Release artifacts downloaded from CI
+/artifacts/
