@@ -102,7 +102,17 @@ jobs:
           Set-Content -Path android/app/google-services.json -Value $env:ANDROID_GOOGLE_SERVICES_JSON -NoNewline
 
           $keystoreBytes = [System.Convert]::FromBase64String($env:ANDROID_UPLOAD_KEYSTORE_BASE64)
-          [System.IO.File]::WriteAllBytes("android/upload-keystore.jks", $keystoreBytes)
+          $keystoreOutputPath = "android/app/keystore/playscout-upload-keystore.jks"
+
+          New-Item `
+            -ItemType Directory `
+            -Path (Split-Path $keystoreOutputPath -Parent) `
+            -Force | Out-Null
+
+          [System.IO.File]::WriteAllBytes(
+            $keystoreOutputPath,
+            $keystoreBytes
+          )
 
       - name: Configure Gradle for Windows runner
         if: runner.os == 'Windows'
