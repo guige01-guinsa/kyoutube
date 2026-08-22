@@ -1227,6 +1227,24 @@ class _ShoppingTab extends ConsumerWidget {
             itemCount: lists.length,
             itemBuilder: (BuildContext context, int index) {
               final list = lists[index];
+              final pendingItems = list.items
+                  .where((item) =>
+                      item.status == KitchenShoppingItemStatus.pending)
+                  .toList(growable: false);
+
+              final purchasedItems = list.items
+                  .where((item) =>
+                      item.status == KitchenShoppingItemStatus.purchased)
+                  .toList(growable: false);
+
+              final otherItems = list.items
+                  .where(
+                    (item) =>
+                        item.status == KitchenShoppingItemStatus.skipped ||
+                        item.status == KitchenShoppingItemStatus.unavailable,
+                  )
+                  .toList(growable: false);
+
               return Card(
                 margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                 child: Padding(
@@ -1254,8 +1272,39 @@ class _ShoppingTab extends ConsumerWidget {
                         ),
                       if ((list.sourceRecipeId ?? '').trim().isNotEmpty)
                         const SizedBox(height: 8),
-                      ...list.items
-                          .map((item) => _shoppingItemTile(context, item)),
+                      if (pendingItems.isNotEmpty) ...<Widget>[
+                        _ShoppingSectionHeader(
+                          title: '장보기 필요 ${pendingItems.length}개',
+                          icon: Icons.shopping_cart_outlined,
+                        ),
+                        const SizedBox(height: 8),
+                        ...pendingItems.map(
+                          (item) => _shoppingItemTile(context, item),
+                        ),
+                      ],
+                      if (purchasedItems.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 12),
+                        _ShoppingSectionHeader(
+                          title: '구매 완료 ${purchasedItems.length}개',
+                          icon: Icons.check_circle_outline,
+                          completed: true,
+                        ),
+                        const SizedBox(height: 8),
+                        ...purchasedItems.map(
+                          (item) => _shoppingItemTile(context, item),
+                        ),
+                      ],
+                      if (otherItems.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: 12),
+                        _ShoppingSectionHeader(
+                          title: '보류/구매 불가 ${otherItems.length}개',
+                          icon: Icons.info_outline,
+                        ),
+                        const SizedBox(height: 8),
+                        ...otherItems.map(
+                          (item) => _shoppingItemTile(context, item),
+                        ),
+                      ],
                       const SizedBox(height: 4),
                       Align(
                         alignment: Alignment.centerRight,
@@ -1377,6 +1426,39 @@ class _ShoppingTab extends ConsumerWidget {
       KitchenShoppingItemStatus.unavailable =>
         const _StatusPresentation('구매하지 못함', Icons.block_outlined),
     };
+  }
+}
+
+class _ShoppingSectionHeader extends StatelessWidget {
+  const _ShoppingSectionHeader({
+    required this.title,
+    required this.icon,
+    this.completed = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final bool completed;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = completed
+        ? Theme.of(context).colorScheme.primary
+        : Theme.of(context).colorScheme.onSurface;
+
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 20, color: color),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+        ),
+      ],
+    );
   }
 }
 
