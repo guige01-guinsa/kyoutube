@@ -12,6 +12,7 @@ class ShoppingReviewDraftItem {
     required this.quantityInput,
     required this.quantity,
     required this.unit,
+    this.selected = true,
   });
 
   final String localId;
@@ -20,6 +21,7 @@ class ShoppingReviewDraftItem {
   final String quantityInput;
   final double? quantity;
   final String? unit;
+  final bool selected;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'local_id': localId,
@@ -28,6 +30,7 @@ class ShoppingReviewDraftItem {
         'quantity_input': quantityInput,
         'quantity': quantity,
         'unit': unit,
+        'selected': selected,
       };
 
   factory ShoppingReviewDraftItem.fromJson(Map<String, dynamic> json) {
@@ -37,12 +40,14 @@ class ShoppingReviewDraftItem {
     final quantityInput = json['quantity_input'];
     final quantity = json['quantity'];
     final unit = json['unit'];
+    final selected = json['selected'];
     if (localId is! String ||
         ingredientText is! String ||
         name is! String ||
         quantityInput is! String ||
         (quantity != null && quantity is! num) ||
-        (unit != null && unit is! String)) {
+        (unit != null && unit is! String) ||
+        (selected != null && selected is! bool)) {
       throw const FormatException('Invalid shopping review draft item');
     }
     return ShoppingReviewDraftItem(
@@ -52,6 +57,7 @@ class ShoppingReviewDraftItem {
       quantityInput: quantityInput,
       quantity: quantity?.toDouble(),
       unit: unit as String?,
+      selected: selected is bool ? selected : true,
     );
   }
 }
@@ -106,7 +112,7 @@ class ShoppingReviewDraft {
           (item.unit?.length ?? 0) > 32) {
         throw const FormatException('Invalid shopping review draft item');
       }
-      if (forSubmission && item.name.trim().isEmpty) {
+      if (forSubmission && item.selected && item.name.trim().isEmpty) {
         throw const FormatException('Shopping review name is required');
       }
       if ((item.quantity == null) != (item.unit == null)) {
@@ -119,12 +125,15 @@ class ShoppingReviewDraft {
               !_units.contains(item.unit))) {
         throw const FormatException('Invalid shopping review quantity or unit');
       }
-      if (forSubmission) {
+      if (forSubmission && item.selected) {
         final normalized = item.name.trim().toLowerCase();
         if (!names.add(normalized)) {
           throw const FormatException('Duplicate shopping review name');
         }
       }
+    }
+    if (forSubmission && !items.any((item) => item.selected)) {
+      throw const FormatException('Select at least one shopping item');
     }
     if (utf8.encode(serialize()).length >
         shoppingReviewDraftMaxSerializedBytes) {
