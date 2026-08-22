@@ -937,6 +937,11 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
       appBar: AppBar(
         title: const Text('주방'),
         actions: <Widget>[
+          IconButton(
+            tooltip: '보유 재료로 찾기',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () => context.push('/ingredient-search'),
+          ),
           PopupMenuButton<_KitchenWorkspaceMenuAction>(
             tooltip: '주방 메뉴',
             enabled: !_cleanupProcessing,

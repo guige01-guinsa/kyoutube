@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/account_page.dart';
 import '../../features/auth/presentation/reset_password_page.dart';
+import '../../features/ingredient_search/presentation/ingredient_search_page.dart';
+import '../../features/ingredient_search/presentation/ingredient_search_results_page.dart';
 import '../../features/home/presentation/home_page.dart';
 import '../../features/kitchen/presentation/kitchen_page.dart';
 import '../../features/kitchen/presentation/shopping_review_page.dart';
@@ -23,6 +25,8 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
   static const String account = '/account';
   static const String youtube = '/youtube';
+  static const String ingredientSearch = '/ingredient-search';
+  static const String ingredientSearchResults = '/ingredient-search/results';
   static const String bookmarks = '/bookmarks';
   static const String creator = '/creator';
   static const String creatorNew = '/creator/new';
@@ -57,6 +61,34 @@ class AppRouter {
       );
     },
     routes: <RouteBase>[
+      GoRoute(
+        path: AppRoutes.ingredientSearch,
+        builder: (BuildContext context, GoRouterState state) =>
+            const IngredientSearchPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.ingredientSearchResults,
+        builder: (BuildContext context, GoRouterState state) {
+          final rawIngredients = state.uri.queryParameters['ingredients'] ?? '';
+
+          final ingredients = rawIngredients
+              .split(',')
+              .map((item) => item.trim())
+              .where((item) => item.isNotEmpty)
+              .take(5)
+              .toList(growable: false);
+
+          if (ingredients.isEmpty) {
+            return const _RouteErrorPage(
+              message: '선택한 재료가 없습니다.',
+            );
+          }
+
+          return IngredientSearchResultsPage(
+            ingredients: ingredients,
+          );
+        },
+      ),
       GoRoute(
         path: AppRoutes.home,
         builder: (BuildContext context, GoRouterState state) =>
