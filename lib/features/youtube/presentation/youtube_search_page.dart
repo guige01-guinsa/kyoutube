@@ -14,11 +14,13 @@ class YoutubeSearchPage extends StatefulWidget {
     this.transport,
     this.creationService,
     this.enabled = Env.youtubeSearchEnabled,
+    this.initialQuery,
   });
 
   final YoutubeSearchTransport? transport;
   final YoutubeRecipeCreationService? creationService;
   final bool enabled;
+  final String? initialQuery;
 
   @override
   State<YoutubeSearchPage> createState() => _YoutubeSearchPageState();
@@ -205,6 +207,9 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
           child: YoutubeRecipeSearchView(
             controller: _controller,
             enabled: widget.enabled,
+            initialQuery: widget.initialQuery,
+            autoSearchInitialQuery:
+                (widget.initialQuery ?? '').trim().length >= 2,
             onOpenUrl: _openYoutubeUrl,
             onCreateRecipe: (item) => _createRecipeFromYoutube(
               title: item.title,

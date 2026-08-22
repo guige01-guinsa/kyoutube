@@ -228,6 +228,21 @@ class _IngredientSearchResultsPageState
                                               },
                                               child: const Text('장보기 준비'),
                                             ),
+                                            OutlinedButton.icon(
+                                              onPressed: () {
+                                                final query =
+                                                    Uri.encodeQueryComponent(
+                                                  widget.ingredients.join(' '),
+                                                );
+
+                                                context
+                                                    .push('/youtube?q=$query');
+                                              },
+                                              icon: const Icon(
+                                                Icons.ondemand_video_outlined,
+                                              ),
+                                              label: const Text('3분 영상'),
+                                            ),
                                           ],
                                         ),
                                       ],
