@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../ingredient_search/domain/shopping_plan.dart';
+
 import '../../recipes/application/recipe_providers.dart';
 import '../../recipes/domain/recipe.dart';
 import '../../recipes/domain/recipe_source_reference.dart';
@@ -33,29 +35,29 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
   bool _popping = false;
 
   String? _error;
-
-  final Map<String, TextEditingController> _nameControllers =
-      <String, TextEditingController>{};
-  final Map<String, TextEditingController> _quantityControllers =
-      <String, TextEditingController>{};
-
   RecipeSourceReference get _source =>
       RecipeSourceReference.parse(widget.sourceRecipeReference);
 
   @override
   void dispose() {
     _saveTimer?.cancel();
-
-    for (final TextEditingController controller in _nameControllers.values) {
-      controller.dispose();
-    }
-
-    for (final TextEditingController controller
-        in _quantityControllers.values) {
-      controller.dispose();
-    }
-
     super.dispose();
+  }
+
+  Future<List<String>> _loadAvailableIngredientNames() async {
+    try {
+      final ingredients =
+          await ref.read(kitchenApiProvider).listIngredients(query: '');
+
+      return ingredients
+          .map((ingredient) => ingredient.name.trim())
+          .where((name) => name.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      // 보유 재료 조회 실패가 장보기 기능 전체 실패로 이어지면 안 됩니다.
+      // 실패 시 전체 재료를 기본 선택 상태로 보여주고 사용자가 직접 제외합니다.
+      return const <String>[];
+    }
   }
 
   Future<void> _loadDraft(Recipe recipe) async {
@@ -69,13 +71,20 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       final ShoppingReviewDraftController controller =
           await ref.read(shoppingReviewDraftControllerProvider.future);
 
+      final availableIngredients = await _loadAvailableIngredientNames();
+
+      final plan = ShoppingPlanBuilder.build(
+        recipeIngredients: recipe.ingredients,
+        availableIngredients: availableIngredients,
+      );
+
       final ShoppingReviewDraft loadedDraft = await controller.getOrCreate(
         sourceRecipeId: _source.value,
         initialItems: List<ShoppingReviewDraftItem>.generate(
-          recipe.ingredients.length,
+          plan.items.length,
           (int index) => _createInitialDraftItem(
             index,
-            recipe.ingredients[index],
+            plan.items[index],
           ),
         ),
       );
@@ -94,13 +103,6 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       if (!mounted) {
         return;
       }
-
-      for (final ShoppingReviewDraftItem item in draft.items) {
-        _nameControllers[item.localId] = TextEditingController(text: item.name);
-        _quantityControllers[item.localId] =
-            TextEditingController(text: item.quantityInput);
-      }
-
       setState(() {
         _draftController = controller;
         _draft = draft;
@@ -120,15 +122,16 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
 
   ShoppingReviewDraftItem _createInitialDraftItem(
     int index,
-    String rawIngredientText,
+    ShoppingPlanItem planItem,
   ) {
     return ShoppingReviewDraftItem(
       localId: 'ingredient-$index',
-      ingredientText: rawIngredientText,
-      name: _guessIngredientName(rawIngredientText),
+      ingredientText: planItem.rawIngredientText,
+      name: planItem.normalizedName,
       quantityInput: '',
       quantity: null,
       unit: null,
+      selected: planItem.selected,
     );
   }
 
@@ -156,6 +159,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
         quantityInput: item.quantityInput,
         quantity: item.quantity,
         unit: item.unit,
+        selected: item.selected,
       );
     }).toList(growable: false);
 
@@ -346,6 +350,9 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       return;
     }
 
+    final selectedItems =
+        draft.items.where((item) => item.selected).toList(growable: false);
+
     setState(() {
       _submitting = true;
       _error = null;
@@ -362,7 +369,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       final result = await ref.read(kitchenApiProvider).createShoppingList(
             sourceRecipeId: draft.sourceRecipeId,
             recipeTitle: recipe.title,
-            items: draft.items,
+            items: selectedItems,
             idempotencyKey: draft.createIdempotencyKey,
           );
 
@@ -491,7 +498,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: draft.items.length,
               itemBuilder: (BuildContext context, int index) {
-                return _itemEditor(context, index, draft.items[index]);
+                return _itemTile(index, draft.items[index]);
               },
             ),
           ),
@@ -517,145 +524,41 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
     );
   }
 
-  Widget _itemEditor(
-    BuildContext context,
+  Widget _itemTile(
     int index,
     ShoppingReviewDraftItem item,
   ) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    '원문: ${item.ingredientText}',
-                    semanticsLabel: '읽기 전용 원문 재료 ${item.ingredientText}',
-                  ),
-                ),
-                IconButton(
-                  onPressed: _draft!.items.length <= 1
-                      ? null
-                      : () {
-                          _nameControllers.remove(item.localId)?.dispose();
-                          _quantityControllers.remove(item.localId)?.dispose();
-
-                          final List<ShoppingReviewDraftItem> items =
-                              List<ShoppingReviewDraftItem>.from(_draft!.items)
-                                ..removeAt(index);
-
-                          setState(() {
-                            _draft = _replaceItems(items);
-                          });
-
-                          _scheduleSave();
-                        },
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: '재료 제거',
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _nameControllers[item.localId],
-              decoration: const InputDecoration(
-                labelText: '검토한 재료 이름',
-                helperText: '필수',
-              ),
-              textInputAction: TextInputAction.next,
-              onChanged: (String value) {
+      child: CheckboxListTile(
+        value: item.selected,
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 4,
+        ),
+        title: Text(
+          item.ingredientText,
+          semanticsLabel: '레시피 재료 ${item.ingredientText}',
+        ),
+        subtitle: Text(
+          item.selected ? '장보기 목록에 포함됨' : '보유 중이거나 장보기에서 제외됨',
+        ),
+        onChanged: _submitting
+            ? null
+            : (bool? selected) {
                 _updateItem(
                   index,
                   ShoppingReviewDraftItem(
                     localId: item.localId,
                     ingredientText: item.ingredientText,
-                    name: value,
+                    name: item.name,
                     quantityInput: item.quantityInput,
                     quantity: item.quantity,
                     unit: item.unit,
+                    selected: selected ?? false,
                   ),
                 );
               },
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _quantityControllers[item.localId],
-                    decoration: const InputDecoration(
-                      labelText: '수량',
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textInputAction: TextInputAction.next,
-                    onChanged: (String value) {
-                      _updateItem(
-                        index,
-                        ShoppingReviewDraftItem(
-                          localId: item.localId,
-                          ingredientText: item.ingredientText,
-                          name: item.name,
-                          quantityInput: value,
-                          quantity: double.tryParse(value.trim()),
-                          unit: item.unit,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: item.unit,
-                    decoration: const InputDecoration(
-                      labelText: '단위',
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem<String>(
-                        value: 'g',
-                        child: Text('g'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'kg',
-                        child: Text('kg'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'ml',
-                        child: Text('ml'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'l',
-                        child: Text('L'),
-                      ),
-                      DropdownMenuItem<String>(
-                        value: 'ea',
-                        child: Text('개'),
-                      ),
-                    ],
-                    onChanged: (String? value) {
-                      _updateItem(
-                        index,
-                        ShoppingReviewDraftItem(
-                          localId: item.localId,
-                          ingredientText: item.ingredientText,
-                          name: item.name,
-                          quantityInput: item.quantityInput,
-                          quantity: item.quantity,
-                          unit: value,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
