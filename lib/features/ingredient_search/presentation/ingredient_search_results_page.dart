@@ -191,6 +191,13 @@ class _IngredientSearchResultsPageState
                                               ? '보유 재료 일치 ${item.count}/${widget.ingredients.length}'
                                               : '보유 재료 일치 ${item.count}/${widget.ingredients.length} · 재료 $missing개 부족',
                                         ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '수량은 레시피 상세에서 확인하세요.',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
                                         const SizedBox(height: 6),
                                         Wrap(
                                           spacing: 4,
