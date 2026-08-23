@@ -570,6 +570,17 @@ class KitchenApi {
         message: 'Idempotency key is invalid.',
       );
     }
+
+    final selectedItems =
+        items.where((item) => item.selected).toList(growable: false);
+
+    if (selectedItems.isEmpty) {
+      throw const KitchenApiException(
+        kind: KitchenApiErrorKind.badRequest,
+        statusCode: 400,
+        message: 'Select at least one shopping item.',
+      );
+    }
     final data = await _request(
       method: 'POST',
       query: const <String, String>{'action': 'create-shopping-from-recipe'},
@@ -578,7 +589,7 @@ class KitchenApi {
         'source_recipe_id': sourceRecipeId,
         if (recipeTitle != null && recipeTitle.trim().isNotEmpty)
           'recipe_title': recipeTitle.trim(),
-        'items': items
+        'items': selectedItems
             .map((item) => <String, dynamic>{
                   'name': item.name.trim(),
                   'ingredient_text': item.ingredientText,

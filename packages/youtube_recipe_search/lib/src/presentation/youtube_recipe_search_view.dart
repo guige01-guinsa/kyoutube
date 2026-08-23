@@ -19,6 +19,8 @@ class YoutubeRecipeSearchView extends StatefulWidget {
     required this.onOpenUrl,
     this.onCreateRecipe,
     this.enabled = true,
+    this.initialQuery,
+    this.autoSearchInitialQuery = false,
     this.debounce = const Duration(milliseconds: 700),
   });
 
@@ -26,6 +28,8 @@ class YoutubeRecipeSearchView extends StatefulWidget {
   final YoutubeUrlOpener onOpenUrl;
   final YoutubeRecipeCreator? onCreateRecipe;
   final bool enabled;
+  final String? initialQuery;
+  final bool autoSearchInitialQuery;
   final Duration debounce;
 
   @override
@@ -41,6 +45,25 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
   String? _error;
   String? _creatingRecipeVideoId;
   bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final initial = widget.initialQuery?.trim() ?? '';
+
+    if (initial.isNotEmpty) {
+      _text.text = initial;
+    }
+
+    if (widget.autoSearchInitialQuery && initial.length >= 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _search();
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {

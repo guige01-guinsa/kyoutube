@@ -190,4 +190,88 @@ void main() {
     expect(body.containsKey('owner_id'), isFalse);
     expect((body['items'] as List).single.containsKey('revision'), isFalse);
   });
+
+  test('create sends selected shopping items only', () async {
+    final client = _FakeClient((request) async => _ok(<String, dynamic>{
+          'list_id': 'list-1',
+          'status': 'active',
+          'created': true,
+          'replayed': false,
+          'idempotency_key': '550e8400-e29b-41d4-a716-446655440000',
+        }));
+
+    final api =
+        KitchenApi(httpClient: client, accessTokenProvider: () async => 'jwt');
+
+    await api.createShoppingList(
+      sourceRecipeId: 'public:recipe-1',
+      idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+      items: const <ShoppingReviewDraftItem>[
+        ShoppingReviewDraftItem(
+          localId: 'selected-item',
+          ingredientText: '감자 2개',
+          name: '감자',
+          quantityInput: '',
+          quantity: null,
+          unit: null,
+          selected: true,
+        ),
+        ShoppingReviewDraftItem(
+          localId: 'available-item',
+          ingredientText: '고추장 1큰술',
+          name: '고추장',
+          quantityInput: '',
+          quantity: null,
+          unit: null,
+          selected: false,
+        ),
+      ],
+    );
+
+    final body = jsonDecode((client.lastRequest! as http.Request).body)
+        as Map<String, dynamic>;
+
+    expect(body['items'], <Map<String, dynamic>>[
+      <String, dynamic>{
+        'name': '감자',
+        'ingredient_text': '감자 2개',
+        'quantity': null,
+        'unit': null,
+      },
+    ]);
+  });
+
+  test('create rejects a draft with no selected shopping items', () async {
+    final client = _FakeClient((request) async => _ok(<String, dynamic>{}));
+
+    final api =
+        KitchenApi(httpClient: client, accessTokenProvider: () async => 'jwt');
+
+    await expectLater(
+      api.createShoppingList(
+        sourceRecipeId: 'public:recipe-1',
+        idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+        items: const <ShoppingReviewDraftItem>[
+          ShoppingReviewDraftItem(
+            localId: 'available-item',
+            ingredientText: '고추장 1큰술',
+            name: '고추장',
+            quantityInput: '',
+            quantity: null,
+            unit: null,
+            selected: false,
+          ),
+        ],
+      ),
+      throwsA(
+        isA<KitchenApiException>().having(
+          (error) => error.kind,
+          'kind',
+          KitchenApiErrorKind.badRequest,
+        ),
+      ),
+    );
+
+    expect(client.lastRequest, isNull);
+  });
 }
