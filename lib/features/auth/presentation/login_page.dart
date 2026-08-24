@@ -82,6 +82,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final launched = await auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: oauthRedirectUri,
+        queryParams: googleOAuthQueryParams,
       );
 
       if (!mounted) {
@@ -132,10 +133,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       final auth = ref.read(authClientProvider);
 
-      await auth.resetPasswordForEmail(
-        email,
-        redirectTo: oauthRedirectUri,
-      );
+      await auth.resetPasswordForEmail(email, redirectTo: oauthRedirectUri);
 
       if (!mounted) {
         return;
@@ -242,9 +240,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isSignUp ? '회원가입' : '로그인'),
-      ),
+      appBar: AppBar(title: Text(_isSignUp ? '회원가입' : '로그인')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
@@ -256,8 +252,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 20 + MediaQuery.of(context).viewInsets.bottom,
               ),
               child: ConstrainedBox(
-                constraints:
-                    BoxConstraints(minHeight: constraints.maxHeight - 40),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 40,
+                ),
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
@@ -304,9 +301,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             autocorrect: false,
-                            decoration: const InputDecoration(
-                              labelText: '이메일',
-                            ),
+                            decoration: const InputDecoration(labelText: '이메일'),
                             validator: (String? value) {
                               final email = value?.trim() ?? '';
 
@@ -328,11 +323,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             },
                             decoration: InputDecoration(
                               labelText: '비밀번호',
-                              helperText:
-                                  _isSignUp ? '8자 이상, 영문과 숫자를 포함해 주세요.' : null,
+                              helperText: _isSignUp
+                                  ? '8자 이상, 영문과 숫자를 포함해 주세요.'
+                                  : null,
                               suffixIcon: IconButton(
-                                tooltip:
-                                    _isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 보기',
+                                tooltip: _isPasswordVisible
+                                    ? '비밀번호 숨기기'
+                                    : '비밀번호 보기',
                                 onPressed: () {
                                   setState(() {
                                     _isPasswordVisible = !_isPasswordVisible;
@@ -402,8 +399,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           if (!_isSignUp) ...<Widget>[
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
-                              onPressed:
-                                  _isSubmitting ? null : _signInWithGoogle,
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : _signInWithGoogle,
                               icon: const Icon(Icons.login),
                               label: const Text('Google로 로그인'),
                             ),
@@ -456,10 +454,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           ),
                           if (_message != null) ...<Widget>[
                             const SizedBox(height: 12),
-                            Text(
-                              _message!,
-                              textAlign: TextAlign.center,
-                            ),
+                            Text(_message!, textAlign: TextAlign.center),
                           ],
                         ],
                       ),

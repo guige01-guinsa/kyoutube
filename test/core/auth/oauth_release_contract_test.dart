@@ -10,6 +10,9 @@ void main() {
     expect(uri.scheme, 'io.supabase.kyoutube');
     expect(uri.host, 'login-callback');
     expect(uri.path, isEmpty);
+    expect(googleOAuthQueryParams, const <String, String>{
+      'prompt': 'select_account',
+    });
   });
 
   test('AndroidManifest declares the OAuth callback intent filter', () {
@@ -17,25 +20,13 @@ void main() {
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();
 
-    expect(
-      manifest,
-      contains('android:scheme="io.supabase.kyoutube"'),
-    );
+    expect(manifest, contains('android:scheme="io.supabase.kyoutube"'));
 
-    expect(
-      manifest,
-      contains('android:host="login-callback"'),
-    );
+    expect(manifest, contains('android:host="login-callback"'));
 
-    expect(
-      manifest,
-      contains('android.intent.action.VIEW'),
-    );
+    expect(manifest, contains('android.intent.action.VIEW'));
 
-    expect(
-      manifest,
-      contains('android.intent.category.BROWSABLE'),
-    );
+    expect(manifest, contains('android.intent.category.BROWSABLE'));
   });
 
   test('LoginPage uses the shared redirect URI for OAuth and email signup', () {
@@ -44,6 +35,7 @@ void main() {
     ).readAsStringSync();
 
     expect(loginPage, contains('redirectTo: oauthRedirectUri'));
+    expect(loginPage, contains('queryParams: googleOAuthQueryParams'));
     expect(loginPage, contains('emailRedirectTo: oauthRedirectUri'));
   });
 
