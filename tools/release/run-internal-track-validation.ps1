@@ -21,6 +21,9 @@ param(
     [int]$PublicRecipeSyncSmokeSize = 1,
 
     [Parameter(Mandatory = $false)]
+    [switch]$EnableYoutubeSearch,
+
+    [Parameter(Mandatory = $false)]
     [switch]$SkipPublicRecipeSyncSmoke
 )
 
@@ -232,6 +235,10 @@ $buildArgs += "--dart-define=SUPABASE_URL_PRODUCTION=$SupabaseUrlProduction"
 $buildArgs += "--dart-define=SUPABASE_ANON_KEY_PRODUCTION=$SupabaseAnonKeyProduction"
 
 $buildArgs += "--dart-define=APP_ENV=production"
+
+if ($EnableYoutubeSearch.IsPresent) {
+    $buildArgs += "--dart-define=YOUTUBE_SEARCH_ENABLED=true"
+}
 
 & $FlutterPath @buildArgs
 if ($LASTEXITCODE -ne 0) {

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/oauth_redirect.dart';
+
 import '../application/auth_providers.dart';
 import '../application/password_policy.dart';
 import 'widgets/password_strength_panel.dart';
@@ -15,9 +17,6 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  static const String _oauthRedirectTo =
-      'io.supabase.kyoutube://login-callback';
-
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -82,7 +81,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
       final launched = await auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: _oauthRedirectTo,
+        redirectTo: oauthRedirectUri,
       );
 
       if (!mounted) {
@@ -135,7 +134,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
       await auth.resetPasswordForEmail(
         email,
-        redirectTo: _oauthRedirectTo,
+        redirectTo: oauthRedirectUri,
       );
 
       if (!mounted) {
@@ -185,6 +184,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         final response = await auth.signUp(
           email: email,
           password: password,
+          emailRedirectTo: oauthRedirectUri,
         );
 
         if (!mounted) {

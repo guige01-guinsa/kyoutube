@@ -26,6 +26,11 @@ on:
         options:
           - windows-latest
           - ubuntu-latest
+      youtubeSearchEnabled:
+        description: "Enable authenticated YouTube recipe search in the release AAB"
+        type: boolean
+        required: false
+        default: true
       flutterVersion:
         description: "Pinned Flutter SDK version"
         type: string
@@ -132,6 +137,10 @@ jobs:
             "-PublicRecipeSyncWorkerSecret", $env:PUBLIC_RECIPE_SYNC_WORKER_SECRET,
             "-PublicRecipeSyncSmokeSize", "${{ inputs.publicRecipeSyncSmokeSize }}"
           )
+
+          if ("${{ inputs.youtubeSearchEnabled }}" -eq "true") {
+            $args += "-EnableYoutubeSearch"
+          }
 
           if ($IsWindows) {
             $args = @("-ExecutionPolicy", "Bypass") + $args
