@@ -34,6 +34,9 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
       await Supabase.initialize(
         url: Env.supabaseUrl,
         publishableKey: Env.supabaseAnonKey,
+        authOptions: FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
       );
 
       // Firebase/FCM은 부가 기능이다.

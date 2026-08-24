@@ -185,6 +185,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         final response = await auth.signUp(
           email: email,
           password: password,
+          emailRedirectTo: _oauthRedirectTo,
         );
 
         if (!mounted) {
