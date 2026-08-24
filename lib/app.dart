@@ -34,7 +34,7 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
       await Supabase.initialize(
         url: Env.supabaseUrl,
         publishableKey: Env.supabaseAnonKey,
-        authOptions: FlutterAuthClientOptions(
+        authOptions: const FlutterAuthClientOptions(
           authFlowType: AuthFlowType.pkce,
         ),
       );
