@@ -10,26 +10,37 @@ void main() {
     expect(uri.scheme, 'io.supabase.kyoutube');
     expect(uri.host, 'login-callback');
     expect(uri.path, isEmpty);
-    expect(googleOAuthQueryParams, const <String, String>{
-      'prompt': 'select_account',
-    });
+    expect(
+      googleOAuthQueryParams,
+      const <String, String>{'prompt': 'select_account'},
+    );
   });
 
-  test('AndroidManifest declares the OAuth callback intent filter', () {
+  test('AndroidManifest delegates OAuth deep links to app_links', () {
     final manifest = File(
       'android/app/src/main/AndroidManifest.xml',
     ).readAsStringSync();
 
-    expect(manifest, contains('android:scheme="io.supabase.kyoutube"'));
-
-    expect(manifest, contains('android:host="login-callback"'));
-
-    expect(manifest, contains('android.intent.action.VIEW'));
-
-    expect(manifest, contains('android.intent.category.BROWSABLE'));
+    expect(
+      manifest,
+      contains('android:scheme="io.supabase.kyoutube"'),
+    );
+    expect(
+      manifest,
+      contains('android:host="login-callback"'),
+    );
+    expect(
+      manifest,
+      contains('android.intent.category.BROWSABLE'),
+    );
+    expect(
+      manifest,
+      contains('android:name="flutter_deeplinking_enabled"'),
+    );
+    expect(manifest, contains('android:value="false"'));
   });
 
-  test('LoginPage uses the shared redirect URI for OAuth and email signup', () {
+  test('LoginPage uses the shared OAuth redirect URI', () {
     final loginPage = File(
       'lib/features/auth/presentation/login_page.dart',
     ).readAsStringSync();
@@ -39,9 +50,11 @@ void main() {
     expect(loginPage, contains('emailRedirectTo: oauthRedirectUri'));
   });
 
-  test('release bootstrap explicitly configures PKCE auth flow', () {
+  test('release bootstrap delegates OAuth callback handling explicitly', () {
     final app = File('lib/app.dart').readAsStringSync();
 
     expect(app, contains('authFlowType: AuthFlowType.pkce'));
+    expect(app, contains('detectSessionInUri: false'));
+    expect(app, contains('OAuthDeepLinkService'));
   });
 }
