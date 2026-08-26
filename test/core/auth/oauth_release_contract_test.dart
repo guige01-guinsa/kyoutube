@@ -44,6 +44,10 @@ void main() {
 
     expect(loginPage, contains('redirectTo: oauthRedirectUri'));
     expect(loginPage, contains('queryParams: googleOAuthQueryParams'));
+    expect(
+      loginPage,
+      contains('authScreenLaunchMode: LaunchMode.externalApplication'),
+    );
     expect(loginPage, contains('emailRedirectTo: oauthRedirectUri'));
   });
 
