@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/auth/oauth_deep_link_service.dart';
 import 'core/config/env.dart';
 import 'core/debug/runtime_diagnostics_overlay.dart';
 import 'core/firebase/firebase_bootstrap.dart';
@@ -20,6 +21,7 @@ class KYoutubeBootstrapApp extends StatefulWidget {
 
 class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
   late Future<void> _initialization;
+  OAuthDeepLinkService? _oauthDeepLinkService;
 
   @override
   void initState() {
@@ -36,8 +38,12 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
         publishableKey: Env.supabaseAnonKey,
         authOptions: const FlutterAuthClientOptions(
           authFlowType: AuthFlowType.pkce,
+          detectSessionInUri: false,
         ),
       );
+
+      _oauthDeepLinkService ??= OAuthDeepLinkService();
+      await _oauthDeepLinkService!.start();
 
       // Firebase/FCM은 부가 기능이다.
       // 초기화 실패가 핵심 앱 기능의 시작을 막으면 안 된다.
@@ -64,6 +70,12 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
       );
       rethrow;
     }
+  }
+
+  @override
+  void dispose() {
+    _oauthDeepLinkService?.dispose();
+    super.dispose();
   }
 
   void _retry() {
