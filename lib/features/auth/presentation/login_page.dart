@@ -83,6 +83,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         OAuthProvider.google,
         redirectTo: oauthRedirectUri,
         queryParams: googleOAuthQueryParams,
+        authScreenLaunchMode: LaunchMode.externalApplication,
       );
 
       if (!mounted) {
@@ -323,13 +324,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             },
                             decoration: InputDecoration(
                               labelText: '비밀번호',
-                              helperText: _isSignUp
-                                  ? '8자 이상, 영문과 숫자를 포함해 주세요.'
-                                  : null,
+                              helperText:
+                                  _isSignUp ? '8자 이상, 영문과 숫자를 포함해 주세요.' : null,
                               suffixIcon: IconButton(
-                                tooltip: _isPasswordVisible
-                                    ? '비밀번호 숨기기'
-                                    : '비밀번호 보기',
+                                tooltip:
+                                    _isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 보기',
                                 onPressed: () {
                                   setState(() {
                                     _isPasswordVisible = !_isPasswordVisible;
@@ -399,9 +398,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           if (!_isSignUp) ...<Widget>[
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
-                              onPressed: _isSubmitting
-                                  ? null
-                                  : _signInWithGoogle,
+                              onPressed:
+                                  _isSubmitting ? null : _signInWithGoogle,
                               icon: const Icon(Icons.login),
                               label: const Text('Google로 로그인'),
                             ),
