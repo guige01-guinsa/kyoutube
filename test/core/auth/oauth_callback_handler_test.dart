@@ -4,7 +4,7 @@ import 'package:k_youtube/core/auth/oauth_callback_handler.dart';
 void main() {
   test('ignores non OAuth deep links', () async {
     final handler = OAuthCallbackHandler(
-      exchangeCode: (_) async {},
+      exchangeSessionFromUri: (_) async => null,
     );
 
     final result = await handler.handle(
@@ -16,7 +16,7 @@ void main() {
 
   test('reports missing OAuth authorization code', () async {
     final handler = OAuthCallbackHandler(
-      exchangeCode: (_) async {},
+      exchangeSessionFromUri: (_) async => null,
     );
 
     final result = await handler.handle(
@@ -26,19 +26,18 @@ void main() {
     expect(result.outcome, OAuthCallbackOutcome.missingCode);
   });
 
-  test('reports provider callback error without exchanging code', () async {
+  test('reports provider callback error without session exchange', () async {
     var exchanges = 0;
 
     final handler = OAuthCallbackHandler(
-      exchangeCode: (_) async {
+      exchangeSessionFromUri: (_) async {
         exchanges += 1;
+        return null;
       },
     );
 
     final result = await handler.handle(
-      Uri.parse(
-        'io.supabase.kyoutube://login-callback?error=access_denied',
-      ),
+      Uri.parse('io.supabase.kyoutube://login-callback?error=access_denied'),
     );
 
     expect(result.outcome, OAuthCallbackOutcome.providerError);
@@ -46,41 +45,48 @@ void main() {
     expect(exchanges, 0);
   });
 
-  test('exchanges each OAuth authorization code once', () async {
-    final handledCodes = <String>[];
-
+  test('returns recovery redirect type from recovery-aware exchange', () async {
     final handler = OAuthCallbackHandler(
-      exchangeCode: (String code) async {
-        handledCodes.add(code);
-      },
-    );
-
-    final uri = Uri.parse(
-      'io.supabase.kyoutube://login-callback?code=one-time-code',
-    );
-
-    final first = await handler.handle(uri);
-    final duplicate = await handler.handle(uri);
-
-    expect(first.outcome, OAuthCallbackOutcome.exchanged);
-    expect(duplicate.outcome, OAuthCallbackOutcome.duplicate);
-    expect(handledCodes, <String>['one-time-code']);
-  });
-
-  test('reports authorization code exchange failure', () async {
-    final handler = OAuthCallbackHandler(
-      exchangeCode: (_) async {
-        throw StateError('exchange failed');
-      },
+      exchangeSessionFromUri: (_) async => 'passwordRecovery',
     );
 
     final result = await handler.handle(
-      Uri.parse(
-        'io.supabase.kyoutube://login-callback?code=failing-code',
-      ),
+      Uri.parse('io.supabase.kyoutube://login-callback?code=recovery-code'),
     );
 
-    expect(result.outcome, OAuthCallbackOutcome.exchangeFailed);
-    expect(result.error, isA<StateError>());
+    expect(result.outcome, OAuthCallbackOutcome.exchanged);
+    expect(result.redirectType, 'passwordRecovery');
   });
+
+  test(
+    'deduplicates successful callback but retries failed callback',
+    () async {
+      var attempts = 0;
+
+      final handler = OAuthCallbackHandler(
+        exchangeSessionFromUri: (_) async {
+          attempts += 1;
+
+          if (attempts == 1) {
+            throw StateError('temporary exchange failure');
+          }
+
+          return null;
+        },
+      );
+
+      final uri = Uri.parse(
+        'io.supabase.kyoutube://login-callback?code=retry-code',
+      );
+
+      final first = await handler.handle(uri);
+      final retry = await handler.handle(uri);
+      final duplicate = await handler.handle(uri);
+
+      expect(first.outcome, OAuthCallbackOutcome.exchangeFailed);
+      expect(retry.outcome, OAuthCallbackOutcome.exchanged);
+      expect(duplicate.outcome, OAuthCallbackOutcome.duplicate);
+      expect(attempts, 2);
+    },
+  );
 }
