@@ -9,6 +9,7 @@ import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
 import 'create_creator_recipe_page.dart';
 import 'recipe_enrichment_page.dart';
+import 'youtube_recipe_enrichment_page.dart';
 
 class CreatorRecipeDetailPage extends ConsumerWidget {
   const CreatorRecipeDetailPage({
@@ -175,7 +176,9 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
                 final createdRecipeId =
                     await Navigator.of(context).push<Object?>(
                   MaterialPageRoute<Object?>(
-                    builder: (_) => RecipeEnrichmentPage(recipe: recipe),
+                    builder: (_) => recipe.sourceType == 'youtube_import'
+                        ? YoutubeRecipeEnrichmentPage(recipe: recipe)
+                        : RecipeEnrichmentPage(recipe: recipe),
                   ),
                 );
 
