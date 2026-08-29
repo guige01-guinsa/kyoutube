@@ -1,6 +1,14 @@
 name: Deploy Supabase Functions
 
 on:
+  push:
+    branches:
+      - release/version-1.0.0-14
+    paths:
+      - supabase/functions/youtube_recipe_context/**
+      - supabase/functions/ai_youtube_recipe_assistant/**
+      - supabase/config.toml
+      - .github/workflows/deploy-public-recipe-sync.yml
   workflow_dispatch:
     inputs:
       target:
@@ -48,11 +56,11 @@ jobs:
         run: supabase functions deploy public_recipe_sync --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
 
       - name: Deploy selected-video context
-        if: ${{ inputs.target == 'youtube_recipe_enrichment' }}
+        if: ${{ github.event_name == 'push' || inputs.target == 'youtube_recipe_enrichment' }}
         shell: bash
         run: supabase functions deploy youtube_recipe_context --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Deploy selected-video AI assistant
-        if: ${{ inputs.target == 'youtube_recipe_enrichment' }}
+        if: ${{ github.event_name == 'push' || inputs.target == 'youtube_recipe_enrichment' }}
         shell: bash
         run: supabase functions deploy ai_youtube_recipe_assistant --project-ref "$SUPABASE_PROJECT_REF"
