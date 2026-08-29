@@ -21,6 +21,7 @@ type YoutubeEnrichmentRequest = {
 type HandlerOptions = {
   getEnv: (name: string) => string | undefined;
   fetchOpenAi?: typeof fetch;
+  logError?: (event: Record<string, unknown>) => void;
 };
 
 const corsHeaders = {
@@ -231,6 +232,7 @@ function prompt(input: YoutubeEnrichmentRequest): string {
 
 export function createYoutubeRecipeAssistantHandler(options: HandlerOptions) {
   const fetchOpenAi = options.fetchOpenAi ?? fetch;
+  const logError = options.logError ?? ((event) => console.error(event));
 
   return async (request: Request): Promise<Response> => {
     if (request.method === "OPTIONS") {
@@ -297,6 +299,54 @@ export function createYoutubeRecipeAssistantHandler(options: HandlerOptions) {
         },
       );
       if (!upstream.ok) {
+        const errorPayload = await upstream.json().catch(() => null);
+        const upstreamError = errorPayload?.error;
+        const upstreamCode = typeof upstreamError?.code === "string"
+          ? upstreamError.code
+          : null;
+        const upstreamType = typeof upstreamError?.type === "string"
+          ? upstreamError.type
+          : null;
+        const requestId = upstream.headers.get("x-request-id");
+
+        logError({
+          event: "openai_recipe_request_failed",
+          function: "ai_youtube_recipe_assistant",
+          status: upstream.status,
+          code: upstreamCode,
+          type: upstreamType,
+          requestId,
+          model,
+        });
+
+        if (upstream.status === 401 || upstream.status === 403) {
+          return jsonResponse({
+            status: "error",
+            code: "ai_upstream_auth_error",
+            message: "AI API 인증 설정을 확인해야 합니다.",
+          }, 502);
+        }
+        if (upstream.status === 429 && upstreamCode === "insufficient_quota") {
+          return jsonResponse({
+            status: "error",
+            code: "ai_upstream_quota_exceeded",
+            message: "AI API 사용 한도 또는 결제 설정을 확인해야 합니다.",
+          }, 502);
+        }
+        if (upstream.status === 429) {
+          return jsonResponse({
+            status: "error",
+            code: "ai_upstream_rate_limited",
+            message: "AI 요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+          }, 502);
+        }
+        if (upstream.status === 404 || upstreamCode === "model_not_found") {
+          return jsonResponse({
+            status: "error",
+            code: "ai_upstream_model_error",
+            message: "AI 모델 설정을 확인해야 합니다.",
+          }, 502);
+        }
         return jsonResponse({
           status: "error",
           code: "ai_upstream_error",
@@ -327,7 +377,13 @@ export function createYoutubeRecipeAssistantHandler(options: HandlerOptions) {
           }],
         },
       });
-    } catch (_) {
+    } catch (error) {
+      logError({
+        event: "openai_recipe_request_exception",
+        function: "ai_youtube_recipe_assistant",
+        errorType: error instanceof Error ? error.name : "unknown",
+        model,
+      });
       return jsonResponse({
         status: "error",
         code: "ai_request_failed",

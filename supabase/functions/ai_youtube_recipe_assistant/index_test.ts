@@ -162,3 +162,43 @@ Deno.test("cleans promotional text from the model recipe title", async () => {
   assertEquals(response.status, 200);
   assertEquals(body.data.title, "김치찌개");
 });
+
+Deno.test("reports and safely logs OpenAI quota errors", async () => {
+  const events: Array<Record<string, unknown>> = [];
+  const quotaHandler = createYoutubeRecipeAssistantHandler({
+    getEnv: (name) => name === "OPENAI_API_KEY" ? "test-key" : undefined,
+    fetchOpenAi: () => Promise.resolve(new Response(JSON.stringify({
+      error: { code: "insufficient_quota", type: "insufficient_quota" },
+    }), {
+      status: 429,
+      headers: { "x-request-id": "req-test" },
+    })),
+    logError: (event) => events.push(event),
+  });
+
+  const response = await quotaHandler(request(validBody));
+  const body = await response.json();
+  assertEquals(response.status, 502);
+  assertEquals(body.code, "ai_upstream_quota_exceeded");
+  assertEquals(body.message, "AI API 사용 한도 또는 결제 설정을 확인해야 합니다.");
+  assertEquals(events[0].status, 429);
+  assertEquals(events[0].code, "insufficient_quota");
+  assertEquals(events[0].requestId, "req-test");
+  assertEquals("apiKey" in events[0], false);
+});
+
+Deno.test("distinguishes OpenAI authentication errors", async () => {
+  const authHandler = createYoutubeRecipeAssistantHandler({
+    getEnv: (name) => name === "OPENAI_API_KEY" ? "test-key" : undefined,
+    fetchOpenAi: () => Promise.resolve(new Response(JSON.stringify({
+      error: { code: "invalid_api_key", type: "invalid_request_error" },
+    }), { status: 401 })),
+    logError: () => {},
+  });
+
+  const response = await authHandler(request(validBody));
+  const body = await response.json();
+  assertEquals(response.status, 502);
+  assertEquals(body.code, "ai_upstream_auth_error");
+  assertEquals(body.message, "AI API 인증 설정을 확인해야 합니다.");
+});
