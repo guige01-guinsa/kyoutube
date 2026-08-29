@@ -1,6 +1,9 @@
 name: Internal Track Release Guard
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       localVerification:
@@ -39,7 +42,8 @@ on:
 
 jobs:
   release_guard:
-    runs-on: ${{ inputs.runnerLabel }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build-aab]') }}
+    runs-on: ${{ inputs.runnerLabel || 'windows-latest' }}
     env:
       SUPABASE_URL_PRODUCTION: ${{ secrets.SUPABASE_URL_PRODUCTION }}
       SUPABASE_ANON_KEY_PRODUCTION: ${{ secrets.SUPABASE_ANON_KEY_PRODUCTION }}
@@ -63,7 +67,7 @@ jobs:
         uses: subosito/flutter-action@v2
         timeout-minutes: 15
         with:
-          flutter-version: ${{ inputs.flutterVersion }}
+          flutter-version: ${{ inputs.flutterVersion || '3.44.8' }}
           cache: true
 
       - name: Guardrail A - Block LocalVerification in CI
@@ -135,10 +139,10 @@ jobs:
             "-SupabaseAnonKeyProduction", $env:SUPABASE_ANON_KEY_PRODUCTION,
             "-PublicRecipeSyncFunctionUrl", $env:PUBLIC_RECIPE_SYNC_FUNCTION_URL,
             "-PublicRecipeSyncWorkerSecret", $env:PUBLIC_RECIPE_SYNC_WORKER_SECRET,
-            "-PublicRecipeSyncSmokeSize", "${{ inputs.publicRecipeSyncSmokeSize }}"
+            "-PublicRecipeSyncSmokeSize", "${{ inputs.publicRecipeSyncSmokeSize || 1 }}"
           )
 
-          if ("${{ inputs.youtubeSearchEnabled }}" -eq "true") {
+          if ("${{ github.event_name == 'push' || inputs.youtubeSearchEnabled }}" -eq "true") {
             $args += "-EnableYoutubeSearch"
           }
 
