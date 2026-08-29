@@ -62,6 +62,16 @@ Deno.test("accepts a selectedVideo-only request", async () => {
   assertEquals((await response.json()).status, "ok");
 });
 
+Deno.test("accepts a legacy request without durationSec", async () => {
+  const legacyVideo = { ...validBody.selectedVideo } as Record<string, unknown>;
+  delete legacyVideo.durationSec;
+  const response = await handler(request({
+    ...validBody,
+    selectedVideo: legacyVideo,
+  }));
+  assertEquals(response.status, 200);
+});
+
 Deno.test("rejects public recipe references", async () => {
   const response = await handler(request({ ...validBody, references: [] }));
   assertEquals(response.status, 400);

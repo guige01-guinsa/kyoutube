@@ -5,7 +5,7 @@ export type SelectedVideo = {
   inferredRecipeTitle: string;
   channelName: string;
   description: string;
-  durationSec: number;
+  durationSec: number | null;
 };
 
 type YoutubeRecipeInput = {
@@ -140,7 +140,7 @@ function normalizeRequest(value: unknown): YoutubeEnrichmentRequest | null {
     description: text(selectedSource.description, 6000),
     durationSec: typeof selectedSource.durationSec === "number"
       ? selectedSource.durationSec
-      : 0,
+      : null,
   };
 
   if (
@@ -150,8 +150,9 @@ function normalizeRequest(value: unknown): YoutubeEnrichmentRequest | null {
   ) return null;
   if ([...selectedVideo.inferredRecipeTitle].length > 10) return null;
   if (
-    !Number.isInteger(selectedVideo.durationSec) ||
-    selectedVideo.durationSec < 1 || selectedVideo.durationSec > 180
+    selectedVideo.durationSec != null &&
+    (!Number.isInteger(selectedVideo.durationSec) ||
+      selectedVideo.durationSec < 1 || selectedVideo.durationSec > 180)
   ) return null;
   if (
     /(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|황금레시피)/.test(
