@@ -1,7 +1,16 @@
-name: Deploy Public Recipe Sync
+name: Deploy Supabase Functions
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Function group to deploy
+        type: choice
+        required: true
+        default: public_recipe_sync
+        options:
+          - public_recipe_sync
+          - youtube_recipe_enrichment
 
 jobs:
   deploy:
@@ -22,12 +31,28 @@ jobs:
         shell: bash
         run: |
           test -n "$SUPABASE_ACCESS_TOKEN" || { echo "Missing SUPABASE_ACCESS_TOKEN repository secret."; exit 1; }
+      - name: Validate public recipe sync secret
+        if: ${{ inputs.target == 'public_recipe_sync' }}
+        shell: bash
+        run: |
           test -n "$PUBLIC_RECIPE_SYNC_WORKER_SECRET" || { echo "Missing PUBLIC_RECIPE_SYNC_WORKER_SECRET repository secret."; exit 1; }
 
       - name: Configure worker secret
+        if: ${{ inputs.target == 'public_recipe_sync' }}
         shell: bash
         run: supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" "PUBLIC_RECIPE_SYNC_WORKER_SECRET=$PUBLIC_RECIPE_SYNC_WORKER_SECRET"
 
-      - name: Deploy function
+      - name: Deploy public recipe sync
+        if: ${{ inputs.target == 'public_recipe_sync' }}
         shell: bash
         run: supabase functions deploy public_recipe_sync --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt
+
+      - name: Deploy selected-video context
+        if: ${{ inputs.target == 'youtube_recipe_enrichment' }}
+        shell: bash
+        run: supabase functions deploy youtube_recipe_context --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Deploy selected-video AI assistant
+        if: ${{ inputs.target == 'youtube_recipe_enrichment' }}
+        shell: bash
+        run: supabase functions deploy ai_youtube_recipe_assistant --project-ref "$SUPABASE_PROJECT_REF"
