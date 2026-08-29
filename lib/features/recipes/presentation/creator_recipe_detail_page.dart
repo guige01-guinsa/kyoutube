@@ -8,7 +8,6 @@ import '../application/recipe_providers.dart';
 import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
 import 'create_creator_recipe_page.dart';
-import 'recipe_enrichment_page.dart';
 import 'youtube_recipe_enrichment_page.dart';
 
 class CreatorRecipeDetailPage extends ConsumerWidget {
@@ -171,31 +170,31 @@ class CreatorRecipeDetailPage extends ConsumerWidget {
             ),
           ],
           primaryActions: <Widget>[
-            OutlinedButton.icon(
-              onPressed: () async {
-                final createdRecipeId =
-                    await Navigator.of(context).push<Object?>(
-                  MaterialPageRoute<Object?>(
-                    builder: (_) => recipe.sourceType == 'youtube_import'
-                        ? YoutubeRecipeEnrichmentPage(recipe: recipe)
-                        : RecipeEnrichmentPage(recipe: recipe),
-                  ),
-                );
-
-                if (createdRecipeId is String &&
-                    createdRecipeId.trim().isNotEmpty &&
-                    context.mounted) {
-                  ref.invalidate(creatorRecipesProvider);
-                  ref.invalidate(myUnifiedRecipesProvider);
-
-                  context.go(
-                    '/creator/',
+            if ((recipe.youtubeUrl ?? '').trim().isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final createdRecipeId =
+                      await Navigator.of(context).push<Object?>(
+                    MaterialPageRoute<Object?>(
+                      builder: (_) =>
+                          YoutubeRecipeEnrichmentPage(recipe: recipe),
+                    ),
                   );
-                }
-              },
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('AI로 레시피 보강'),
-            ),
+
+                  if (createdRecipeId is String &&
+                      createdRecipeId.trim().isNotEmpty &&
+                      context.mounted) {
+                    ref.invalidate(creatorRecipesProvider);
+                    ref.invalidate(myUnifiedRecipesProvider);
+
+                    context.go(
+                      '/creator/',
+                    );
+                  }
+                },
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('AI로 레시피 보강'),
+              ),
             FilledButton.icon(
               onPressed: () => _goShoppingReview(context, recipe),
               icon: const Icon(Icons.shopping_cart_outlined),
