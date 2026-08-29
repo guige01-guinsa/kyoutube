@@ -3,7 +3,7 @@ name: Deploy Supabase Functions
 on:
   push:
     branches:
-      - release/version-1.0.0-14
+      - main
     paths:
       - supabase/functions/youtube_recipe_context/**
       - supabase/functions/ai_youtube_recipe_assistant/**
