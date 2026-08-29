@@ -116,6 +116,10 @@ class KitchenShoppingItem {
   /// Legacy UI compatibility; new state transitions must use [status].
   bool get isPurchased => status == KitchenShoppingItemStatus.purchased;
 
+  /// 장보기에서 사용자가 수량과 단위를 보완해야 하는지 여부입니다.
+  bool get needsIngredientInfo =>
+      quantity == null || (unit ?? '').trim().isEmpty;
+
   factory KitchenShoppingItem.fromJson(Map<String, dynamic> json) {
     if (json['id'] is! String ||
         (json['id'] as String).trim().isEmpty ||
