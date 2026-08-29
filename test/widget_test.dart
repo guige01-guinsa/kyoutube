@@ -414,13 +414,13 @@ void main() {
     await tester.tap(find.text('AI로 레시피 보강'));
     await tester.pumpAndSettle();
 
-    expect(find.text('영상으로 AI 레시피 보강'), findsOneWidget);
-    expect(find.textContaining('공공 레시피나 다른 영상은 참조하지 않습니다.'),
+    expect(find.text('AI 레시피 초안 만들기'), findsOneWidget);
+    expect(find.textContaining('공공 레시피나 다른 영상은 검색하지 않습니다.'),
         findsOneWidget);
     expect(repository.publicSearchCalls, 0);
   });
 
-  testWidgets('non-youtube creator recipe keeps public enrichment page',
+  testWidgets('non-youtube creator recipe does not offer public enrichment',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -433,19 +433,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('AI로 레시피 보강'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.text('AI로 레시피 보강'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('AI로 레시피 보강'), findsOneWidget);
-    expect(
-      find.textContaining('유사한 공공 레시피를 선택하면'),
-      findsOneWidget,
-    );
+    expect(find.text('AI로 레시피 보강'), findsNothing);
   });
 
   testWidgets('bookmarks page renders saved recipe',
