@@ -5,20 +5,20 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_recipe_search/youtube_recipe_search.dart';
 
 import '../../../core/config/env.dart';
+import '../../recipes/domain/recipe.dart';
+import '../../recipes/presentation/youtube_recipe_enrichment_page.dart';
 import '../data/supabase_youtube_search_transport.dart';
-import '../data/youtube_recipe_creation_service.dart';
+import '../domain/youtube_thumbnail_url.dart';
 
 class YoutubeSearchPage extends StatefulWidget {
   const YoutubeSearchPage({
     super.key,
     this.transport,
-    this.creationService,
     this.enabled = Env.youtubeSearchEnabled,
     this.initialQuery,
   });
 
   final YoutubeSearchTransport? transport;
-  final YoutubeRecipeCreationService? creationService;
   final bool enabled;
   final String? initialQuery;
 
@@ -28,7 +28,6 @@ class YoutubeSearchPage extends StatefulWidget {
 
 class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   late final YoutubeSearchController _controller;
-  late final YoutubeRecipeCreationService _creationService;
 
   @override
   void initState() {
@@ -40,7 +39,6 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
       YoutubeSearchClient(transport),
     );
 
-    _creationService = widget.creationService ?? YoutubeRecipeCreationService();
   }
 
   bool _isAuthenticated() {
@@ -88,34 +86,38 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
       return;
     }
 
-    try {
-      final result = await _creationService.createDraftFromYoutube(
-        YoutubeRecipeDraftInput(
-          title: title,
-          channelTitle: channelTitle,
-          youtubeUrl: youtubeUrl,
-        ),
-      );
+    final normalizedTitle = title.trim();
+    final normalizedYoutubeUrl = youtubeUrl.trim();
 
-      if (!mounted) {
-        return;
-      }
+    if (normalizedTitle.isEmpty || normalizedYoutubeUrl.isEmpty) {
+      _showMessage('영상 정보를 확인할 수 없습니다.');
+      return;
+    }
 
+    final sourceRecipe = Recipe(
+      id: '',
+      title: normalizedTitle,
+      summary: channelTitle.trim().isEmpty
+          ? '선택한 YouTube 영상 기반 레시피'
+          : '선택한 YouTube 영상 기반 레시피 · ${channelTitle.trim()}',
+      ingredients: const <String>[],
+      steps: const <String>[],
+      imageUrl: youtubeThumbnailUrlFromUrl(normalizedYoutubeUrl),
+      youtubeUrl: normalizedYoutubeUrl,
+      sourceType: 'youtube_import',
+    );
+
+    final createdRecipeId = await Navigator.of(context).push<Object?>(
+      MaterialPageRoute<Object?>(
+        builder: (_) => YoutubeRecipeEnrichmentPage(recipe: sourceRecipe),
+      ),
+    );
+
+    if (createdRecipeId is String &&
+        createdRecipeId.trim().isNotEmpty &&
+        mounted) {
       _showMessage('내 레시피에 저장했습니다.');
-
-      context.go('/creator/${Uri.encodeComponent(result.recipeId)}');
-    } on YoutubeRecipeCreationException catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage(error.message);
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage('레시피 생성 중 오류가 발생했습니다.');
+      context.go('/creator/${Uri.encodeComponent(createdRecipeId)}');
     }
   }
 
