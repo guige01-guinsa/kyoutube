@@ -15,6 +15,7 @@ const validBody = {
     inferredRecipeTitle: "김치찌개",
     channelName: "요리 채널",
     description: "김치와 돼지고기를 이용한 조리 설명",
+    durationSec: 179,
   },
 };
 
@@ -25,6 +26,7 @@ const successFetch: typeof fetch = () =>
         choices: [{
           message: {
             content: JSON.stringify({
+              title: "김치찌개",
               summary: "영상 설명 기반 초안",
               ingredients: ["김치"],
               steps: ["끓인다"],
@@ -100,6 +102,14 @@ Deno.test("enforces inferred title length of at most 10 characters", async () =>
   assertEquals(response.status, 400);
 });
 
+Deno.test("rejects a selected video longer than 180 seconds", async () => {
+  const response = await handler(request({
+    ...validBody,
+    selectedVideo: { ...validBody.selectedVideo, durationSec: 181 },
+  }));
+  assertEquals(response.status, 400);
+});
+
 Deno.test("rejects promotional inferred titles", async () => {
   const response = await handler(request({
     ...validBody,
@@ -109,4 +119,36 @@ Deno.test("rejects promotional inferred titles", async () => {
     },
   }));
   assertEquals(response.status, 400);
+});
+
+Deno.test("cleans promotional text from the model recipe title", async () => {
+  const promotionalTitleFetch: typeof fetch = () =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                title: "[대박] 무조건 구독! 초간단 김치찌개 레시피",
+                summary: "영상 설명 기반 초안",
+                ingredients: ["김치"],
+                steps: ["끓인다"],
+                tips: null,
+                warnings: [],
+              }),
+            },
+          }],
+        }),
+        { status: 200 },
+      ),
+    );
+  const titleHandler = createYoutubeRecipeAssistantHandler({
+    getEnv: (name) => name === "OPENAI_API_KEY" ? "test-key" : undefined,
+    fetchOpenAi: promotionalTitleFetch,
+  });
+
+  const response = await titleHandler(request(validBody));
+  const body = await response.json();
+  assertEquals(response.status, 200);
+  assertEquals(body.data.title, "김치찌개");
 });

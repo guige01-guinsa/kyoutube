@@ -12,6 +12,7 @@ class YoutubeRecipeContext {
     required this.channelTitle,
     required this.description,
     required this.youtubeUrl,
+    this.durationSec,
   });
 
   final String videoId;
@@ -19,6 +20,7 @@ class YoutubeRecipeContext {
   final String channelTitle;
   final String description;
   final String youtubeUrl;
+  final int? durationSec;
 
   factory YoutubeRecipeContext.fromJson(Map<String, dynamic> json) {
     return YoutubeRecipeContext(
@@ -27,6 +29,7 @@ class YoutubeRecipeContext {
       channelTitle: (json['channelTitle'] as String? ?? '').trim(),
       description: (json['description'] as String? ?? '').trim(),
       youtubeUrl: (json['youtubeUrl'] as String? ?? '').trim(),
+      durationSec: json['durationSec'] as int?,
     );
   }
 
