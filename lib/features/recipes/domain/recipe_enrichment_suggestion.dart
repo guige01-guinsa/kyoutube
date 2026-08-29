@@ -28,6 +28,7 @@ class RecipeEnrichmentReference {
 
 class RecipeEnrichmentSuggestion {
   const RecipeEnrichmentSuggestion({
+    required this.title,
     required this.summary,
     required this.ingredients,
     required this.steps,
@@ -36,6 +37,7 @@ class RecipeEnrichmentSuggestion {
     this.tips,
   });
 
+  final String title;
   final String summary;
   final List<String> ingredients;
   final List<String> steps;
@@ -58,6 +60,7 @@ class RecipeEnrichmentSuggestion {
     final referencesRaw = json['references'];
 
     return RecipeEnrichmentSuggestion(
+      title: (json['title'] as String? ?? '').trim(),
       summary: (json['summary'] as String? ?? '').trim(),
       ingredients: stringList(json['ingredients']),
       steps: stringList(json['steps']),
@@ -75,11 +78,16 @@ class RecipeEnrichmentSuggestion {
   Recipe toDraftRecipe({
     required Recipe sourceRecipe,
   }) {
+    final editableTips = <String>[
+      if ((tips ?? '').trim().isNotEmpty) tips!.trim(),
+      if (warnings.isNotEmpty) '확인사항: ${warnings.join(' / ')}',
+    ].join('\n');
+
     return Recipe(
       id: '',
-      title: sourceRecipe.title,
+      title: title.isEmpty ? sourceRecipe.title : title,
       summary: summary,
-      tips: tips,
+      tips: editableTips.isEmpty ? null : editableTips,
       ingredients: ingredients,
       steps: steps,
       imageUrl: sourceRecipe.imageUrl,

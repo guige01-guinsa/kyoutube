@@ -179,6 +179,10 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
             ),
           ),
         ),
+        const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('검색 결과에는 재생시간 3분 이내 영상만 표시됩니다.'),
+        ),
         if (!widget.enabled)
           const Padding(
             padding: EdgeInsets.only(top: 8),
@@ -260,7 +264,11 @@ class _YoutubeSearchResultCard extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(item.title),
-              subtitle: Text(item.channelTitle),
+              subtitle: Text(
+                item.durationSec == null
+                    ? item.channelTitle
+                    : '${item.channelTitle} · ${_durationLabel(item.durationSec!)}',
+              ),
               trailing: IconButton(
                 tooltip: 'YouTube \uC5F4\uAE30',
                 onPressed: onOpenUrl,
@@ -289,5 +297,11 @@ class _YoutubeSearchResultCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _durationLabel(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return '$minutes:${remainder.toString().padLeft(2, '0')}';
   }
 }

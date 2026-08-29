@@ -5,6 +5,7 @@ export type SelectedVideo = {
   inferredRecipeTitle: string;
   channelName: string;
   description: string;
+  durationSec: number | null;
 };
 
 type YoutubeRecipeInput = {
@@ -121,6 +122,7 @@ function normalizeRequest(value: unknown): YoutubeEnrichmentRequest | null {
     "inferredRecipeTitle",
     "channelName",
     "description",
+    "durationSec",
   ];
   if (Object.keys(selectedSource).some((key) => !selectedKeys.includes(key))) {
     return null;
@@ -136,13 +138,22 @@ function normalizeRequest(value: unknown): YoutubeEnrichmentRequest | null {
     inferredRecipeTitle: text(selectedSource.inferredRecipeTitle, 40),
     channelName: text(selectedSource.channelName, 160),
     description: text(selectedSource.description, 6000),
+    durationSec: typeof selectedSource.durationSec === "number"
+      ? selectedSource.durationSec
+      : null,
   };
 
   if (
-    !recipe.title || !recipe.youtubeUrl ||
-    Object.values(selectedVideo).some((item) => !item)
+    !recipe.title || !recipe.youtubeUrl || !selectedVideo.videoId ||
+    !selectedVideo.youtubeUrl || !selectedVideo.originalTitle ||
+    !selectedVideo.inferredRecipeTitle || !selectedVideo.channelName
   ) return null;
   if ([...selectedVideo.inferredRecipeTitle].length > 10) return null;
+  if (
+    selectedVideo.durationSec != null &&
+    (!Number.isInteger(selectedVideo.durationSec) ||
+      selectedVideo.durationSec < 1 || selectedVideo.durationSec > 180)
+  ) return null;
   if (
     /(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|황금레시피)/.test(
       selectedVideo.inferredRecipeTitle,
@@ -162,14 +173,36 @@ function normalizeRequest(value: unknown): YoutubeEnrichmentRequest | null {
   return { recipe, selectedVideo };
 }
 
-function parseModelOutput(value: unknown) {
+function cleanRecipeTitle(value: unknown, fallback: string): string {
+  const cleaned = text(value, 80)
+    .replace(/[\[\(【].*?[\]\)】]/g, " ")
+    .replace(
+      /(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|황금레시피|구독|좋아요|알림설정|만드는|만들기|레시피)/g,
+      " ",
+    )
+    .replace(/[^가-힣A-Za-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const normalized = cleaned || fallback.trim();
+  return [...normalized].slice(0, 20).join("").trim();
+}
+
+function parseModelOutput(value: unknown, input: YoutubeEnrichmentRequest) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
+  const title = cleanRecipeTitle(
+    source.title,
+    input.selectedVideo.inferredRecipeTitle,
+  );
   const summary = text(source.summary, 240);
   const ingredients = textList(source.ingredients, 60, 160);
   const steps = textList(source.steps, 40, 500);
-  if (!summary || ingredients.length === 0 || steps.length === 0) return null;
+  if (!title || !summary || ingredients.length === 0 || steps.length === 0) {
+    return null;
+  }
   return {
+    title,
     summary,
     ingredients,
     steps,
@@ -183,10 +216,13 @@ function prompt(input: YoutubeEnrichmentRequest): string {
 당신은 한국어 레시피 편집 보조 AI입니다.
 오직 사용자가 선택한 한 개의 YouTube 영상 정보와 설명만 사용하세요.
 공공 레시피, 다른 영상, 외부 자료, 자막 또는 댓글을 사용하지 마세요.
-설명에 없는 계량, 시간, 비율을 사실처럼 만들지 말고 warnings에 영상 확인 필요를 표시하세요.
+영상 제목·설명·채널·길이에서 확인 가능한 제목, 요약, 재료, 계량, 조리 순서, 시간, 팁을 최대한 채우세요.
+제목은 음식명 중심으로 20자 이내로 추론하고 광고, 감탄, 홍보, 채널명, 특수문자를 제외하세요.
+설명에 없는 계량, 시간, 비율을 사실처럼 만들지 말고 해당 항목은 warnings에 영상 확인 필요를 표시하세요.
+재료나 조리 순서를 확인할 수 없으면 빈 배열 대신 "영상에서 확인 필요"라는 편집용 항목을 넣으세요.
 결과는 자동 저장되지 않는 사용자 검토용 초안입니다.
 반드시 아래 JSON 객체만 반환하세요.
-{"summary":"240자 이하","ingredients":["재료"],"steps":["단계"],"tips":null,"warnings":["주의"]}
+{"title":"레시피 제목","summary":"240자 이하","ingredients":["재료와 계량"],"steps":["단계와 확인 가능한 시간"],"tips":"팁 또는 null","warnings":["사용자가 영상에서 확인할 항목"]}
 
 현재 레시피: ${JSON.stringify(input.recipe)}
 선택된 영상: ${JSON.stringify(input.selectedVideo)}
@@ -270,7 +306,7 @@ export function createYoutubeRecipeAssistantHandler(options: HandlerOptions) {
       const payload = await upstream.json().catch(() => null);
       const raw = payload?.choices?.[0]?.message?.content;
       const result = typeof raw === "string"
-        ? parseModelOutput(JSON.parse(raw))
+        ? parseModelOutput(JSON.parse(raw), input)
         : null;
       if (!result) {
         return jsonResponse({

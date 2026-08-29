@@ -19,6 +19,7 @@ class _RecordingClient extends http.BaseClient {
       Stream<List<int>>.value(utf8.encode(jsonEncode(<String, Object?>{
         'status': 'ok',
         'data': <String, Object?>{
+          'title': '김치찌개',
           'summary': '영상 설명 기반 초안',
           'ingredients': <String>['김치'],
           'steps': <String>['끓인다'],
@@ -81,6 +82,7 @@ void main() {
         channelTitle: '요리 채널',
         description: '김치와 돼지고기를 끓입니다.',
         youtubeUrl: 'https://www.youtube.com/watch?v=abc123XYZ00',
+        durationSec: 179,
       ),
     );
 
@@ -102,9 +104,47 @@ void main() {
     expect(body.containsKey('selectedVideo'), isTrue);
     expect(body.containsKey('references'), isFalse);
     expect(body['selectedVideo']['videoId'], 'abc123XYZ00');
+    expect(body['selectedVideo']['durationSec'], 179);
     expect(
       (body['selectedVideo']['inferredRecipeTitle'] as String).runes.length,
       lessThanOrEqualTo(10),
+    );
+  });
+
+  test('rejects a selected YouTube video longer than three minutes', () async {
+    final service = RecipeEnrichmentService(
+      supabaseClient: SupabaseClient('http://localhost', 'test-key'),
+      httpClient: _RecordingClient(),
+      supabaseUrl: 'https://project.supabase.co',
+      supabaseAnonKey: 'anon-key',
+      accessTokenProvider: () => 'user-token',
+      youtubeContextLoader: (_) async => const YoutubeRecipeContext(
+        videoId: 'abc123XYZ00',
+        title: '긴 김치찌개 영상',
+        channelTitle: '요리 채널',
+        description: '김치찌개 설명',
+        youtubeUrl: 'https://www.youtube.com/watch?v=abc123XYZ00',
+        durationSec: 181,
+      ),
+    );
+
+    await expectLater(
+      service.createSuggestionFromSelectedYoutubeVideo(
+        recipe: Recipe(
+          id: 'recipe-1',
+          title: '김치찌개',
+          ingredients: const <String>[],
+          steps: const <String>[],
+          youtubeUrl: 'https://youtu.be/abc123XYZ00',
+        ),
+      ),
+      throwsA(
+        isA<RecipeEnrichmentException>().having(
+          (error) => error.message,
+          'message',
+          contains('3분 이내'),
+        ),
+      ),
     );
   });
 }

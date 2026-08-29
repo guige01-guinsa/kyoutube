@@ -161,9 +161,10 @@ class RecipeEnrichmentService {
           supabaseClient: _supabaseClient,
         ).loadFromYoutubeUrl(youtubeUrl));
 
-    if (!context.hasDescription) {
+    final durationSec = context.durationSec;
+    if (durationSec == null || durationSec > 180) {
       throw const RecipeEnrichmentException(
-        '이 영상의 설명란에 레시피 보강에 사용할 정보가 없습니다.',
+        '3분 이내로 확인된 YouTube 영상만 AI로 보강할 수 있습니다.',
       );
     }
 
@@ -190,6 +191,7 @@ class RecipeEnrichmentService {
             ),
             'channelName': context.channelTitle,
             'description': context.description,
+            'durationSec': durationSec,
           },
         },
       ),

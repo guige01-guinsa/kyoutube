@@ -87,8 +87,10 @@ class _YoutubeRecipeEnrichmentPageState
             ),
             const SizedBox(height: 12),
             const Text(
-              '선택한 YouTube 영상의 설명과 영상 정보만 참고합니다. '
-              '공공 레시피나 다른 영상은 참조하지 않습니다.',
+              '선택한 3분 이내 YouTube 영상의 제목·설명·채널·길이만 '
+              '참고해 편집 가능한 초안을 만듭니다. '
+              '공공 레시피나 다른 영상은 참조하지 않습니다. '
+              '추가 검색도 하지 않습니다.',
             ),
             const SizedBox(height: 16),
             if (youtubeUrl.isNotEmpty)
@@ -120,6 +122,11 @@ class _YoutubeRecipeEnrichmentPageState
                 ),
               ),
             ] else ...<Widget>[
+              Text(
+                suggestion.title,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
               Text(suggestion.summary),
               const SizedBox(height: 16),
               Text('재료', style: Theme.of(context).textTheme.titleMedium),
@@ -130,11 +137,24 @@ class _YoutubeRecipeEnrichmentPageState
                   .asMap()
                   .entries
                   .map((entry) => Text('${entry.key + 1}. ${entry.value}')),
+              if ((suggestion.tips ?? '').trim().isNotEmpty) ...<Widget>[
+                const SizedBox(height: 16),
+                Text('팁', style: Theme.of(context).textTheme.titleMedium),
+                Text(suggestion.tips!),
+              ],
+              if (suggestion.warnings.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 16),
+                Text(
+                  '사용자 확인사항',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                ...suggestion.warnings.map((item) => Text('• $item')),
+              ],
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: () => _openEditor(suggestion),
                 icon: const Icon(Icons.edit_outlined),
-                label: const Text('이 초안 편집'),
+                label: const Text('초안 수정 후 저장'),
               ),
               OutlinedButton(
                 onPressed: () => setState(() => _suggestion = null),

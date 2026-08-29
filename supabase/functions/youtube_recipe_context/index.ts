@@ -54,6 +54,14 @@ function text(value: unknown, maxLength: number): string {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+function durationSeconds(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(value);
+  if (!match) return null;
+  return (Number(match[1] ?? "0") * 3600) +
+    (Number(match[2] ?? "0") * 60) + Number(match[3] ?? "0");
+}
+
 serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -112,7 +120,7 @@ serve(async (request) => {
   }
 
   const url = new URL("https://www.googleapis.com/youtube/v3/videos");
-  url.searchParams.set("part", "snippet");
+  url.searchParams.set("part", "snippet,contentDetails");
   url.searchParams.set("id", videoId);
   url.searchParams.set("key", apiKey);
 
@@ -144,6 +152,7 @@ serve(async (request) => {
     const payload = await upstream.json();
     const item = Array.isArray(payload?.items) ? payload.items[0] : null;
     const snippet = item?.snippet;
+    const durationSec = durationSeconds(item?.contentDetails?.duration);
 
     if (!snippet) {
       return response(
@@ -155,6 +164,16 @@ serve(async (request) => {
       );
     }
 
+    if (durationSec == null || durationSec > 180) {
+      return response(
+        {
+          status: "error",
+          message: "3분 이내로 확인된 YouTube 영상만 사용할 수 있습니다.",
+        },
+        400,
+      );
+    }
+
     return response({
       status: "ok",
       data: {
@@ -163,6 +182,7 @@ serve(async (request) => {
         channelTitle: text(snippet.channelTitle, 160),
         description: text(snippet.description, 6000),
         youtubeUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`,
+        durationSec,
         sourceType: "youtube_description",
       },
     });

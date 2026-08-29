@@ -64,6 +64,12 @@ entrypoint = "./functions/youtube_recipe_context/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/youtube_recipe_context/*.html" ]
+
+[functions.ai_youtube_recipe_assistant]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ai_youtube_recipe_assistant/index.ts"
+
 [functions.youtube_search]
 enabled = true
 verify_jwt = true
