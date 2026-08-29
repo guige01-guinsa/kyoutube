@@ -21,11 +21,25 @@ class RecipeEnrichmentService {
   RecipeEnrichmentService({
     SupabaseClient? supabaseClient,
     http.Client? httpClient,
+    String? supabaseUrl,
+    String? supabaseAnonKey,
+    String? Function()? accessTokenProvider,
+    Future<YoutubeRecipeContext> Function(String youtubeUrl)?
+        youtubeContextLoader,
   })  : _supabaseClient = supabaseClient ?? Supabase.instance.client,
-        _httpClient = httpClient ?? http.Client();
+        _httpClient = httpClient ?? http.Client(),
+        _supabaseUrl = supabaseUrl ?? Env.supabaseUrl,
+        _supabaseAnonKey = supabaseAnonKey ?? Env.supabaseAnonKey,
+        _accessTokenProvider = accessTokenProvider,
+        _youtubeContextLoader = youtubeContextLoader;
 
   final SupabaseClient _supabaseClient;
   final http.Client _httpClient;
+  final String _supabaseUrl;
+  final String _supabaseAnonKey;
+  final String? Function()? _accessTokenProvider;
+  final Future<YoutubeRecipeContext> Function(String youtubeUrl)?
+      _youtubeContextLoader;
 
   Future<RecipeEnrichmentSuggestion> createSuggestion({
     required Recipe recipe,
@@ -37,22 +51,23 @@ class RecipeEnrichmentService {
       );
     }
 
-    final session = _supabaseClient.auth.currentSession;
+    final accessToken = _accessTokenProvider?.call() ??
+        _supabaseClient.auth.currentSession?.accessToken;
 
-    if (session == null) {
+    if (accessToken == null || accessToken.isEmpty) {
       throw const RecipeEnrichmentException('로그인이 필요합니다.');
     }
 
     final uri = Uri.parse(
-      '${Env.supabaseUrl}/functions/v1/ai_recipe_assistant',
+      '$_supabaseUrl/functions/v1/ai_recipe_assistant',
     );
 
     final response = await _httpClient.post(
       uri,
       headers: <String, String>{
         'Content-Type': 'application/json',
-        'apikey': Env.supabaseAnonKey,
-        'Authorization': 'Bearer ${session.accessToken}',
+        'apikey': _supabaseAnonKey,
+        'Authorization': 'Bearer $accessToken',
       },
       body: jsonEncode(
         <String, dynamic>{
@@ -121,7 +136,8 @@ class RecipeEnrichmentService {
     return suggestion;
   }
 
-  Future<RecipeEnrichmentSuggestion> createSuggestionFromYoutubeDescription({
+  Future<RecipeEnrichmentSuggestion>
+      createSuggestionFromSelectedYoutubeVideo({
     required Recipe recipe,
   }) async {
     final youtubeUrl = (recipe.youtubeUrl ?? '').trim();
@@ -132,16 +148,18 @@ class RecipeEnrichmentService {
       );
     }
 
-    final session = _supabaseClient.auth.currentSession;
+    final accessToken = _accessTokenProvider?.call() ??
+        _supabaseClient.auth.currentSession?.accessToken;
 
-    if (session == null) {
+    if (accessToken == null || accessToken.isEmpty) {
       throw const RecipeEnrichmentException('로그인이 필요합니다.');
     }
 
-    final context = await YoutubeRecipeContextService(
-      httpClient: _httpClient,
-      supabaseClient: _supabaseClient,
-    ).loadFromYoutubeUrl(youtubeUrl);
+    final context = await (_youtubeContextLoader?.call(youtubeUrl) ??
+        YoutubeRecipeContextService(
+          httpClient: _httpClient,
+          supabaseClient: _supabaseClient,
+        ).loadFromYoutubeUrl(youtubeUrl));
 
     if (!context.hasDescription) {
       throw const RecipeEnrichmentException(
@@ -150,26 +168,29 @@ class RecipeEnrichmentService {
     }
 
     final response = await _httpClient.post(
-      Uri.parse('${Env.supabaseUrl}/functions/v1/ai_recipe_assistant'),
+      Uri.parse('$_supabaseUrl/functions/v1/ai_youtube_recipe_assistant'),
       headers: <String, String>{
         'Content-Type': 'application/json',
-        'apikey': Env.supabaseAnonKey,
-        'Authorization': 'Bearer ${session.accessToken}',
+        'apikey': _supabaseAnonKey,
+        'Authorization': 'Bearer $accessToken',
       },
       body: jsonEncode(
         <String, dynamic>{
-          'recipe': _recipePayload(recipe),
-          'references': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'type': 'youtube_description',
-              'videoId': context.videoId,
-              'title': context.title,
-              'channelName': context.channelTitle,
-              'youtubeUrl': context.youtubeUrl,
-              'description': context.description,
-              'confidence': 'medium',
-            },
-          ],
+          'recipe': <String, dynamic>{
+            'title': recipe.title,
+            'youtubeUrl': youtubeUrl,
+          },
+          'selectedVideo': <String, dynamic>{
+            'videoId': context.videoId,
+            'youtubeUrl': context.youtubeUrl,
+            'originalTitle': context.title,
+            'inferredRecipeTitle': _inferRecipeTitle(
+              recipe.title,
+              context.title,
+            ),
+            'channelName': context.channelTitle,
+            'description': context.description,
+          },
         },
       ),
     );
@@ -219,6 +240,35 @@ class RecipeEnrichmentService {
     }
 
     return suggestion;
+  }
+
+  String _inferRecipeTitle(String recipeTitle, String videoTitle) {
+    var value = recipeTitle.trim().isNotEmpty
+        ? recipeTitle.trim()
+        : videoTitle.trim();
+    value = value
+        .replaceAll(RegExp(r'[\[\(【].*?[\]\)】]'), ' ')
+        .replaceAll(
+          RegExp(
+            r'(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|맛있는|만드는|만들기|황금레시피|레시피)',
+          ),
+          ' ',
+        )
+        .replaceAll(RegExp(r'[^가-힣A-Za-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (value.isEmpty) {
+      value = '영상레시피';
+    }
+
+    final words = value.split(' ').where((word) => word.isNotEmpty).toList();
+    if (words.length > 1) {
+      final lastTwo = words.sublist(words.length - 2).join(' ');
+      value = lastTwo.runes.length <= 10 ? lastTwo : words.last;
+    }
+
+    return String.fromCharCodes(value.runes.take(10));
   }
 
   Map<String, dynamic> _recipePayload(Recipe recipe) {

@@ -242,6 +242,31 @@ class _DelayedRecipeRepository extends _FakeRecipeRepository {
   }
 }
 
+class _YoutubeCreatorRecipeRepository extends _FakeRecipeRepository {
+  int publicSearchCalls = 0;
+
+  @override
+  Future<Recipe?> getCreatorRecipeById(String id) async {
+    return Recipe(
+      id: id,
+      title: '김치찌개',
+      ingredients: const <String>[],
+      steps: const <String>['영상을 확인해 주세요.'],
+      youtubeUrl: 'https://youtu.be/abc123XYZ00',
+      sourceType: 'youtube_import',
+    );
+  }
+
+  @override
+  Future<List<Recipe>> listPublicRecipes({
+    String? search,
+    bool useAiSearch = false,
+  }) async {
+    publicSearchCalls += 1;
+    return super.listPublicRecipes(search: search, useAiSearch: useAiSearch);
+  }
+}
+
 void main() {
   testWidgets('home screen renders', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -365,6 +390,62 @@ void main() {
 
     expect(find.text('팁'), findsOneWidget);
     expect(find.text('테스트 팁'), findsOneWidget);
+  });
+
+  testWidgets('youtube_import recipe opens the YouTube-only enrichment page',
+      (WidgetTester tester) async {
+    final repository = _YoutubeCreatorRecipeRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          recipeRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const MaterialApp(
+          home: CreatorRecipeDetailPage(recipeId: 'youtube-recipe-id'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('AI로 레시피 보강'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('AI로 레시피 보강'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('영상으로 AI 레시피 보강'), findsOneWidget);
+    expect(find.textContaining('공공 레시피나 다른 영상은 참조하지 않습니다.'),
+        findsOneWidget);
+    expect(repository.publicSearchCalls, 0);
+  });
+
+  testWidgets('non-youtube creator recipe keeps public enrichment page',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          recipeRepositoryProvider.overrideWithValue(_FakeRecipeRepository()),
+        ],
+        child: const MaterialApp(
+          home: CreatorRecipeDetailPage(recipeId: 'manual-recipe-id'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('AI로 레시피 보강'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('AI로 레시피 보강'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI로 레시피 보강'), findsOneWidget);
+    expect(
+      find.textContaining('유사한 공공 레시피를 선택하면'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('bookmarks page renders saved recipe',

@@ -92,6 +92,7 @@ class YoutubeRecipeCreationService {
         ],
         'tips': '원본 YouTube 영상을 확인한 뒤 레시피 내용을 보완해 주세요.',
         'youtube_url': youtubeUrl,
+        'source_type': 'youtube_import',
         'image_path': youtubeThumbnailUrlFromUrl(youtubeUrl),
         'is_published': false,
       }),

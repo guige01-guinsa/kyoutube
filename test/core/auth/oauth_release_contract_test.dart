@@ -49,6 +49,16 @@ void main() {
       contains('authScreenLaunchMode: LaunchMode.externalApplication'),
     );
     expect(loginPage, contains('emailRedirectTo: oauthRedirectUri'));
+    expect(loginPage, contains('OAuthProvider.kakao'));
+    expect(loginPage, contains("const Text('카카오로 로그인')"));
+  });
+
+  test('local Supabase config keeps Kakao credentials out of source', () {
+    final config = File('supabase/config.toml').readAsStringSync();
+
+    expect(config, contains('[auth.external.kakao]'));
+    expect(config, contains('client_id = "env(AUTH_KAKAO_CLIENT_ID)"'));
+    expect(config, contains('secret = "env(AUTH_KAKAO_SECRET)"'));
   });
 
   test('release bootstrap delegates OAuth callback handling explicitly', () {

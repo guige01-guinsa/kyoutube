@@ -9,6 +9,7 @@ type RecipePayload = {
   youtube_url: string | null;
   image_path: string | null;
   is_published: boolean;
+  source_type: "manual" | "youtube_import" | "creator_copy";
 };
 
 type PublicRecipeRow = {
@@ -498,6 +499,13 @@ async function parseRecipePayload(req: Request): Promise<{ payload?: RecipePaylo
   const youtubeUrl = typeof body.youtube_url === "string" ? body.youtube_url.trim() : "";
   const imagePath = typeof body.image_path === "string" ? body.image_path.trim() : "";
 
+  const sourceType =
+    body.source_type === "youtube_import"
+      ? "youtube_import"
+      : body.source_type === "creator_copy"
+      ? "creator_copy"
+      : "manual";
+
   return {
     payload: {
       title,
@@ -507,7 +515,8 @@ async function parseRecipePayload(req: Request): Promise<{ payload?: RecipePaylo
       tips: tips.length > 0 ? tips : null,
       youtube_url: youtubeUrl.length > 0 ? youtubeUrl : null,
       image_path: imagePath.length > 0 ? imagePath : null,
-      is_published: typeof body.is_published === "boolean" ? body.is_published : true
+      is_published: typeof body.is_published === "boolean" ? body.is_published : true,
+      source_type: sourceType
     }
   };
 }
@@ -661,7 +670,7 @@ async function listCreatorRecipes(url: URL, userId: string): Promise<Response> {
   const params = new URLSearchParams();
   params.set(
     "select",
-    "id,author_id,title,summary,ingredients,steps,tips,youtube_url,image_path,is_published,created_at,updated_at"
+    "id,author_id,title,summary,ingredients,steps,tips,youtube_url,image_path,is_published,source_type,created_at,updated_at"
   );
   params.set("author_id", `eq.${userId}`);
   params.set("order", "created_at.desc");
@@ -689,7 +698,7 @@ async function getCreatorRecipeDetail(id: string, userId: string): Promise<Respo
   const params = new URLSearchParams();
   params.set(
     'select',
-    'id,author_id,title,summary,ingredients,steps,tips,youtube_url,image_path,is_published,created_at,updated_at',
+    'id,author_id,title,summary,ingredients,steps,tips,youtube_url,image_path,is_published,source_type,created_at,updated_at',
   );
   params.set('id', `eq.${id}`);
   params.set('author_id', `eq.${userId}`);

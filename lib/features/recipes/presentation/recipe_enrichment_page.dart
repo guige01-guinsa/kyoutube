@@ -168,7 +168,8 @@ class _RecipeEnrichmentPageState extends ConsumerState<RecipeEnrichmentPage> {
     try {
       final service = RecipeEnrichmentService();
 
-      final suggestion = await service.createSuggestionFromYoutubeDescription(
+      final suggestion =
+          await service.createSuggestionFromSelectedYoutubeVideo(
         recipe: widget.recipe,
       );
 
