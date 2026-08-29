@@ -776,14 +776,13 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
 
   Future<_ReviewSubmission?> _showReviewDialog(KitchenShoppingItem item,
       {bool purchase = false}) async {
-    final nameController = TextEditingController(
-        text: item.reviewStatus == KitchenShoppingItemReviewStatus.confirmed
-            ? item.name
-            : '');
+    final nameController = TextEditingController(text: item.name);
     final quantityController =
         TextEditingController(text: item.quantity?.toString() ?? '');
+    final quantityFocusNode = FocusNode();
     String? unit = item.unit;
     String? validationError;
+    final needsQuantity = item.quantity == null || (item.unit ?? '').isEmpty;
     final result = await showDialog<_ReviewSubmission>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -799,19 +798,22 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
                 const SizedBox(height: 12),
                 TextField(
                     controller: nameController,
-                    autofocus: true,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                         labelText: '재료 이름', helperText: '필수')),
                 TextField(
                     controller: quantityController,
+                    focusNode: quantityFocusNode,
+                    autofocus: needsQuantity,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(labelText: '수량')),
+                    decoration: const InputDecoration(
+                        labelText: '수량', helperText: '필수')),
                 DropdownButtonFormField<String>(
                   initialValue: unit,
-                  decoration: const InputDecoration(labelText: '단위'),
+                  decoration: const InputDecoration(
+                      labelText: '단위', helperText: '필수'),
                   items: const <DropdownMenuItem<String>>[
                     DropdownMenuItem(value: 'g', child: Text('g')),
                     DropdownMenuItem(value: 'kg', child: Text('kg')),
@@ -844,16 +846,13 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
                   setDialogState(() => validationError = '재료 이름을 입력하세요.');
                   return;
                 }
-                if ((quantity == null) != (unit == null) ||
-                    (quantity != null &&
-                        (quantity <= 0 || !quantity.isFinite))) {
+                if (quantity == null ||
+                    unit == null ||
+                    quantity <= 0 ||
+                    !quantity.isFinite) {
                   setDialogState(
-                      () => validationError = '수량과 단위를 함께 올바르게 입력하세요.');
-                  return;
-                }
-                if (purchase && (quantity == null || unit == null)) {
-                  setDialogState(
-                      () => validationError = '구매함으로 변경하려면 수량과 단위가 필요합니다.');
+                      () => validationError = '수량과 단위를 모두 입력해 주세요.');
+                  quantityFocusNode.requestFocus();
                   return;
                 }
                 Navigator.pop(
@@ -873,6 +872,7 @@ class _KitchenPageState extends ConsumerState<KitchenPage>
 
     nameController.dispose();
     quantityController.dispose();
+    quantityFocusNode.dispose();
 
     return result;
   }
@@ -1348,11 +1348,24 @@ class _ShoppingTab extends ConsumerWidget {
   Widget _shoppingItemTile(BuildContext context, KitchenShoppingItem item) {
     final processing =
         completionProcessing || processingItemIds.contains(item.id);
-    final status = _statusPresentation(item.status);
     final needsReview = item.needsReview ||
         item.reviewStatus == KitchenShoppingItemReviewStatus.required;
+    final needsIngredientInfo = item.needsIngredientInfo;
+    final status = needsIngredientInfo
+        ? const _StatusPresentation(
+            '재료 정보 수정이 필요합니다.', Icons.warning_amber_rounded)
+        : _statusPresentation(item.status);
+    final colorScheme = Theme.of(context).colorScheme;
+    final warningColor = colorScheme.tertiary;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
+      color: needsIngredientInfo ? warningColor.withValues(alpha: 0.08) : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: needsIngredientInfo
+            ? BorderSide(color: warningColor, width: 1.5)
+            : BorderSide.none,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(
@@ -1384,7 +1397,21 @@ class _ShoppingTab extends ConsumerWidget {
                   semanticsLabel: '읽기 전용 원문 ${item.ingredientText}'),
               if (item.quantity != null)
                 Text('수량 ${item.quantity} ${item.unit ?? ''}'.trim()),
-              if (item.reviewStatus ==
+              if (needsIngredientInfo) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  '장보기에 사용할 수량과 단위를 입력해 주세요.',
+                  style: TextStyle(
+                    color: warningColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                FilledButton.icon(
+                    onPressed: processing ? null : () => onEditReview(item),
+                    icon: const Icon(Icons.edit_note),
+                    label: const Text('수량·단위 입력')),
+              ] else if (item.reviewStatus ==
                   KitchenShoppingItemReviewStatus.confirmed)
                 TextButton.icon(
                     onPressed: processing ? null : () => onEditReview(item),
@@ -1394,7 +1421,11 @@ class _ShoppingTab extends ConsumerWidget {
                 initialValue: item.status,
                 decoration: const InputDecoration(labelText: '구매 상태'),
                 items: KitchenShoppingItemStatus.values.map((value) {
-                  final presentation = _statusPresentation(value);
+                  final presentation = needsIngredientInfo &&
+                          value == KitchenShoppingItemStatus.pending
+                      ? const _StatusPresentation('재료 정보 수정이 필요합니다.',
+                          Icons.warning_amber_rounded)
+                      : _statusPresentation(value);
                   return DropdownMenuItem(
                       value: value, child: Text(presentation.label));
                 }).toList(),
