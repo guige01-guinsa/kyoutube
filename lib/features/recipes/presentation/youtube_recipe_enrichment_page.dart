@@ -33,7 +33,7 @@ class _YoutubeRecipeEnrichmentPageState
 
     try {
       final suggestion = await RecipeEnrichmentService()
-          .createSuggestionFromYoutubeDescription(
+          .createSuggestionFromSelectedYoutubeVideo(
         recipe: widget.recipe,
       );
 

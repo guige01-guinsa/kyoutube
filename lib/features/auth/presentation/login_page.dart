@@ -116,6 +116,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
+  Future<void> _signInWithKakao() async {
+    setState(() {
+      _isSubmitting = true;
+      _message = null;
+    });
+
+    try {
+      final auth = ref.read(authClientProvider);
+
+      final launched = await auth.signInWithOAuth(
+        OAuthProvider.kakao,
+        redirectTo: oauthRedirectUri,
+        authScreenLaunchMode: LaunchMode.externalApplication,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _message = launched
+            ? '카카오 로그인 창을 열었습니다. 인증 후 앱으로 돌아와 주세요.'
+            : '카카오 로그인 창을 열지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      });
+    } on AuthException catch (error) {
+      if (mounted) {
+        setState(() {
+          _message = _friendlyAuthMessage(error);
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _message = '카카오 로그인을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _sendPasswordResetEmail() async {
     final email = _emailController.text.trim();
 
@@ -402,6 +447,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                   _isSubmitting ? null : _signInWithGoogle,
                               icon: const Icon(Icons.login),
                               label: const Text('Google로 로그인'),
+                            ),
+                            const SizedBox(height: 8),
+                            FilledButton.icon(
+                              onPressed:
+                                  _isSubmitting ? null : _signInWithKakao,
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFFEE500),
+                                foregroundColor: const Color(0xFF191919),
+                              ),
+                              icon: const Icon(Icons.chat_bubble),
+                              label: const Text('카카오로 로그인'),
                             ),
                             TextButton(
                               onPressed: _isSubmitting
