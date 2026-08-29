@@ -24,6 +24,39 @@ Map<String, dynamic> itemJson({
     };
 
 void main() {
+  test('shopping item requires ingredient info when quantity or unit is empty',
+      () {
+    final base = <String, dynamic>{
+      'id': 'item-1',
+      'list_id': 'list-1',
+      'name': '두부',
+      'ingredient_text': '두부',
+      'status': 'pending',
+      'review_status': 'required',
+      'needs_review': true,
+      'is_checked': false,
+      'revision': 0,
+      'updated_at': '2026-08-29T00:00:00Z',
+    };
+
+    expect(
+      KitchenShoppingItem.fromJson(<String, dynamic>{
+        ...base,
+        'quantity': null,
+        'unit': null,
+      }).needsIngredientInfo,
+      isTrue,
+    );
+    expect(
+      KitchenShoppingItem.fromJson(<String, dynamic>{
+        ...base,
+        'quantity': 1,
+        'unit': 'ea',
+      }).needsIngredientInfo,
+      isFalse,
+    );
+  });
+
   test('parses the canonical reviewed item contract', () {
     final item = KitchenShoppingItem.fromJson(itemJson());
     expect(item.status, KitchenShoppingItemStatus.pending);
