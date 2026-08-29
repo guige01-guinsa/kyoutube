@@ -21,9 +21,15 @@ class YoutubeRecipeEnrichmentPage extends ConsumerStatefulWidget {
 
 class _YoutubeRecipeEnrichmentPageState
     extends ConsumerState<YoutubeRecipeEnrichmentPage> {
-  bool _isGenerating = false;
+  bool _isGenerating = true;
   String? _error;
   RecipeEnrichmentSuggestion? _suggestion;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _generate());
+  }
 
   Future<void> _generate() async {
     setState(() {
@@ -42,6 +48,8 @@ class _YoutubeRecipeEnrichmentPageState
       setState(() {
         _suggestion = suggestion;
       });
+
+      await _openEditor(suggestion);
     } on RecipeEnrichmentException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
@@ -75,7 +83,7 @@ class _YoutubeRecipeEnrichmentPageState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(suggestion == null ? '영상으로 AI 레시피 보강' : 'AI 보강 제안'),
+        title: const Text('AI 레시피 초안 만들기'),
       ),
       body: SafeArea(
         child: ListView(
@@ -87,10 +95,8 @@ class _YoutubeRecipeEnrichmentPageState
             ),
             const SizedBox(height: 12),
             const Text(
-              '선택한 3분 이내 YouTube 영상의 제목·설명·채널·길이만 '
-              '참고해 편집 가능한 초안을 만듭니다. '
-              '공공 레시피나 다른 영상은 참조하지 않습니다. '
-              '추가 검색도 하지 않습니다.',
+              '선택한 3분 이내 YouTube 영상만 분석해 편집 가능한 초안을 '
+              '만듭니다. 공공 레시피나 다른 영상은 검색하지 않습니다.',
             ),
             const SizedBox(height: 16),
             if (youtubeUrl.isNotEmpty)
@@ -102,25 +108,27 @@ class _YoutubeRecipeEnrichmentPageState
               ),
             const SizedBox(height: 20),
             if (suggestion == null) ...<Widget>[
+              if (_isGenerating) ...<Widget>[
+                const Center(child: CircularProgressIndicator()),
+                const SizedBox(height: 12),
+                const Text(
+                  '영상에서 제목·재료·조리 순서·팁을 정리하고 있습니다...',
+                  textAlign: TextAlign.center,
+                ),
+              ],
               if (_error != null)
                 Text(
                   _error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: _isGenerating ? null : _generate,
-                icon: _isGenerating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome),
-                label: Text(
-                  _isGenerating ? 'AI 레시피 보강 중...' : '이 영상으로 AI 레시피 보강',
+              if (_error != null) ...<Widget>[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _isGenerating ? null : _generate,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('다시 시도'),
                 ),
-              ),
+              ],
             ] else ...<Widget>[
               Text(
                 suggestion.title,
@@ -157,8 +165,8 @@ class _YoutubeRecipeEnrichmentPageState
                 label: const Text('초안 수정 후 저장'),
               ),
               OutlinedButton(
-                onPressed: () => setState(() => _suggestion = null),
-                child: const Text('다시 생성'),
+                onPressed: () => _openEditor(suggestion),
+                child: const Text('편집 화면 다시 열기'),
               ),
             ],
           ],

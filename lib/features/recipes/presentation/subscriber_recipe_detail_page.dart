@@ -6,7 +6,7 @@ import '../../cooking/presentation/cooking_completion_feedback_card.dart';
 import '../application/recipe_providers.dart';
 import '../application/unified_recipe_providers.dart';
 import '../domain/recipe.dart';
-import 'recipe_enrichment_page.dart';
+import 'youtube_recipe_enrichment_page.dart';
 
 class SubscriberRecipeDetailPage extends ConsumerStatefulWidget {
   const SubscriberRecipeDetailPage({super.key, required this.recipeId});
@@ -258,30 +258,32 @@ class _SubscriberRecipeDetailPageState
             ),
           ],
           primaryActions: <Widget>[
-            OutlinedButton.icon(
-              onPressed: () async {
-                final createdRecipeId =
-                    await Navigator.of(context).push<Object?>(
-                  MaterialPageRoute<Object?>(
-                    builder: (_) => RecipeEnrichmentPage(recipe: recipe),
-                  ),
-                );
-
-                if (createdRecipeId is String &&
-                    createdRecipeId.trim().isNotEmpty &&
-                    context.mounted) {
-                  ref.invalidate(subscriberRecipesProvider);
-                  ref.invalidate(creatorRecipesProvider);
-                  ref.invalidate(myUnifiedRecipesProvider);
-
-                  context.go(
-                    '/creator/',
+            if ((recipe.youtubeUrl ?? '').trim().isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final createdRecipeId =
+                      await Navigator.of(context).push<Object?>(
+                    MaterialPageRoute<Object?>(
+                      builder: (_) =>
+                          YoutubeRecipeEnrichmentPage(recipe: recipe),
+                    ),
                   );
-                }
-              },
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('AI로 레시피 보강'),
-            ),
+
+                  if (createdRecipeId is String &&
+                      createdRecipeId.trim().isNotEmpty &&
+                      context.mounted) {
+                    ref.invalidate(subscriberRecipesProvider);
+                    ref.invalidate(creatorRecipesProvider);
+                    ref.invalidate(myUnifiedRecipesProvider);
+
+                    context.go(
+                      '/creator/',
+                    );
+                  }
+                },
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('AI로 레시피 보강'),
+              ),
             FilledButton.icon(
               onPressed: () => _goShoppingReview(context, recipe),
               icon: const Icon(Icons.shopping_cart_outlined),
