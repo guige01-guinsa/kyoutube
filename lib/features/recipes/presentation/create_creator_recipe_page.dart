@@ -47,11 +47,24 @@ class _CreateCreatorRecipePageState
   final _imagePicker = ImagePicker();
 
   bool _isSubmitting = false;
+  bool _showValidationErrors = false;
   String? _errorMessage;
   Uint8List? _selectedImageBytes;
   String _selectedImageExtension = 'jpg';
 
   bool get _isEditMode => widget.editRecipeId != null;
+  bool get _isAiDraft => widget.initialRecipe?.sourceType == 'ai_enrichment_draft';
+
+  bool get _hasAiConfirmationItems {
+    final recipe = widget.initialRecipe;
+    if (recipe == null) return false;
+    return <String>[
+      recipe.summary ?? '',
+      recipe.tips ?? '',
+      ...recipe.ingredients,
+      ...recipe.steps,
+    ].any((value) => value.contains('확인 필요'));
+  }
 
   @override
   void initState() {
@@ -141,11 +154,16 @@ class _CreateCreatorRecipePageState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
+      setState(() {
+        _showValidationErrors = true;
+        _errorMessage = '제목·재료·조리 순서의 필수 항목을 확인해 주세요.';
+      });
       return;
     }
 
     setState(() {
       _isSubmitting = true;
+      _showValidationErrors = false;
       _errorMessage = null;
     });
 
@@ -244,9 +262,79 @@ class _CreateCreatorRecipePageState
       body: SafeArea(
         child: Form(
           key: _formKey,
+          autovalidateMode: _showValidationErrors
+              ? AutovalidateMode.always
+              : AutovalidateMode.disabled,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
             children: <Widget>[
+              if (_isAiDraft) ...<Widget>[
+                Card(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withValues(alpha: 0.55),
+                  child: const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Icon(Icons.smart_toy_outlined),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '선택한 YouTube 영상만으로 만든 AI 초안입니다. '
+                            '내용을 확인하고 자유롭게 수정한 뒤 저장해 주세요.',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_hasAiConfirmationItems)
+                  Card(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .tertiaryContainer,
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Icon(Icons.warning_amber_rounded),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '영상에서 확인되지 않은 정보가 있습니다. '
+                              '“확인 필요”로 표시된 재료·분량·단계를 영상과 비교해 수정해 주세요.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ],
+              if (_showValidationErrors) ...<Widget>[
+                Card(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Row(
+                      children: <Widget>[
+                        Icon(Icons.error_outline),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '저장하려면 제목·재료·조리 순서를 모두 입력해야 합니다.',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               TextFormField(
                 controller: _titleController,
                 decoration: const InputDecoration(labelText: '제목'),

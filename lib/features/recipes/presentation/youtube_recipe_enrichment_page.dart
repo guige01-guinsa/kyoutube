@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,7 +23,15 @@ class YoutubeRecipeEnrichmentPage extends ConsumerStatefulWidget {
 
 class _YoutubeRecipeEnrichmentPageState
     extends ConsumerState<YoutubeRecipeEnrichmentPage> {
+  static const _progressLabels = <String>[
+    '영상 제목에서 레시피 이름을 정리하고 있습니다.',
+    '영상 설명에서 재료와 분량을 확인하고 있습니다.',
+    '조리 순서와 팁을 편집 가능한 초안으로 만들고 있습니다.',
+  ];
+
   bool _isGenerating = true;
+  int _progressStage = 0;
+  Timer? _progressTimer;
   String? _error;
   RecipeEnrichmentSuggestion? _suggestion;
 
@@ -31,10 +41,22 @@ class _YoutubeRecipeEnrichmentPageState
     WidgetsBinding.instance.addPostFrameCallback((_) => _generate());
   }
 
+  @override
+  void dispose() {
+    _progressTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _generate() async {
     setState(() {
       _isGenerating = true;
+      _progressStage = 0;
       _error = null;
+    });
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 1600), (_) {
+      if (!mounted || _progressStage >= _progressLabels.length - 1) return;
+      setState(() => _progressStage += 1);
     });
 
     try {
@@ -57,6 +79,7 @@ class _YoutubeRecipeEnrichmentPageState
         setState(() => _error = '영상 기반 AI 레시피 보강 중 오류가 발생했습니다.');
       }
     } finally {
+      _progressTimer?.cancel();
       if (mounted) setState(() => _isGenerating = false);
     }
   }
@@ -109,10 +132,12 @@ class _YoutubeRecipeEnrichmentPageState
             const SizedBox(height: 20),
             if (suggestion == null) ...<Widget>[
               if (_isGenerating) ...<Widget>[
-                const Center(child: CircularProgressIndicator()),
+                LinearProgressIndicator(
+                  value: (_progressStage + 1) / _progressLabels.length,
+                ),
                 const SizedBox(height: 12),
-                const Text(
-                  '영상에서 제목·재료·조리 순서·팁을 정리하고 있습니다...',
+                Text(
+                  _progressLabels[_progressStage],
                   textAlign: TextAlign.center,
                 ),
               ],
