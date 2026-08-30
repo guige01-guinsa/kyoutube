@@ -53,7 +53,8 @@ class _CreateCreatorRecipePageState
   String _selectedImageExtension = 'jpg';
 
   bool get _isEditMode => widget.editRecipeId != null;
-  bool get _isAiDraft => widget.initialRecipe?.sourceType == 'ai_enrichment_draft';
+  bool get _isAiDraft =>
+      widget.initialRecipe?.sourceType == 'ai_enrichment_draft';
 
   bool get _hasAiConfirmationItems {
     final recipe = widget.initialRecipe;
@@ -293,9 +294,7 @@ class _CreateCreatorRecipePageState
                 ),
                 if (_hasAiConfirmationItems)
                   Card(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .tertiaryContainer,
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
                     child: const Padding(
                       padding: EdgeInsets.all(12),
                       child: Row(

@@ -136,9 +136,9 @@ class RecipeEnrichmentService {
     return suggestion;
   }
 
-  Future<RecipeEnrichmentSuggestion>
-      createSuggestionFromSelectedYoutubeVideo({
+  Future<RecipeEnrichmentSuggestion> createSuggestionFromSelectedYoutubeVideo({
     required Recipe recipe,
+    String? transcript,
   }) async {
     final youtubeUrl = (recipe.youtubeUrl ?? '').trim();
 
@@ -166,6 +166,35 @@ class RecipeEnrichmentService {
       throw const RecipeEnrichmentException(
         '3분 이내로 확인된 YouTube 영상만 AI로 보강할 수 있습니다.',
       );
+    }
+
+    return _requestSuggestion(
+      recipe: recipe,
+      youtubeUrl: youtubeUrl,
+      context: context,
+      durationSec: durationSec,
+      failureMessage: '영상 설명란 기반 AI 보강을 처리하지 못했습니다.',
+      invalidResponseMessage: '영상 설명란 AI 보강 응답 형식이 올바르지 않습니다.',
+      invalidResultMessage: '영상 설명란 AI 보강 결과가 올바르지 않습니다.',
+      insufficientResultMessage: '영상 설명란에서 충분한 레시피 정보를 찾지 못했습니다.',
+    );
+  }
+
+  Future<RecipeEnrichmentSuggestion> _requestSuggestion({
+    required Recipe recipe,
+    required String youtubeUrl,
+    required YoutubeRecipeContext context,
+    required int durationSec,
+    required String failureMessage,
+    required String invalidResponseMessage,
+    required String invalidResultMessage,
+    required String insufficientResultMessage,
+  }) async {
+    final accessToken = _accessTokenProvider?.call() ??
+        _supabaseClient.auth.currentSession?.accessToken;
+
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const RecipeEnrichmentException('로그인이 필요합니다.');
     }
 
     final response = await _httpClient.post(
@@ -207,27 +236,27 @@ class RecipeEnrichmentService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RecipeEnrichmentException(
-        _extractMessage(decoded) ?? '영상 설명란 기반 AI 보강을 처리하지 못했습니다.',
+        _extractMessage(decoded) ?? failureMessage,
       );
     }
 
     if (decoded is! Map<String, dynamic>) {
-      throw const RecipeEnrichmentException(
-        '영상 설명란 AI 보강 응답 형식이 올바르지 않습니다.',
+      throw RecipeEnrichmentException(
+        invalidResponseMessage,
       );
     }
 
     if (decoded['status'] != 'ok') {
       throw RecipeEnrichmentException(
-        _extractMessage(decoded) ?? '영상 설명란 AI 보강을 처리하지 못했습니다.',
+        _extractMessage(decoded) ?? failureMessage,
       );
     }
 
     final data = decoded['data'];
 
     if (data is! Map<String, dynamic>) {
-      throw const RecipeEnrichmentException(
-        '영상 설명란 AI 보강 결과가 올바르지 않습니다.',
+      throw RecipeEnrichmentException(
+        invalidResultMessage,
       );
     }
 
@@ -236,8 +265,8 @@ class RecipeEnrichmentService {
     if (suggestion.summary.isEmpty ||
         suggestion.ingredients.isEmpty ||
         suggestion.steps.isEmpty) {
-      throw const RecipeEnrichmentException(
-        '영상 설명란에서 충분한 레시피 정보를 찾지 못했습니다.',
+      throw RecipeEnrichmentException(
+        insufficientResultMessage,
       );
     }
 
@@ -245,9 +274,8 @@ class RecipeEnrichmentService {
   }
 
   String _inferRecipeTitle(String recipeTitle, String videoTitle) {
-    var value = recipeTitle.trim().isNotEmpty
-        ? recipeTitle.trim()
-        : videoTitle.trim();
+    var value =
+        recipeTitle.trim().isNotEmpty ? recipeTitle.trim() : videoTitle.trim();
     value = value
         .replaceAll(RegExp(r'[\[\(【].*?[\]\)】]'), ' ')
         .replaceAll(

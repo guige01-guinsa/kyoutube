@@ -6,22 +6,41 @@ import '../../../core/widgets/centered_state_view.dart';
 import '../../auth/application/auth_providers.dart';
 import '../application/unified_recipe_providers.dart';
 import '../domain/unified_recipe.dart';
+import 'bookmarked_recipes_page.dart';
 import 'recipe_thumbnail.dart';
 
 class MyRecipesPage extends ConsumerStatefulWidget {
-  const MyRecipesPage({super.key});
+  const MyRecipesPage({
+    super.key,
+    this.initialTab = 0,
+  });
+
+  final int initialTab;
 
   @override
   ConsumerState<MyRecipesPage> createState() => _MyRecipesPageState();
 }
 
-class _MyRecipesPageState extends ConsumerState<MyRecipesPage> {
+class _MyRecipesPageState extends ConsumerState<MyRecipesPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 1).toInt(),
+    );
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -88,6 +107,19 @@ class _MyRecipesPageState extends ConsumerState<MyRecipesPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('내 레시피 관리'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const <Widget>[
+            Tab(
+              icon: Icon(Icons.menu_book_outlined),
+              text: '직접 만든 레시피',
+            ),
+            Tab(
+              icon: Icon(Icons.bookmark_outline),
+              text: '저장한 레시피',
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
@@ -100,36 +132,42 @@ class _MyRecipesPageState extends ConsumerState<MyRecipesPage> {
         icon: const Icon(Icons.add),
         label: const Text('새 레시피'),
       ),
-      body: recipesAsync.when(
-        data: (recipes) {
-          return _MyRecipeList(
-            recipes: recipes,
-            searchController: _searchController,
-            searchQuery: _searchQuery,
-            onSearchChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
+      body: TabBarView(
+        controller: _tabController,
+        children: <Widget>[
+          recipesAsync.when(
+            data: (recipes) {
+              return _MyRecipeList(
+                recipes: recipes,
+                searchController: _searchController,
+                searchQuery: _searchQuery,
+                onSearchChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+                onClearSearch: _clearSearch,
+                onRefresh: _refresh,
+                onOpenRecipe: (recipe) => _openRecipe(context, recipe),
+              );
             },
-            onClearSearch: _clearSearch,
-            onRefresh: _refresh,
-            onOpenRecipe: (recipe) => _openRecipe(context, recipe),
-          );
-        },
-        error: (error, stackTrace) {
-          return CenteredStateView(
-            icon: Icons.cloud_off_outlined,
-            title: '레시피를 불러오지 못했습니다',
-            message: '잠시 후 다시 시도해 주세요.',
-            actionLabel: '다시 시도',
-            onAction: () => ref.invalidate(
-              myUnifiedRecipesProvider(_searchQuery),
-            ),
-          );
-        },
-        loading: () {
-          return const Center(child: CircularProgressIndicator());
-        },
+            error: (error, stackTrace) {
+              return CenteredStateView(
+                icon: Icons.cloud_off_outlined,
+                title: '레시피를 불러오지 못했습니다',
+                message: '잠시 후 다시 시도해 주세요.',
+                actionLabel: '다시 시도',
+                onAction: () => ref.invalidate(
+                  myUnifiedRecipesProvider(_searchQuery),
+                ),
+              );
+            },
+            loading: () {
+              return const Center(child: CircularProgressIndicator());
+            },
+          ),
+          const BookmarkedRecipesPage(showAppBar: false),
+        ],
       ),
     );
   }

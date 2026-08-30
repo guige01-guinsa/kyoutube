@@ -1,6 +1,6 @@
 # GitHub Actions Secrets Template (Internal Track Release Guard)
 
-Last update: 2026-07-24
+Last update: 2026-08-30
 
 This template is for `.github/workflows/internal-track-release-guard.yml`.
 
@@ -72,7 +72,7 @@ gh secret set ANDROID_KEY_PROPERTIES --repo $repo --body "$keyProps"
 $gsJson = Get-Content "android/app/google-services.json" -Raw
 gh secret set ANDROID_GOOGLE_SERVICES_JSON --repo $repo --body "$gsJson"
 
-$keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("android/upload-keystore.jks"))
+$keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("<storeFile이 가리키는 실제 키스토어 경로>"))
 gh secret set ANDROID_UPLOAD_KEYSTORE_BASE64 --repo $repo --body "$keystoreBase64"
 
 ## Dispatch input recommendations
@@ -86,6 +86,6 @@ For `.github/workflows/internal-track-release-guard.yml` workflow_dispatch:
 
 1. `SUPABASE_URL_PRODUCTION` and `SUPABASE_ANON_KEY_PRODUCTION` are production values.
 2. `PUBLIC_RECIPE_SYNC_WORKER_SECRET` matches Supabase runtime env.
-3. `ANDROID_KEY_PROPERTIES` points to `storeFile=../upload-keystore.jks`.
-4. `ANDROID_UPLOAD_KEYSTORE_BASE64` decodes to the same keystore used by Play upload key.
-5. `ANDROID_GOOGLE_SERVICES_JSON` matches package id `com.kyoutube.kyoutube`.
+3. `ANDROID_KEY_PROPERTIES` has a relative `storeFile` path that resolves inside `android/`.
+4. `ANDROID_UPLOAD_KEYSTORE_BASE64` decodes to the file named by that `storeFile` path and uses the Play upload key.
+5. `ANDROID_GOOGLE_SERVICES_JSON` matches package id `com.kyoutube.app`.

@@ -18,10 +18,10 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "io.supabase.kyoutube://login-callback"
+site_url = "io.supabase.kyoutube://login-callback/"
 enable_anonymous_sign_ins = false
 additional_redirect_urls = [
-  "io.supabase.kyoutube://login-callback",
+  "io.supabase.kyoutube://login-callback/",
   "http://127.0.0.1:54321/auth/v1/callback"
 ]
 
@@ -69,6 +69,11 @@ entrypoint = "./functions/youtube_recipe_context/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/ai_youtube_recipe_assistant/index.ts"
+
+[functions.ai_recipe_assistant]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ai_recipe_assistant/index.ts"
 
 [functions.youtube_search]
 enabled = true

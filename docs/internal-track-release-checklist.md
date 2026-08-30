@@ -1,10 +1,10 @@
 # Internal Track Release Checklist
 
-Last update: 2026-07-26
+Last update: 2026-08-30
 
 ## Scope
 - Phase 2 / Operations & Policy Track / Step 1
-- Goal: produce a signed AAB and upload to Google Play internal testing
+- Goal: produce a signed 1.0.1+16 AAB and upload to Google Play internal testing
 
 ## Current status (workspace scan)
 - `android/key.properties`: present
@@ -20,7 +20,7 @@ Last update: 2026-07-26
 - Place the keystore file at the `storeFile` location.
 
 2. Add Firebase Android config
-- Download `google-services.json` from Firebase Console for package `com.kyoutube.kyoutube`.
+- Download `google-services.json` from Firebase Console for package `com.kyoutube.app`.
 - Place it at `android/app/google-services.json`.
 
 3. Add Firebase iOS config
@@ -55,6 +55,9 @@ If build fails with `gen_snapshot.EXE` blocked on Windows:
 6. Smoke test on internal build
 - Login
 - Public recipe browse/detail
+- Home header, search guidance, and compact `더보기` menu are readable and easy to operate.
+- `내 레시피 관리` shows both `직접 만든 레시피` and `저장한 레시피` tabs.
+- A legacy `/bookmarks` link opens the `저장한 레시피` tab rather than a separate bookmark page.
 - Home YouTube source search shows loading and result/error states correctly
 - `YouTube 열기` launches external app/browser successfully
 - YouTube import flow (edit sheet -> save) creates a recipe with `youtubeUrl`
@@ -74,6 +77,7 @@ If build fails with `gen_snapshot.EXE` blocked on Windows:
 
 CI run option:
 - Run `.github/workflows/internal-track-release-guard.yml` from GitHub Actions workflow_dispatch.
+- Merge the release candidate into `main` first; the workflow blocks dispatches from other branches.
 - Keep `localVerification=false`.
 - Provide required repository secrets for keystore/firebase/supabase/worker secret.
 
