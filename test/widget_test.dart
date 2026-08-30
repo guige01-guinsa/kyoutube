@@ -280,9 +280,11 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('playscout'), findsOneWidget);
-    expect(find.text('공개 레시피 검색'), findsOneWidget);
+    expect(find.text('요리 찾아보기'), findsOneWidget);
+    expect(find.text('무엇을 만들어 볼까요?'), findsOneWidget);
     expect(find.text('테스트 레시피'), findsOneWidget);
+    expect(find.byTooltip('북마크'), findsNothing);
+    expect(find.byTooltip('더보기'), findsOneWidget);
   });
 
   testWidgets('home search submits immediately and keeps the result visible',

@@ -9,7 +9,7 @@ void main() {
 
     expect(uri.scheme, 'io.supabase.kyoutube');
     expect(uri.host, 'login-callback');
-    expect(uri.path, isEmpty);
+    expect(uri.path, '/');
     expect(googleOAuthQueryParams, const <String, String>{
       'prompt': 'select_account',
     });

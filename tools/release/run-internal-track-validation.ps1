@@ -77,6 +77,21 @@ function Assert-ConfiguredValue {
     }
 }
 
+function Assert-HttpsUrl {
+    param(
+        [string]$Name,
+        [string]$Value
+    )
+
+    $uri = $null
+    if (-not $Value.StartsWith("https://") -or
+        -not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or
+        $uri.Scheme -ne "https" -or
+        [string]::IsNullOrWhiteSpace($uri.Host)) {
+        throw "Invalid HTTPS URL: $Name"
+    }
+}
+
 function Assert-PathExists {
     param(
         [string]$Path,
@@ -181,6 +196,7 @@ if ($isCi -and $LocalVerification.IsPresent) {
 
 Assert-ConfiguredValue -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction -Hint "Pass a real production Supabase URL."
 Assert-ConfiguredValue -Name "SupabaseAnonKeyProduction" -Value $SupabaseAnonKeyProduction -Hint "Pass a real production Supabase anon key."
+Assert-HttpsUrl -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction
 
 if (-not $SkipPublicRecipeSyncSmoke.IsPresent) {
     Assert-ConfiguredValue -Name "PublicRecipeSyncFunctionUrl" -Value $PublicRecipeSyncFunctionUrl -Hint "Pass the public_recipe_sync production function URL."

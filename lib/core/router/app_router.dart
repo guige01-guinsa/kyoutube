@@ -9,7 +9,6 @@ import '../../features/ingredient_search/presentation/ingredient_search_results_
 import '../../features/home/presentation/home_page.dart';
 import '../../features/kitchen/presentation/kitchen_page.dart';
 import '../../features/kitchen/presentation/shopping_review_page.dart';
-import '../../features/recipes/presentation/bookmarked_recipes_page.dart';
 import '../../features/recipes/presentation/create_creator_recipe_page.dart';
 import '../../features/recipes/presentation/creator_recipe_detail_page.dart';
 import '../../features/recipes/presentation/my_recipes_page.dart';
@@ -45,6 +44,9 @@ class AppRoutes {
 
   static String kitchenWithTab(String tab) =>
       '$kitchen?tab=${Uri.encodeQueryComponent(tab)}';
+
+  static String myRecipesWithTab(String tab) =>
+      '$myRecipes?tab=${Uri.encodeQueryComponent(tab)}';
 
   static String shoppingReviewWithSource(String source) =>
       '$shoppingReview?source=${Uri.encodeQueryComponent(source)}';
@@ -124,8 +126,8 @@ class AppRouter {
       // Public/bookmarked recipes.
       GoRoute(
         path: AppRoutes.bookmarks,
-        builder: (BuildContext context, GoRouterState state) =>
-            const BookmarkedRecipesPage(),
+        redirect: (BuildContext context, GoRouterState state) =>
+            AppRoutes.myRecipesWithTab('saved'),
       ),
       GoRoute(
         path: '/recipes/:id',
@@ -166,8 +168,9 @@ class AppRouter {
       // My recipes.
       GoRoute(
         path: AppRoutes.myRecipes,
-        builder: (BuildContext context, GoRouterState state) =>
-            const MyRecipesPage(),
+        builder: (BuildContext context, GoRouterState state) => MyRecipesPage(
+          initialTab: state.uri.queryParameters['tab'] == 'saved' ? 1 : 0,
+        ),
       ),
       GoRoute(
         path: '/my-recipes/:id',

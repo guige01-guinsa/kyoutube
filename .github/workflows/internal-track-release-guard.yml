@@ -55,10 +55,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -111,7 +111,30 @@ jobs:
           Set-Content -Path android/app/google-services.json -Value $env:ANDROID_GOOGLE_SERVICES_JSON -NoNewline
 
           $keystoreBytes = [System.Convert]::FromBase64String($env:ANDROID_UPLOAD_KEYSTORE_BASE64)
-          $keystoreOutputPath = "android/app/keystore/playscout-upload-keystore.jks"
+          $storeFileLine = $env:ANDROID_KEY_PROPERTIES -split "`r?`n" |
+            Where-Object { $_ -match '^\s*storeFile\s*=' } |
+            Select-Object -First 1
+
+          if ([string]::IsNullOrWhiteSpace($storeFileLine)) {
+            throw "CI pipeline guard: ANDROID_KEY_PROPERTIES is missing storeFile."
+          }
+
+          $storeFileValue = ($storeFileLine -split "=", 2)[1].Trim()
+          if ([System.IO.Path]::IsPathRooted($storeFileValue)) {
+            throw "CI pipeline guard: storeFile must be relative to android/app."
+          }
+
+          $androidRoot = [System.IO.Path]::GetFullPath("android")
+          $keystoreOutputPath = [System.IO.Path]::GetFullPath(
+            (Join-Path "android/app" $storeFileValue)
+          )
+
+          if (-not $keystoreOutputPath.StartsWith(
+            $androidRoot + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase
+          )) {
+            throw "CI pipeline guard: storeFile must resolve inside android/."
+          }
 
           New-Item `
             -ItemType Directory `

@@ -13,6 +13,12 @@ import '../../recipes/application/recipe_providers.dart';
 import '../../recipes/domain/recipe.dart';
 import '../../recipes/presentation/recipe_thumbnail.dart';
 
+enum _HomeMenuAction {
+  account,
+  signIn,
+  signOut,
+}
+
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -38,7 +44,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('playscout'),
+        title: const Text('요리 찾아보기'),
         actions: <Widget>[
           if (Env.youtubeSearchEnabled)
             IconButton(
@@ -65,40 +71,53 @@ class _HomePageState extends ConsumerState<HomePage> {
                 context.push('/login');
                 return;
               }
-              context.push('/bookmarks');
-            },
-            icon: const Icon(Icons.bookmark_outline),
-            tooltip: '북마크',
-          ),
-          IconButton(
-            onPressed: () {
-              if (currentUser == null) {
-                context.push('/login');
-                return;
-              }
               context.push('/my-recipes');
             },
             icon: const Icon(Icons.menu_book_outlined),
             tooltip: '내 레시피',
           ),
-          if (currentUser != null)
-            IconButton(
-              onPressed: () {
-                context.push('/account');
-              },
-              icon: const Icon(Icons.account_circle_outlined),
-              tooltip: '계정 관리',
-            ),
-          IconButton(
-            onPressed: () async {
-              if (currentUser == null) {
-                context.push('/login');
-                return;
+          PopupMenuButton<_HomeMenuAction>(
+            tooltip: '더보기',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (_HomeMenuAction action) async {
+              switch (action) {
+                case _HomeMenuAction.account:
+                  context.push('/account');
+                  return;
+                case _HomeMenuAction.signIn:
+                  context.push('/login');
+                  return;
+                case _HomeMenuAction.signOut:
+                  await ref
+                      .read(accountServiceProvider)
+                      .signOutCurrentAccount();
+                  return;
               }
-              await ref.read(accountServiceProvider).signOutCurrentAccount();
             },
-            icon: Icon(currentUser == null ? Icons.login : Icons.logout),
-            tooltip: currentUser == null ? '로그인' : '로그아웃',
+            itemBuilder: (BuildContext context) =>
+                <PopupMenuEntry<_HomeMenuAction>>[
+              if (currentUser != null)
+                const PopupMenuItem<_HomeMenuAction>(
+                  value: _HomeMenuAction.account,
+                  child: ListTile(
+                    leading: Icon(Icons.account_circle_outlined),
+                    title: Text('계정 관리'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              PopupMenuItem<_HomeMenuAction>(
+                value: currentUser == null
+                    ? _HomeMenuAction.signIn
+                    : _HomeMenuAction.signOut,
+                child: ListTile(
+                  leading: Icon(
+                    currentUser == null ? Icons.login : Icons.logout,
+                  ),
+                  title: Text(currentUser == null ? '로그인' : '로그아웃'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -350,8 +369,8 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
             focusNode: _focusNode,
             textInputAction: TextInputAction.search,
             decoration: InputDecoration(
-              labelText: '공개 레시피 검색',
-              hintText: '제목, 재료, 조리 단어로 검색',
+              labelText: '무엇을 만들어 볼까요?',
+              hintText: '예: 된장찌개, 두부, 감자',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: _controller.text.isEmpty
                   ? null
@@ -384,7 +403,7 @@ class _PublicRecipeSearchBarState extends State<_PublicRecipeSearchBar> {
             selected: widget.useAiSearch,
             onSelected: widget.onAiSearchChanged,
             avatar: const Icon(Icons.auto_awesome, size: 18),
-            label: const Text('AI 검색 기준 사용'),
+            label: const Text('AI로 재료·조리법도 함께 찾기'),
           ),
         ],
       ),
