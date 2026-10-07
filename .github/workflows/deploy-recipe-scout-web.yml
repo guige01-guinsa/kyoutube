@@ -1,0 +1,38 @@
+name: Deploy Recipe Scout Web
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          cache: true
+      - name: Fetch packages
+        run: flutter pub get
+      - name: Build production web app
+        env:
+          SUPABASE_URL_PRODUCTION: ${{ secrets.SUPABASE_URL_PRODUCTION }}
+          SUPABASE_ANON_KEY_PRODUCTION: ${{ secrets.SUPABASE_ANON_KEY_PRODUCTION }}
+        run: |
+          test -n "$SUPABASE_URL_PRODUCTION"
+          test -n "$SUPABASE_ANON_KEY_PRODUCTION"
+          flutter build web --release \
+            --dart-define=APP_ENV=production \
+            --dart-define=SUPABASE_URL_PRODUCTION="$SUPABASE_URL_PRODUCTION" \
+            --dart-define=SUPABASE_ANON_KEY_PRODUCTION="$SUPABASE_ANON_KEY_PRODUCTION" \
+            --dart-define=YOUTUBE_SEARCH_ENABLED=true
+      - name: Deploy Firebase Hosting live site
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_RECIPE_SCOUT_WORKSPACE }}
+          channelId: live
+          projectId: recipe-scout-workspace
