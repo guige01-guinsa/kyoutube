@@ -26,6 +26,22 @@ async function checked(response, code) {
   return response.json();
 }
 
+export async function resolveChannel(env, yt) {
+  let target = env.YOUTUBE_CHANNEL_ID;
+  if (env.YOUTUBE_CHANNEL_HANDLE) {
+    const handle = env.YOUTUBE_CHANNEL_HANDLE.replace(/^@/, '');
+    if (!/^[A-Za-z0-9._-]{3,30}$/.test(handle)) throw new Error('invalid_channel_handle');
+    const found = await yt(`channels?part=id&forHandle=${encodeURIComponent(handle)}`);
+    const resolved = found.items?.length === 1 ? found.items[0].id : null;
+    if (!resolved || (target && target !== resolved)) throw new Error('youtube_channel_mismatch');
+    target = resolved;
+  }
+  if (!/^UC[A-Za-z0-9_-]{22}$/.test(target ?? '')) throw new Error('invalid_channel_id');
+  const own = await yt('channels?part=id&mine=true');
+  if (!own.items?.some(item => item.id === target)) throw new Error('youtube_channel_mismatch');
+  return target;
+}
+
 export async function uploadVideo({ campaign, video, token, channelId, privacy, fetcher = fetch, onInitiated = () => {} }) {
   const init = await fetcher('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST', signal: AbortSignal.timeout(30000), headers: { Authorization: `Bearer ${token}`,
@@ -50,8 +66,9 @@ export async function runWorker(env = process.env) {
     console.log('Marketing is disabled; no upload attempted.'); return;
   }
   const names = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'YOUTUBE_CLIENT_ID',
-    'YOUTUBE_CLIENT_SECRET', 'YOUTUBE_REFRESH_TOKEN', 'YOUTUBE_CHANNEL_ID'];
+    'YOUTUBE_CLIENT_SECRET', 'YOUTUBE_REFRESH_TOKEN'];
   if (names.some(name => !env[name])) throw new Error('missing_marketing_configuration');
+  if (!env.YOUTUBE_CHANNEL_ID && !env.YOUTUBE_CHANNEL_HANDLE) throw new Error('missing_channel_configuration');
   const privacy = env.MARKETING_PRIVACY ?? 'private';
   if (!['private', 'public', 'unlisted'].includes(privacy)) throw new Error('invalid_privacy');
   const root = new URL(env.SUPABASE_URL);
@@ -73,8 +90,7 @@ export async function runWorker(env = process.env) {
   const yt = async path => checked(await fetch(`https://www.googleapis.com/youtube/v3/${path}`, {
     signal: AbortSignal.timeout(30000), headers: { Authorization: `Bearer ${oauth.access_token}` },
   }), 'youtube_read_failed');
-  const channel = await yt('channels?part=id&mine=true');
-  if (!channel.items?.some(item => item.id === env.YOUTUBE_CHANNEL_ID)) throw new Error('youtube_channel_mismatch');
+  const channelId = await resolveChannel(env, yt);
   const campaigns = await db('rpc/claim_marketing_campaign', 'POST', {});
   const campaign = campaigns[0];
   if (campaign) {
@@ -88,7 +104,7 @@ export async function runWorker(env = process.env) {
         { encoding: 'utf8', timeout: 180000 });
       if (render.status !== 0) throw new Error('video_render_failed');
       const videoId = await uploadVideo({ campaign, video: await readFile(output), token: oauth.access_token,
-        channelId: env.YOUTUBE_CHANNEL_ID, privacy, onInitiated: () => { initiated = true; } });
+        channelId, privacy, onInitiated: () => { initiated = true; } });
       await db(`marketing_campaigns?id=eq.${campaign.id}&status=eq.publishing`, 'PATCH', {
         status: 'published', youtube_video_id: videoId, error_code: null });
       console.log(`Uploaded campaign ${campaign.id}; requested visibility: ${privacy}.`);

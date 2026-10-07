@@ -1,9 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { campaignLink, videoMetadata, uploadVideo, runWorker } from './worker.mjs';
+import { campaignLink, videoMetadata, uploadVideo, runWorker, resolveChannel } from './worker.mjs';
 import { parseContent, buildPrompt } from '../../supabase/functions/marketing_generate/content.ts';
 
 const campaign = { id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', title: '재료 검색', description: '앱 기능 소개' };
+
+test('resolve configured handle and verify authenticated channel ownership', async () => {
+  const id = 'UCabcdefghijklmnopqrstuv';
+  const calls = [];
+  const result = await resolveChannel({ YOUTUBE_CHANNEL_HANDLE: '@guige01' }, async path => {
+    calls.push(path);
+    return { items: [{ id }] };
+  });
+  assert.equal(result, id);
+  assert.deepEqual(calls, ['channels?part=id&forHandle=guige01', 'channels?part=id&mine=true']);
+});
+
+test('refuse handle/id conflicts and accounts that do not own the target channel', async () => {
+  const id = 'UCabcdefghijklmnopqrstuv';
+  await assert.rejects(resolveChannel({ YOUTUBE_CHANNEL_HANDLE: '@guige01',
+    YOUTUBE_CHANNEL_ID: 'UCzyxwvutsrqponmlkjihgfe' }, async () => ({ items: [{ id }] })), /youtube_channel_mismatch/);
+  await assert.rejects(resolveChannel({ YOUTUBE_CHANNEL_HANDLE: '@guige01' }, async path =>
+    ({ items: path.includes('forHandle=') ? [{ id }] : [] })), /youtube_channel_mismatch/);
+  await assert.rejects(resolveChannel({ YOUTUBE_CHANNEL_HANDLE: '@guige01' }, async () =>
+    ({ items: [] })), /youtube_channel_mismatch/);
+});
 
 test('Play referral preserves campaign without confusing Shorts links with clicks', () => {
   const url = new URL(campaignLink(campaign.id));

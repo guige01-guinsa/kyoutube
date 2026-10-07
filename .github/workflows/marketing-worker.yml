@@ -40,4 +40,5 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.MARKETING_YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.MARKETING_YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_CHANNEL_ID: ${{ vars.MARKETING_YOUTUBE_CHANNEL_ID }}
+          YOUTUBE_CHANNEL_HANDLE: ${{ vars.MARKETING_YOUTUBE_CHANNEL_HANDLE || '@guige01' }}
         run: node tools/marketing/worker.mjs

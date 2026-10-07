@@ -17,6 +17,10 @@ ChatGPT 홍보 초안 자동화도 월·수·금 오전(한국 시간)으로 설
 
 ## 운영 연결 순서
 
+홍보 대상 채널은 사용자가 지정한 **https://www.youtube.com/@guige01** 입니다.
+워크플로의 기본 핸들은 `@guige01`이며, OAuth 인증 후 공식 API로 채널 ID를 조회하고
+인증된 계정의 채널 ID와 일치하는지 확인합니다. 주소 지정만으로 인증·게시가 완료되지는 않습니다.
+
 1. PR의 Flutter 및 Marketing Quality 검사를 통과시키고 변경사항을 main에 반영.
 2. 기존 `Apply Supabase Migrations` 워크플로를 실행하기 전에 대기 중인 모든 migration을 확인. 이 작업은 모든 대기 migration을 적용하므로 0027만 있다고 가정하지 말 것. 기존 실행 기록과 DB migration 목록을 대조하고 백업 확인.
 3. Supabase Dashboard → Authentication → Users에서 운영자의 UUID 확인. SQL Editor에서 아래 템플릿의 UUID를 본인 UUID로 대체해 실행:
@@ -47,7 +51,8 @@ ChatGPT 홍보 초안 자동화도 월·수·금 오전(한국 시간)으로 설
    | Secret | `MARKETING_YOUTUBE_CLIENT_ID` | 마케팅 OAuth 클라이언트 ID |
    | Secret | `MARKETING_YOUTUBE_CLIENT_SECRET` | 마케팅 OAuth 클라이언트 secret |
    | Secret | `MARKETING_YOUTUBE_REFRESH_TOKEN` | 채널의 OAuth refresh token |
-   | Variable | `MARKETING_YOUTUBE_CHANNEL_ID` | `UC…` 형식 채널 ID |
+   | Variable | `MARKETING_YOUTUBE_CHANNEL_HANDLE` | 기본 `@guige01`, 다른 채널을 지정할 때 변경 |
+   | Variable | `MARKETING_YOUTUBE_CHANNEL_ID` | 선택 사항: `UC…` 형식 ID를 추가 지정하면 핸들과도 일치해야 함 |
    | Variable | `MARKETING_PRIVACY` | 처음에는 `private` |
    | Variable | `MARKETING_ENABLED` | 설정 완료 후 `true` |
 
