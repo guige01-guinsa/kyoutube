@@ -35,4 +35,4 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_RECIPE_SCOUT_WORKSPACE }}
           channelId: live
-          projectId: recipe-scout-workspace
+          projectId: korea-01
