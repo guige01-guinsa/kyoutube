@@ -61,7 +61,7 @@ class _MarketingPageState extends ConsumerState<MarketingPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('검토 완료 · 예약 승인'),
+        title: const Text('레시피 스카우트 홍보 · 예약 승인'),
         content: Text(
           '제목·설명·3개 장면을 확인하셨습니까?\n\n'
           '${DateFormat('yyyy-MM-dd HH:mm').format(scheduled)} (기기 시간) 이후 '
@@ -112,7 +112,7 @@ class _MarketingPageState extends ConsumerState<MarketingPage> {
     final admin = ref.watch(marketingAdminProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('마케팅 자동화'),
+        title: const Text('레시피 스카우트 홍보 관리'),
         actions: <Widget>[
           IconButton(
             onPressed: _busy
@@ -141,7 +141,7 @@ class _MarketingPageState extends ConsumerState<MarketingPage> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: <Widget>[
-        const Text('앱 기능 홍보 초안 → 검토·예약 승인 → 영상 제작·업로드'),
+        const Text('레시피 스카우트 기능 홍보 초안 → 검토·예약 승인 → 영상 제작·업로드'),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: _topic,
