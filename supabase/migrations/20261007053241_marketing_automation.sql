@@ -56,12 +56,24 @@ end $$;
 revoke all on function public.reserve_marketing_generation() from public, anon, authenticated;
 grant execute on function public.reserve_marketing_generation() to service_role;
 
-create function public.schedule_marketing_campaign(campaign_id uuid, publish_at timestamptz)
-returns void language plpgsql security definer set search_path = public, pg_temp as $$
+create function public.assert_marketing_access() returns boolean
+language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   if not exists (select 1 from public.marketing_admins where user_id = auth.uid()) then
     raise exception 'marketing_admin_required';
   end if;
+  if coalesce(auth.jwt()->>'aal', 'aal1') <> 'aal2' then
+    raise exception 'ADMIN_MFA_REQUIRED';
+  end if;
+  return true;
+end $$;
+revoke all on function public.assert_marketing_access() from public, anon;
+grant execute on function public.assert_marketing_access() to authenticated;
+
+create function public.schedule_marketing_campaign(campaign_id uuid, publish_at timestamptz)
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  perform public.assert_marketing_access();
   if publish_at is null or publish_at < now() + interval '5 minutes'
      or publish_at > now() + interval '30 days' then raise exception 'invalid_schedule'; end if;
   update public.marketing_campaigns set status = 'scheduled', scheduled_at = publish_at,
@@ -75,9 +87,7 @@ grant execute on function public.schedule_marketing_campaign(uuid, timestamptz) 
 create function public.cancel_marketing_campaign(campaign_id uuid)
 returns void language plpgsql security definer set search_path = public, pg_temp as $$
 begin
-  if not exists (select 1 from public.marketing_admins where user_id = auth.uid()) then
-    raise exception 'marketing_admin_required';
-  end if;
+  perform public.assert_marketing_access();
   update public.marketing_campaigns set status = 'cancelled'
     where id = campaign_id and status in ('draft', 'scheduled');
   if not found then raise exception 'campaign_not_cancellable'; end if;

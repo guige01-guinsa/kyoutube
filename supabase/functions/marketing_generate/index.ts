@@ -11,9 +11,10 @@ Deno.serve(async request => {
   if (request.method !== 'POST') return json({ message: 'POST 요청이 필요합니다.' }, 405);
   const url = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const apiKey = Deno.env.get('OPENAI_API_KEY');
   const model = Deno.env.get('OPENAI_MARKETING_MODEL');
-  if (!url || !serviceKey) return json({ message: '서버 설정을 확인하세요.' }, 503);
+  if (!url || !serviceKey || !anonKey) return json({ message: '서버 설정을 확인하세요.' }, 503);
   const token = request.headers.get('Authorization')?.match(/^Bearer (.+)$/)?.[1];
   if (!token) return json({ message: '로그인이 필요합니다.' }, 401);
   const db = createClient(url, serviceKey, { auth: { persistSession: false } });
@@ -21,6 +22,10 @@ Deno.serve(async request => {
   if (authError || !user) return json({ message: '로그인이 필요합니다.' }, 401);
   const { data: admin, error: adminError } = await db.from('marketing_admins').select('user_id').eq('user_id', user.id).maybeSingle();
   if (adminError || !admin) return json({ message: '마케팅 관리자 권한이 필요합니다.' }, 403);
+  const userDb = createClient(url, anonKey, { auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } } });
+  const { error: accessError } = await userDb.rpc('assert_marketing_access');
+  if (accessError) return json({ message: '관리자 2단계 인증을 완료해 주세요.' }, 403);
   if (!apiKey || !model) return json({ message: 'AI 키와 마케팅 모델 설정이 필요합니다.' }, 503);
   const body = await request.json().catch(() => null);
   const topic = body?.topic;

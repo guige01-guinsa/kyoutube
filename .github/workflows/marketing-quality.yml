@@ -4,13 +4,13 @@ on:
     paths:
       - 'tools/marketing/**'
       - 'supabase/functions/marketing_generate/**'
-      - 'supabase/migrations/0027_marketing_automation.sql'
+      - 'supabase/migrations/*_marketing_automation.sql'
       - '.github/workflows/marketing-*.yml'
   push:
     paths:
       - 'tools/marketing/**'
       - 'supabase/functions/marketing_generate/**'
-      - 'supabase/migrations/0027_marketing_automation.sql'
+      - 'supabase/migrations/*_marketing_automation.sql'
       - '.github/workflows/marketing-*.yml'
 permissions:
   contents: read

@@ -1,6 +1,6 @@
 // Execute real PostgreSQL RLS and RPCs in ephemeral PGlite, never production.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 const { PGlite } = await import(pathToFileURL(process.env.MARKETING_PGLITE_PATH).href);
 const db = new PGlite();
@@ -10,9 +10,13 @@ await db.exec(`create role anon; create role authenticated; create role service_
   create schema auth; create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable as
     $$select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid$$;
+  create function auth.jwt() returns jsonb language sql stable as
+    $$select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb$$;
   grant usage on schema auth to authenticated;
   insert into auth.users values ('${admin}'), ('${ordinary}');`);
-await db.exec(await readFile(new URL('../../supabase/migrations/0027_marketing_automation.sql', import.meta.url), 'utf8'));
+const migrations = new URL('../../supabase/migrations/', import.meta.url);
+const file = (await readdir(migrations)).find(name => name.endsWith('_marketing_automation.sql'));
+await db.exec(await readFile(new URL(file, migrations), 'utf8'));
 await db.query('insert into marketing_admins values ($1)', [admin]);
 const row = (await db.query(`insert into marketing_campaigns(created_by, topic, title, description, scenes)
   values ($1, 'shopping', 'title', 'description', '["one", "two", "three"]') returning id`, [admin])).rows[0];
@@ -23,6 +27,10 @@ await assert.rejects(db.query('select schedule_marketing_campaign($1, now() + in
 await assert.rejects(db.query('select * from claim_marketing_campaign()'), /permission denied/);
 await db.exec(`select set_config('request.jwt.claim.sub', '${admin}', false);`);
 assert.equal((await db.query('select * from marketing_campaigns')).rows.length, 1);
+await assert.rejects(db.query('select assert_marketing_access()'), /ADMIN_MFA_REQUIRED/);
+await assert.rejects(db.query('select schedule_marketing_campaign($1, now() + interval \'1 day\')', [row.id]), /ADMIN_MFA_REQUIRED/);
+await db.exec(`select set_config('request.jwt.claims', '{"aal":"aal2"}', false);`);
+assert.equal((await db.query('select assert_marketing_access() as ok')).rows[0].ok, true);
 await assert.rejects(db.query('update marketing_campaigns set status = \'published\''), /permission denied/);
 await assert.rejects(db.query('select schedule_marketing_campaign($1, now())', [row.id]), /invalid_schedule/);
 await db.query('select schedule_marketing_campaign($1, now() + interval \'1 day\')', [row.id]);

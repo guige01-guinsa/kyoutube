@@ -22,7 +22,7 @@ ChatGPT 홍보 초안 자동화도 월·수·금 오전(한국 시간)으로 설
 인증된 계정의 채널 ID와 일치하는지 확인합니다. 주소 지정만으로 인증·게시가 완료되지는 않습니다.
 
 1. PR의 Flutter 및 Marketing Quality 검사를 통과시키고 변경사항을 main에 반영.
-2. 기존 `Apply Supabase Migrations` 워크플로를 실행하기 전에 대기 중인 모든 migration을 확인. 이 작업은 모든 대기 migration을 적용하므로 0027만 있다고 가정하지 말 것. 기존 실행 기록과 DB migration 목록을 대조하고 백업 확인.
+2. 기존 `Apply Supabase Migrations` 워크플로를 실행하기 전에 대기 중인 모든 migration을 확인. 이 작업은 모든 대기 migration을 적용하므로 마케팅 migration만 있다고 가정하지 말 것. 기존 실행 기록과 DB migration 목록을 대조하고 백업 확인.
 3. Supabase Dashboard → Authentication → Users에서 운영자의 UUID 확인. SQL Editor에서 아래 템플릿의 UUID를 본인 UUID로 대체해 실행:
 
    ```sql
@@ -96,3 +96,18 @@ DB 검증은 임시 PGlite PostgreSQL에서 관리자 격리·직접 수정 거�
 - https://developers.google.com/youtube/v3/guides/using_resumable_upload_protocol
 - https://developers.google.com/identity/protocols/oauth2/web-server#offline
 - https://support.google.com/youtube/answer/13748639
+
+## 운영 서버 적용 시 확인
+
+운영 DB는 기존 0089까지의 별도 변경 이력을 보유합니다. 마케팅 migration은 번호 충돌을 피하고 이번 파일만 개별 적용합니다. 기존 관리자 보안 정책에 맞춰 AI 생성·예약 승인·취소에는 2단계 인증(AAL2)을 요구합니다. 현재 운영 버전의 앱 소스가 GitHub main보다 최신이므로, 이 PR만으로 기존 앱 버전을 대체하지 않습니다.
+
+## 2026-10-07 운영 적용 기록
+
+- Supabase `dfczeudklykypysiseck`에 `20261007053241_marketing_automation.sql` 적용 완료. 로컬 파일 번호를 실제 migration 이력과 일치시킴.
+- `marketing_generate` 버전 1 ACTIVE, JWT 인증 사용.
+- 기존 운영 관리자 1개 계정을 marketing allowlist에 등록.
+- 마케팅 3개 테이블 RLS 활성화, 익명 SELECT 및 일반 사용자 INSERT 권한 없음 확인.
+- 관리자 AAL1 요청 거절/AAL2 승인 및 큐/한도 동작을 임시 PostgreSQL에서 재검증.
+- 생성 한도 테이블은 클라이언트 정책이 없는 서버 전용 테이블로 의도적으로 접근 차단. 관리자 RPC의 SECURITY DEFINER는 allowlist·MFA 검증을 거친 작업에만 사용.
+- OpenAI 마케팅 모델 및 GitHub worker Secrets, YouTube OAuth 설정은 아직 확인/등록하지 않음. 채널 게시 작업은 비활성 상태.
+- 현재 운영 앱의 실제 소스가 GitHub main보다 최신이라는 점을 확인했으므로 PR의 예전 앱 버전을 운영 앱에 덮어쓰지 않음.
