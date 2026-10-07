@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/firebase/firebase_messaging_service.dart';
+import '../../../core/router/app_router.dart';
+import '../../marketing/application/marketing_providers.dart';
 
 import '../application/account_service.dart';
 import '../application/auth_providers.dart';
@@ -250,6 +252,14 @@ class _AccountPageState extends ConsumerState<AccountPage> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 24),
+          if (ref.watch(marketingAdminProvider).valueOrNull == true)
+            ListTile(
+              leading: const Icon(Icons.campaign_outlined),
+              title: const Text('레시피 스카우트 홍보 관리'),
+              subtitle: const Text('홍보 영상 만들기·검토·예약'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _isProcessing ? null : () => context.push(AppRoutes.marketing),
+            ),
           ListTile(
             leading: const Icon(Icons.notifications_active_outlined),
             title: const Text('알림 설정'),
