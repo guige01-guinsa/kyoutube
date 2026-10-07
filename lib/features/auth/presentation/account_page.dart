@@ -255,8 +255,8 @@ class _AccountPageState extends ConsumerState<AccountPage> {
           if (ref.watch(marketingAdminProvider).valueOrNull == true)
             ListTile(
               leading: const Icon(Icons.campaign_outlined),
-              title: const Text('마케팅 자동화'),
-              subtitle: const Text('홍보 초안 검토 및 예약 게시'),
+              title: const Text('레시피 스카우트 홍보 관리'),
+              subtitle: const Text('홍보 영상 만들기·검토·예약'),
               trailing: const Icon(Icons.chevron_right),
               onTap: _isProcessing ? null : () => context.push(AppRoutes.marketing),
             ),
