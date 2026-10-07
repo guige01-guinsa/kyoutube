@@ -1,0 +1,46 @@
+name: Marketing Quality
+on:
+  pull_request:
+    paths:
+      - 'tools/marketing/**'
+      - 'supabase/functions/marketing_generate/**'
+      - 'supabase/migrations/0027_marketing_automation.sql'
+      - '.github/workflows/marketing-*.yml'
+  push:
+    paths:
+      - 'tools/marketing/**'
+      - 'supabase/functions/marketing_generate/**'
+      - 'supabase/migrations/0027_marketing_automation.sql'
+      - '.github/workflows/marketing-*.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 'v2.x'
+      - name: Type check Edge Function
+        run: deno check supabase/functions/marketing_generate/index.ts
+      - name: Worker tests
+        run: node --test tools/marketing/worker.test.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install renderer and database test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-noto-cjk
+          python -m pip install Pillow==11.3.0
+          npm install --prefix /tmp/marketing-db @electric-sql/pglite@0.3.14
+      - name: Database security and queue behavior
+        env:
+          MARKETING_PGLITE_PATH: /tmp/marketing-db/node_modules/@electric-sql/pglite/dist/index.js
+        run: node tools/marketing/database.test.mjs
+      - name: Render smoke test
+        run: python tools/marketing/render_test.py
