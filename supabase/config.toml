@@ -79,3 +79,8 @@ entrypoint = "./functions/ai_recipe_assistant/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/youtube_search/index.ts"
+
+[functions.marketing_generate]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/marketing_generate/index.ts"
