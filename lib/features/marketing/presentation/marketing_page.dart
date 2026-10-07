@@ -98,10 +98,11 @@ class _MarketingPageState extends ConsumerState<MarketingPage> {
       );
       if (!opened) throw StateError('not_opened');
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('영상 페이지를 열 수 없습니다.')));
+      }
     }
   }
 
@@ -142,7 +143,7 @@ class _MarketingPageState extends ConsumerState<MarketingPage> {
         const Text('앱 기능 홍보 초안 → 검토·예약 승인 → 영상 제작·업로드'),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: _topic,
+          initialValue: _topic,
           decoration: const InputDecoration(labelText: '홍보 주제'),
           items: const <DropdownMenuItem<String>>[
             DropdownMenuItem(value: 'youtube', child: Text('3분 이내 요리 영상 검색')),
