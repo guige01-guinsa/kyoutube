@@ -15,6 +15,12 @@ jobs:
         with:
           flutter-version: '3.44.8'
           cache: true
+      - name: Enable Flutter web platform
+        run: |
+          flutter config --enable-web
+          if [ ! -d web ]; then
+            flutter create . --platforms web
+          fi
       - name: Fetch packages
         run: flutter pub get
       - name: Build production web app
