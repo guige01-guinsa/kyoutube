@@ -1,12 +1,14 @@
 name: k_youtube
 description: AI cooking platform MVP
 publish_to: "none"
-version: 1.0.1+16
+version: 1.0.1+99
 environment:
   sdk: ">=3.4.0 <4.0.0"
 
 dependencies:
   flutter:
+    sdk: flutter
+  flutter_localizations:
     sdk: flutter
   flutter_riverpod: ^2.5.1
   app_links: ^7.2.1
@@ -15,17 +17,38 @@ dependencies:
   firebase_core: ^3.4.0
   firebase_messaging: ^15.1.0
   http: ^1.2.2
+  file_selector: ^1.1.0
+  archive: ^4.0.9
+  xml: ^7.0.1
   image_picker: ^1.1.2
-  intl: ^0.19.0
+  in_app_purchase: ^3.3.0
+  in_app_purchase_android: ^0.5.3
+  intl: ^0.20.2
   shared_preferences: ^2.3.2
   url_launcher: ^6.3.1
+  share_plus: ^13.3.0
+  pdf: ^3.13.0
+  printing: 5.15.0
+  web: ^1.1.1
   youtube_recipe_search:
     path: packages/youtube_recipe_search
 
 dev_dependencies:
+  analyzer: 10.1.0
+  file_selector_platform_interface: ^2.7.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/ingredients/
+    - assets/guide/
+    - assets/branding/recipe-scout-icon.png
+    - assets/fonts/NanumGothic-Regular.ttf
+    - assets/fonts/OFL-NanumGothic.txt
+  fonts:
+    - family: RecipeScoutKR
+      fonts:
+        - asset: assets/fonts/NanumGothic-Regular.ttf
