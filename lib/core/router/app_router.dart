@@ -15,6 +15,7 @@ import '../../features/recipes/presentation/my_recipes_page.dart';
 import '../../features/recipes/presentation/recipe_detail_page.dart';
 import '../../features/recipes/presentation/subscriber_recipe_detail_page.dart';
 import '../../features/youtube/presentation/youtube_search_page.dart';
+import '../../features/marketing/presentation/marketing_page.dart';
 
 class AppRoutes {
   const AppRoutes._();
@@ -23,6 +24,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String resetPassword = '/reset-password';
   static const String account = '/account';
+  static const String marketing = '/marketing';
   static const String youtube = '/youtube';
   static const String ingredientSearch = '/ingredient-search';
   static const String ingredientSearchResults = '/ingredient-search/results';
@@ -107,6 +109,11 @@ class AppRouter {
       ),
 
       // Auth.
+      GoRoute(
+        path: AppRoutes.marketing,
+        builder: (BuildContext context, GoRouterState state) =>
+            const MarketingPage(),
+      ),
       GoRoute(
         path: AppRoutes.login,
         builder: (BuildContext context, GoRouterState state) =>

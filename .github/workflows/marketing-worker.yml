@@ -1,0 +1,14 @@
+name: Recipe Scout Marketing
+
+# Rollout hold: no schedule, and manual dispatch cannot publish.
+# Re-enable only after explicit approval and release-source integration checks.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Recipe Scout marketing publishing is suspended.'

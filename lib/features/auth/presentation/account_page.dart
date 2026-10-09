@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/firebase/firebase_messaging_service.dart';
+import '../../../core/router/app_router.dart';
+import '../../marketing/application/marketing_providers.dart';
 
 import '../application/account_service.dart';
 import '../application/auth_providers.dart';
@@ -250,6 +252,14 @@ class _AccountPageState extends ConsumerState<AccountPage> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 24),
+          if (ref.watch(marketingAdminProvider).valueOrNull == true)
+            ListTile(
+              leading: const Icon(Icons.campaign_outlined),
+              title: const Text('마케팅 자동화'),
+              subtitle: const Text('홍보 초안 검토 및 예약 게시'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _isProcessing ? null : () => context.push(AppRoutes.marketing),
+            ),
           ListTile(
             leading: const Icon(Icons.notifications_active_outlined),
             title: const Text('알림 설정'),
@@ -261,7 +271,7 @@ class _AccountPageState extends ConsumerState<AccountPage> {
           ListTile(
             leading: const Icon(Icons.privacy_tip_outlined),
             title: const Text('개인정보 처리방침'),
-            subtitle: const Text('playscout 개인정보 처리방침을 확인합니다.'),
+            subtitle: const Text('레시피 스카우트 개인정보 처리방침을 확인합니다.'),
             trailing: const Icon(Icons.open_in_new),
             onTap: () => _openExternalUrl(_privacyPolicyUri),
           ),
