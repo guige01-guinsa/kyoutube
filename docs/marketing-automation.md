@@ -39,3 +39,15 @@
 - powershell -ExecutionPolicy Bypass -File tools/dev/verify.ps1
 
 운영 DB migration·Edge Function·앱 배포 및 홍보 게시 활성화는 별도 승인 후 진행.
+
+## v99 원본 assets 복원
+
+원본은 GitHub Release v1.0.1+99의 recipe-scout-v99-assets.zip (47개 파일)에 보관합니다. Flutter Quality는 검사 전에 이를 다운로드해 고정 SHA-256을 검증하고 assets 경로에 복원합니다. ZIP이 교체되어 해시가 바뀌면 검사를 중단합니다. 다운로드에는 저장소 contents:read만 사용하며 배포는 수행하지 않습니다.
+
+새 PC에서도 Release 첨부파일을 다운로드한 뒤 저장소 루트에서 다음 명령을 실행합니다:
+
+```text
+python tools/dev/restore_v99_assets.py 다운로드한-ZIP-경로
+```
+
+기존 파일 내용이 v99 원본과 다르면 덮어쓰지 않고 중단합니다. AAB 재검증은 하지 않습니다. 앱 analyze/test와 assets 복원은 릴리스 빌드/운영 배포와 별도입니다.
