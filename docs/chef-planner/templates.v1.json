@@ -1,0 +1,432 @@
+{
+  "schemaVersion": 1,
+  "status": "design_not_deployed",
+  "date": "2026-10-10",
+  "description": "시간은 사용자 확인을 위한 초기 일정값이며 식품 안전 기준이 아니다. 원본 구매와 조리량은 확인 후 사용한다.",
+  "actions": {
+    "recipe_search": "레시피 찾아보기",
+    "recipe_open": "레시피 확인하기",
+    "ingredient_review": "재료 확인하기",
+    "meal_plan": "식단 확인하기",
+    "purchase_prepare": "구매 준비하기",
+    "purchase_request": "구매요청 확인하기",
+    "purchase_receipt": "입고 기록 확인하기",
+    "cost_review": "원가 확인하기"
+  },
+  "templates": [
+    {
+      "id": "opening-preparation",
+      "version": 1,
+      "category": "chef_work",
+      "name": "영업 시작 준비",
+      "anchorKind": "opening",
+      "defaultTimezone": "Asia/Seoul",
+      "recurrenceDefault": null,
+      "tasks": [
+        {
+          "key": "stock-check",
+          "title": "재료와 준비 상태 확인",
+          "startOffsetMinutes": -90,
+          "durationMinutes": 15,
+          "dependsOn": [],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "ingredient_review",
+          "parallelAllowed": false
+        },
+        {
+          "key": "prep-list",
+          "title": "오늘 준비 목록 확인",
+          "startOffsetMinutes": -75,
+          "durationMinutes": 10,
+          "dependsOn": [
+            "stock-check"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "ingredient-prep",
+          "title": "재료 손질 준비",
+          "startOffsetMinutes": -65,
+          "durationMinutes": 25,
+          "dependsOn": [
+            "prep-list"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "cooking-prep",
+          "title": "조리 준비",
+          "startOffsetMinutes": -40,
+          "durationMinutes": 30,
+          "dependsOn": [
+            "ingredient-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "opening-check",
+          "title": "영업 준비 최종 확인",
+          "startOffsetMinutes": -10,
+          "durationMinutes": 10,
+          "dependsOn": [
+            "cooking-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        }
+      ]
+    },
+    {
+      "id": "closing-checklist",
+      "version": 1,
+      "category": "chef_work",
+      "name": "영업 마감 정리",
+      "anchorKind": "closing_start",
+      "defaultTimezone": "Asia/Seoul",
+      "recurrenceDefault": null,
+      "tasks": [
+        {
+          "key": "pending-review",
+          "title": "미완료 업무 확인",
+          "startOffsetMinutes": 0,
+          "durationMinutes": 10,
+          "dependsOn": [],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        },
+        {
+          "key": "ingredient-record",
+          "title": "남은 재료 기록",
+          "startOffsetMinutes": 10,
+          "durationMinutes": 10,
+          "dependsOn": [
+            "pending-review"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "ingredient_review",
+          "parallelAllowed": false
+        },
+        {
+          "key": "cleanup",
+          "title": "작업 공간 정리",
+          "startOffsetMinutes": 20,
+          "durationMinutes": 20,
+          "dependsOn": [
+            "ingredient-record"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        },
+        {
+          "key": "tomorrow-prep",
+          "title": "다음 영업일 준비 확인",
+          "startOffsetMinutes": 40,
+          "durationMinutes": 10,
+          "dependsOn": [
+            "cleanup"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "meal_plan",
+          "parallelAllowed": false
+        },
+        {
+          "key": "closing-check",
+          "title": "마감 확인",
+          "startOffsetMinutes": 50,
+          "durationMinutes": 5,
+          "dependsOn": [
+            "tomorrow-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        }
+      ]
+    },
+    {
+      "id": "weekly-menu-planning",
+      "version": 1,
+      "category": "chef_work",
+      "name": "주간 메뉴 계획",
+      "anchorKind": "next_week_opening",
+      "defaultTimezone": "Asia/Seoul",
+      "recurrenceDefault": null,
+      "tasks": [
+        {
+          "key": "previous-week",
+          "title": "전주 메뉴 검토",
+          "startOffsetMinutes": -5760,
+          "durationMinutes": 20,
+          "dependsOn": [],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        },
+        {
+          "key": "menu-research",
+          "title": "다음 주 메뉴 연구",
+          "startOffsetMinutes": -4320,
+          "durationMinutes": 45,
+          "dependsOn": [
+            "previous-week"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_search",
+          "parallelAllowed": false
+        },
+        {
+          "key": "menu-servings",
+          "title": "메뉴와 인분 확인",
+          "startOffsetMinutes": -2880,
+          "durationMinutes": 20,
+          "dependsOn": [
+            "menu-research"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "meal_plan",
+          "parallelAllowed": false
+        },
+        {
+          "key": "purchase-prep",
+          "title": "구매 준비 확인",
+          "startOffsetMinutes": -1440,
+          "durationMinutes": 30,
+          "dependsOn": [
+            "menu-servings"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "purchase_prepare",
+          "parallelAllowed": false
+        },
+        {
+          "key": "work-review",
+          "title": "조리 준비 일정 확인",
+          "startOffsetMinutes": -120,
+          "durationMinutes": 15,
+          "dependsOn": [
+            "purchase-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        }
+      ]
+    },
+    {
+      "id": "new-menu-launch",
+      "version": 1,
+      "category": "chef_work",
+      "name": "신메뉴 출시 준비",
+      "anchorKind": "first_service",
+      "defaultTimezone": "Asia/Seoul",
+      "recurrenceDefault": null,
+      "tasks": [
+        {
+          "key": "recipe-research",
+          "title": "참고 레시피 조사",
+          "startOffsetMinutes": -10080,
+          "durationMinutes": 45,
+          "dependsOn": [],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_search",
+          "parallelAllowed": false
+        },
+        {
+          "key": "test-cooking",
+          "title": "시험 조리",
+          "startOffsetMinutes": -7200,
+          "durationMinutes": 60,
+          "dependsOn": [
+            "recipe-research"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "recipe-review",
+          "title": "개선점과 준비 시간 기록",
+          "startOffsetMinutes": -5760,
+          "durationMinutes": 20,
+          "dependsOn": [
+            "test-cooking"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "cost-review",
+          "title": "원가와 판매가 검토",
+          "startOffsetMinutes": -4320,
+          "durationMinutes": 30,
+          "dependsOn": [
+            "recipe-review"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "cost_review",
+          "parallelAllowed": false
+        },
+        {
+          "key": "launch-prep",
+          "title": "제공 준비 업무 확인",
+          "startOffsetMinutes": -120,
+          "durationMinutes": 20,
+          "dependsOn": [
+            "cost-review"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "meal_plan",
+          "parallelAllowed": false
+        }
+      ]
+    },
+    {
+      "id": "purchase-receipt",
+      "version": 1,
+      "category": "chef_work",
+      "name": "식재료 구매와 입고 준비",
+      "anchorKind": "delivery_expected",
+      "defaultTimezone": "Asia/Seoul",
+      "recurrenceDefault": null,
+      "tasks": [
+        {
+          "key": "requirements",
+          "title": "필요 재료 확인",
+          "startOffsetMinutes": -2880,
+          "durationMinutes": 20,
+          "dependsOn": [],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "meal_plan",
+          "parallelAllowed": false
+        },
+        {
+          "key": "purchase-quantity",
+          "title": "구매량과 단위 확인",
+          "startOffsetMinutes": -1440,
+          "durationMinutes": 20,
+          "dependsOn": [
+            "requirements"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "purchase_prepare",
+          "parallelAllowed": false
+        },
+        {
+          "key": "purchase-request",
+          "title": "구매요청 검토",
+          "startOffsetMinutes": -720,
+          "durationMinutes": 15,
+          "dependsOn": [
+            "purchase-quantity"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "purchase_request",
+          "parallelAllowed": false
+        },
+        {
+          "key": "delivery-check",
+          "title": "납품 상태 확인",
+          "startOffsetMinutes": 0,
+          "durationMinutes": 10,
+          "dependsOn": [
+            "purchase-request"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "purchase_request",
+          "parallelAllowed": false
+        },
+        {
+          "key": "receipt-record",
+          "title": "입고 기록 확인",
+          "startOffsetMinutes": 10,
+          "durationMinutes": 15,
+          "dependsOn": [
+            "delivery-check"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "purchase_receipt",
+          "parallelAllowed": false
+        }
+      ]
+    },
+    {
+      "id": "reservation-event",
+      "version": 1,
+      "category": "chef_work",
+      "name": "예약 손님과 행사 준비",
+      "anchorKind": "service",
+      "defaultTimezone": "Asia/Seoul",
+      "recurrenceDefault": null,
+      "tasks": [
+        {
+          "key": "menu-servings",
+          "title": "메뉴와 예정 인분 확인",
+          "startOffsetMinutes": -2880,
+          "durationMinutes": 20,
+          "dependsOn": [],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "meal_plan",
+          "parallelAllowed": false
+        },
+        {
+          "key": "purchase-prep",
+          "title": "행사 구매 준비",
+          "startOffsetMinutes": -1440,
+          "durationMinutes": 30,
+          "dependsOn": [
+            "menu-servings"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "purchase_prepare",
+          "parallelAllowed": false
+        },
+        {
+          "key": "ingredient-prep",
+          "title": "행사 재료 준비",
+          "startOffsetMinutes": -150,
+          "durationMinutes": 60,
+          "dependsOn": [
+            "purchase-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "cooking-prep",
+          "title": "제공 전 조리 준비",
+          "startOffsetMinutes": -90,
+          "durationMinutes": 60,
+          "dependsOn": [
+            "ingredient-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": "recipe_open",
+          "parallelAllowed": false
+        },
+        {
+          "key": "service-check",
+          "title": "제공 준비 최종 확인",
+          "startOffsetMinutes": -30,
+          "durationMinutes": 20,
+          "dependsOn": [
+            "cooking-prep"
+          ],
+          "reminderMinutesBefore": 10,
+          "connectionAction": null,
+          "parallelAllowed": false
+        }
+      ]
+    }
+  ]
+}
