@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import '../../features/operations/data/ops_push_service.dart';
 import 'package:flutter/foundation.dart';
 
 import '../ops/ops_monitor_service.dart';
@@ -141,6 +142,7 @@ class FirebaseMessagingService {
       );
 
       if (initialMessage != null) {
+        OpsPushService.handleOpen(initialMessage);
         debugState.value = debugState.value.copyWith(
           lastMessageTitle: OpsMonitorService.redact(
             initialMessage.notification?.title ?? '(앱 시작)',
@@ -176,6 +178,7 @@ class FirebaseMessagingService {
 
       _openedAppSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
         (RemoteMessage message) {
+          OpsPushService.handleOpen(message);
           debugState.value = debugState.value.copyWith(
             lastMessageTitle: OpsMonitorService.redact(
               message.notification?.title ?? '(앱 열림)',

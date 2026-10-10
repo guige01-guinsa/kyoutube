@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -66,7 +67,7 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('비밀번호가 변경되었습니다.'),
+          content: LocalizedText('비밀번호가 변경되었습니다.'),
           duration: Duration(seconds: 3),
         ),
       );
@@ -101,7 +102,7 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('비밀번호 재설정'),
+        title: const LocalizedText('비밀번호 재설정'),
       ),
       body: SafeArea(
         child: LayoutBuilder(
@@ -131,7 +132,7 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                             size: 56,
                           ),
                           const SizedBox(height: 20),
-                          Text(
+                          LocalizedText(
                             '새 비밀번호를 입력해 주세요.',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.titleMedium,
@@ -140,12 +141,12 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                           TextFormField(
                             controller: _passwordController,
                             obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: '새 비밀번호',
+                            decoration: InputDecoration(
+                              labelText: context.tr('새 비밀번호'),
                             ),
                             validator: (value) {
                               if ((value ?? '').length < 8) {
-                                return '비밀번호는 8자 이상이어야 합니다.';
+                                return context.tr('비밀번호는 8자 이상이어야 합니다.');
                               }
                               return null;
                             },
@@ -154,12 +155,12 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                           TextFormField(
                             controller: _confirmPasswordController,
                             obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: '새 비밀번호 확인',
+                            decoration: InputDecoration(
+                              labelText: context.tr('새 비밀번호 확인'),
                             ),
                             validator: (value) {
                               if (value != _passwordController.text) {
-                                return '비밀번호가 일치하지 않습니다.';
+                                return context.tr('비밀번호가 일치하지 않습니다.');
                               }
                               return null;
                             },
@@ -167,13 +168,13 @@ class _ResetPasswordPageState extends ConsumerState<ResetPasswordPage> {
                           const SizedBox(height: 20),
                           FilledButton(
                             onPressed: _isSubmitting ? null : _submit,
-                            child: Text(
+                            child: LocalizedText(
                               _isSubmitting ? '변경 중...' : '비밀번호 변경',
                             ),
                           ),
                           if (_message != null) ...<Widget>[
                             const SizedBox(height: 16),
-                            Text(
+                            LocalizedText(
                               _message!,
                               textAlign: TextAlign.center,
                               style: TextStyle(

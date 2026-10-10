@@ -1,10 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 class Env {
-  static const bool youtubeSearchEnabled = bool.fromEnvironment(
-    'YOUTUBE_SEARCH_ENABLED',
-    defaultValue: false,
-  );
   static const String _rawAppEnv =
       String.fromEnvironment('APP_ENV', defaultValue: '');
 
@@ -40,6 +36,11 @@ class Env {
   static const String _productionSupabaseAnonKey =
       String.fromEnvironment('SUPABASE_ANON_KEY_PRODUCTION', defaultValue: '');
 
+  // Native Google Sign-In exchanges this web client ID for a Supabase session.
+  // It is an OAuth client identifier, not a client secret.
+  static const String googleWebClientId =
+      '1080683616982-ken6ft2ftph0fvvnlqpgj5cvpvgciu65.apps.googleusercontent.com';
+
   static String get supabaseUrl {
     switch (appEnv) {
       case 'production':
@@ -47,7 +48,9 @@ class Env {
             ? _productionSupabaseUrl
             : _supabaseUrl;
       case 'staging':
-        return _stagingSupabaseUrl.isNotEmpty ? _stagingSupabaseUrl : _supabaseUrl;
+        return _stagingSupabaseUrl.isNotEmpty
+            ? _stagingSupabaseUrl
+            : _supabaseUrl;
       case 'local':
         return _localSupabaseUrl.isNotEmpty ? _localSupabaseUrl : _supabaseUrl;
       default:

@@ -1,17 +1,28 @@
+import '../../../core/auth/auth_return.dart';
+import '../../auth/application/auth_providers.dart';
+import 'package:k_youtube/core/widgets/scout_page.dart';
+import '../../guide/presentation/guide_help_button.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/widgets/centered_state_view.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/format/user_number.dart';
 import '../../ingredient_search/domain/shopping_plan.dart';
-
+import '../../ingredient_search/domain/ingredient_matcher.dart';
 import '../../recipes/application/recipe_providers.dart';
 import '../../recipes/domain/recipe.dart';
 import '../../recipes/domain/recipe_source_reference.dart';
 import '../application/kitchen_providers.dart';
 import '../application/shopping_persistence_controllers.dart';
+import '../data/kitchen_api.dart';
 import '../domain/shopping_review_drafts.dart';
+import '../domain/shopping_units.dart';
+import 'shopping_purchase_quantity_dialog.dart';
 
 class ShoppingReviewPage extends ConsumerStatefulWidget {
   const ShoppingReviewPage({
@@ -29,39 +40,28 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
   ShoppingReviewDraft? _draft;
   ShoppingReviewDraftController? _draftController;
   Timer? _saveTimer;
+  final _recipeServings = TextEditingController(text: '1');
+  final _targetServings = TextEditingController(text: '1');
 
   bool _loadingDraft = false;
   bool _submitting = false;
   bool _popping = false;
 
   String? _error;
+  bool _needsLogin = false;
   RecipeSourceReference get _source =>
       RecipeSourceReference.parse(widget.sourceRecipeReference);
 
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _recipeServings.dispose();
+    _targetServings.dispose();
     super.dispose();
   }
 
-  Future<List<String>> _loadAvailableIngredientNames() async {
-    try {
-      final ingredients =
-          await ref.read(kitchenApiProvider).listIngredients(query: '');
-
-      return ingredients
-          .map((ingredient) => ingredient.name.trim())
-          .where((name) => name.isNotEmpty)
-          .toList(growable: false);
-    } catch (_) {
-      // 보유 재료 조회 실패가 장보기 기능 전체 실패로 이어지면 안 됩니다.
-      // 실패 시 전체 재료를 기본 선택 상태로 보여주고 사용자가 직접 제외합니다.
-      return const <String>[];
-    }
-  }
-
   Future<void> _loadDraft(Recipe recipe) async {
-    if (_loadingDraft || _draft != null) {
+    if (!mounted || _loadingDraft || _draft != null) {
       return;
     }
 
@@ -71,11 +71,11 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       final ShoppingReviewDraftController controller =
           await ref.read(shoppingReviewDraftControllerProvider.future);
 
-      final availableIngredients = await _loadAvailableIngredientNames();
-
       final plan = ShoppingPlanBuilder.build(
         recipeIngredients: recipe.ingredients,
-        availableIngredients: availableIngredients,
+        // Cooking does not track stock consumption. A past inventory record
+        // cannot establish what is available now; shoppers exclude it explicitly.
+        availableIngredients: const <String>[],
       );
 
       final ShoppingReviewDraft loadedDraft = await controller.getOrCreate(
@@ -108,6 +108,8 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
         _draft = draft;
         _loadingDraft = false;
       });
+      _recipeServings.text = _shoppingNumber(draft.recipeServings);
+      _targetServings.text = _shoppingNumber(draft.targetServings);
     } catch (_) {
       if (!mounted) {
         return;
@@ -132,6 +134,7 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       quantity: null,
       unit: null,
       selected: planItem.selected,
+      needsReview: planItem.needsReview,
     );
   }
 
@@ -140,13 +143,19 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
 
     final List<ShoppingReviewDraftItem> items =
         draft.items.map((ShoppingReviewDraftItem item) {
-      if (item.name.trim().isNotEmpty) {
-        return item;
-      }
-
+      final String existingName = item.name.trim();
       final String guessedName = _guessIngredientName(item.ingredientText);
+      final bool isLegacyGeneratedName = RegExp(
+        r'(?:큰스푼|작은스푼|티스푼|스푼|숟가락|종이컵|컵|모|줄기|단|개|그램|리터|tsp|tbsp|t)$',
+        caseSensitive: false,
+      ).hasMatch(existingName);
 
-      if (guessedName.trim().isEmpty) {
+      // Old automatic drafts could retain a measuring word, such as
+      // "다진마늘 스푼". Only replace an empty or clearly generated name;
+      // an operator-edited name remains untouched.
+      if ((existingName.isNotEmpty && !isLegacyGeneratedName) ||
+          guessedName.isEmpty ||
+          guessedName == existingName) {
         return item;
       }
 
@@ -160,6 +169,8 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
         quantity: item.quantity,
         unit: item.unit,
         selected: item.selected,
+        needsReview: item.needsReview,
+        purchaseConfirmed: item.purchaseConfirmed,
       );
     }).toList(growable: false);
 
@@ -175,34 +186,42 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       createdAt: draft.createdAt,
       updatedAt: DateTime.now().toUtc(),
       items: List<ShoppingReviewDraftItem>.unmodifiable(items),
+      recipeServings: draft.recipeServings,
+      targetServings: draft.targetServings,
     );
   }
 
-  String _guessIngredientName(String rawIngredientText) {
-    var value = rawIngredientText.trim();
+  String _shoppingNumber(double value) => value == value.roundToDouble()
+      ? value.toInt().toString()
+      : value
+          .toStringAsFixed(3)
+          .replaceFirst(RegExp(r'0+$'), '')
+          .replaceFirst(RegExp(r'\.$'), '');
 
-    if (value.isEmpty) {
-      return '';
+  void _applyServings() {
+    final base = parseUserNumber(_recipeServings.text);
+    final target = parseUserNumber(_targetServings.text);
+    if (base == null ||
+        target == null ||
+        !isValidShoppingServings(base) ||
+        !isValidShoppingServings(target)) {
+      setState(() => _error = '레시피 기준 인분과 만들 인분을 0.1~1,000 사이로 입력해 주세요.');
+      return;
     }
+    try {
+      setState(() {
+        _draft = rescaleShoppingReviewDraftServings(_draft!,
+            recipeServings: base, targetServings: target);
+        _error = null;
+      });
+      _scheduleSave();
+    } on FormatException {
+      setState(() => _error = '인분에 맞춰 수량을 계산하지 못했습니다. 수량을 직접 확인해 주세요.');
+    }
+  }
 
-    value = value.replaceAll(RegExp(r'^[\s\-•·]+'), '');
-
-    value = value.replaceAll(
-      RegExp(r'\([^)]*\)'),
-      ' ',
-    );
-
-    value = value.replaceAll(
-      RegExp(
-        r'\d+(?:\.\d+)?\s*(kg|g|ml|l|L|개|큰술|작은술|컵|대|쪽|알|장|봉|팩|줌|꼬집|cm)?',
-        caseSensitive: false,
-      ),
-      ' ',
-    );
-
-    value = value.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    return value.isEmpty ? rawIngredientText.trim() : value;
+  String _guessIngredientName(String rawIngredientText) {
+    return IngredientMatcher.normalize(rawIngredientText);
   }
 
   ShoppingReviewDraft _replaceItems(List<ShoppingReviewDraftItem> items) {
@@ -293,16 +312,16 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('검토 취소'),
-          content: const Text('저장된 검토 초안을 삭제할까요?'),
+          title: const LocalizedText('검토 취소'),
+          content: const LocalizedText('저장된 검토 초안을 삭제할까요?'),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('계속 검토'),
+              child: const LocalizedText('계속 검토'),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('삭제'),
+              child: const LocalizedText('삭제'),
             ),
           ],
         );
@@ -389,7 +408,13 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
 
       ref.invalidate(kitchenShoppingListsProvider);
 
-      context.go('/kitchen?tab=shopping');
+      context.go(Uri(
+        path: '/shopping',
+        queryParameters: <String, String>{
+          'stage': 'prepare',
+          'list': result.listId,
+        },
+      ).toString());
     } catch (err) {
       if (!mounted) {
         return;
@@ -397,7 +422,18 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
 
       setState(() {
         _submitting = false;
-        _error = '장보기 목록 생성에 실패했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.\n$err';
+        _needsLogin = err is KitchenApiException &&
+            err.kind == KitchenApiErrorKind.unauthorized;
+        _error = switch (err) {
+          KitchenApiException(kind: KitchenApiErrorKind.unauthorized) =>
+            '로그인이 만료되었습니다. 다시 로그인한 뒤 장보기 목록을 만들어 주세요.',
+          KitchenApiException(code: 'shopping_request_rejected') =>
+            '서버가 장보기 요청을 처리하지 못했습니다. 다시 시도하거나 고객지원에 문의해 주세요.',
+          KitchenApiException(kind: KitchenApiErrorKind.validation) ||
+          KitchenApiException(kind: KitchenApiErrorKind.badRequest) =>
+            '선택한 재료의 이름·수량·단위를 확인해 주세요. 수량이 없으면 수량과 단위를 함께 비워 둘 수 있습니다.',
+          _ => '장보기 목록을 만들지 못했어요. 연결 상태를 확인한 뒤 다시 시도해 주세요.',
+        };
       });
     }
   }
@@ -421,46 +457,75 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('장보기 준비'),
+          title: const LocalizedText('장보기 준비'),
           actions: <Widget>[
             TextButton(
               onPressed: _submitting ? null : _continueLater,
-              child: const Text('나중에 계속'),
+              child: const LocalizedText('나중에 계속'),
             ),
             IconButton(
               onPressed: _submitting ? null : _cancel,
               icon: const Icon(Icons.close),
-              tooltip: '취소',
+              tooltip: context.tr('취소'),
             ),
           ],
         ),
-        body: recipeAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(),
-          ),
-          error: (_, __) => const Center(
-            child: Text('레시피를 불러올 수 없습니다.'),
-          ),
-          data: (Recipe? recipe) {
-            if (recipe == null) {
-              return const Center(
-                child: Text('레시피를 찾을 수 없습니다.'),
-              );
-            }
-
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _loadDraft(recipe),
-            );
-
-            if (_draft == null) {
-              return const Center(
+        body: ScoutPageBody(
+            maxWidth: 900,
+            child: recipeAsync.when(
+              loading: () => const Center(
                 child: CircularProgressIndicator(),
-              );
-            }
+              ),
+              error: (_, __) => CenteredStateView(
+                  icon: Icons.refresh,
+                  title: '레시피를 불러올 수 없습니다.',
+                  message: '',
+                  actionLabel: context.tr('다시 시도'),
+                  onAction: () {
+                    switch (source.type) {
+                      case 'public':
+                        ref.invalidate(recipeByIdProvider(source.id));
+                      case 'creator':
+                        ref.invalidate(creatorRecipeByIdProvider(source.id));
+                      default:
+                        ref.invalidate(subscriberRecipeByIdProvider(source.id));
+                    }
+                  }),
+              data: (Recipe? recipe) {
+                if (recipe == null) {
+                  return const Center(
+                    child: LocalizedText('레시피를 찾을 수 없습니다.'),
+                  );
+                }
 
-            return _buildForm(context, recipe);
-          },
-        ),
+                if (_draft == null && _error != null) {
+                  return CenteredStateView(
+                    icon: Icons.refresh,
+                    title: '장보기 준비를 불러오지 못했어요',
+                    message: _error!,
+                    actionLabel: context.tr('다시 시도'),
+                    onAction: () {
+                      setState(() {
+                        _error = null;
+                      });
+                      _loadDraft(recipe);
+                    },
+                  );
+                }
+
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _loadDraft(recipe),
+                );
+
+                if (_draft == null) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                return _buildForm(context, recipe);
+              },
+            )),
       ),
     );
   }
@@ -469,58 +534,135 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
     final ShoppingReviewDraft draft = _draft!;
     final bool canSubmit = !_submitting && _isValid(draft);
 
+    final selectedCount = draft.items.where((item) => item.selected).length;
     return SafeArea(
-      child: Column(
-        children: <Widget>[
-          if (_error != null)
-            MaterialBanner(
-              content: Text(_error!),
-              actions: <Widget>[
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _error = null;
-                    });
-                  },
-                  child: const Text('닫기'),
-                ),
-              ],
-            ),
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text('원문 재료를 확인하고 이름·수량·단위를 입력하세요.'),
-            ),
-          ),
+      child: Center(
+          child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: ScoutStyle.contentWidth),
+        child: Column(children: <Widget>[
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: draft.items.length,
-              itemBuilder: (BuildContext context, int index) {
-                return _itemTile(index, draft.items[index]);
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: canSubmit ? () => _submit(recipe) : null,
-                icon: _submitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.playlist_add),
-                label: const Text('장보기 목록 만들기'),
+              child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            children: <Widget>[
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                    child: LocalizedText(recipe.title,
+                        style: Theme.of(context).textTheme.headlineSmall)),
+                GuideHelpButton(lesson: 'buy-quantity', enabled: !_submitting),
+              ]),
+              const SizedBox(height: 8),
+              const LocalizedText('필요한 재료만 골라 담으세요. 이미 있는 재료는 선택을 해제할 수 있어요.'),
+              const SizedBox(height: 8),
+              const LocalizedText(
+                  '조리 원문은 참고용입니다. 구매 수량·단위는 따로 입력하며, 비워 두어도 목록을 만들 수 있습니다.'),
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const LocalizedText('인분에 맞춰 필요한 양 계산',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      const LocalizedText(
+                          '레시피 기준 인분과 만들 인분을 입력하면, 레시피에서 읽은 수량만 다시 계산합니다. 직접 수정한 구매 수량은 유지됩니다.'),
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 12, runSpacing: 8, children: [
+                        SizedBox(
+                          width: 170,
+                          child: TextField(
+                            controller: _recipeServings,
+                            key: const ValueKey('recipe-base-servings'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: InputDecoration(
+                                labelText: context.tr('레시피 기준 인분')),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 170,
+                          child: TextField(
+                            controller: _targetServings,
+                            key: const ValueKey('recipe-target-servings'),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            onSubmitted: (_) => _applyServings(),
+                            decoration:
+                                InputDecoration(labelText: context.tr('만들 인분')),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          key: const ValueKey('apply-recipe-servings'),
+                          onPressed: _submitting ? null : _applyServings,
+                          icon: const Icon(Icons.calculate_outlined),
+                          label: const LocalizedText('필요량 계산'),
+                        ),
+                      ]),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-        ],
-      ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: ScoutStyle.mint,
+                    borderRadius: BorderRadius.circular(18)),
+                child: Row(children: <Widget>[
+                  const Icon(Icons.shopping_basket_outlined,
+                      color: ScoutStyle.forest),
+                  const SizedBox(width: 12),
+                  Expanded(
+                      child: LocalizedText(
+                          '전체 ${draft.items.length}개 중 $selectedCount개 선택',
+                          style: Theme.of(context).textTheme.titleMedium)),
+                ]),
+              ),
+              if (_needsLogin)
+                TextButton(
+                    onPressed: () async {
+                      final account = ref.read(activeAccountIdProvider);
+                      await context.push(loginFor(
+                          GoRouterState.of(context).uri.toString(),
+                          resume: true,
+                          account: account));
+                      if (mounted) setState(() => _needsLogin = false);
+                    },
+                    child: const LocalizedText('로그인 후 계속')),
+              if (_error != null) ...<Widget>[
+                const SizedBox(height: 12),
+                LocalizedText(_error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
+              ],
+              const SizedBox(height: 20),
+              LocalizedText('장볼 재료 선택',
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 10),
+              for (var index = 0; index < draft.items.length; index++)
+                _itemTile(index, draft.items[index]),
+            ],
+          )),
+          Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: canSubmit ? () => _submit(recipe) : null,
+                  icon: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.shopping_basket_outlined),
+                  label: LocalizedText(_submitting
+                      ? '목록을 만드는 중이에요'
+                      : '장보기 목록 만들기 · $selectedCount개'),
+                ),
+              )),
+        ]),
+      )),
     );
   }
 
@@ -528,20 +670,64 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
     int index,
     ShoppingReviewDraftItem item,
   ) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final selected = item.selected;
+    final quantity = item.quantity;
+    final quantityLabel = quantity == null
+        ? ''
+        : quantity % 1 == 0
+            ? quantity.toInt().toString()
+            : quantity.toString();
+
     return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      color: selected ? colorScheme.surface : ScoutStyle.cream,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: selected
+              ? colorScheme.primary.withValues(alpha: 0.42)
+              : colorScheme.outlineVariant,
+        ),
+      ),
       child: CheckboxListTile(
-        value: item.selected,
+        value: selected,
+        secondary: IconButton(
+          icon: const Icon(Icons.edit_outlined),
+          tooltip: context.tr('구매 수량·단위'),
+          onPressed: _submitting
+              ? null
+              : () async {
+                  final updated =
+                      await showShoppingPurchaseQuantityDialog(context, item);
+                  if (updated != null && mounted) _updateItem(index, updated);
+                },
+        ),
         controlAffinity: ListTileControlAffinity.leading,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
+          horizontal: 10,
           vertical: 4,
         ),
-        title: Text(
+        title: LocalizedText(
           item.ingredientText,
-          semanticsLabel: '레시피 재료 ${item.ingredientText}',
+          semanticsLabel: context.tr('레시피 재료 ${item.ingredientText}'),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
         ),
-        subtitle: Text(
-          item.selected ? '장보기 목록에 포함됨' : '보유 중이거나 장보기에서 제외됨',
+        subtitle: LocalizedText(
+          !selected
+              ? '이번 장보기에서 제외'
+              : item.quantity == null
+                  ? '구매 수량·단위 미입력 · 나중에 입력 가능'
+                  : '구매 $quantityLabel ${shoppingUnitLabel(item.unit)}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: selected
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              ),
         ),
         onChanged: _submitting
             ? null
@@ -556,6 +742,8 @@ class _ShoppingReviewPageState extends ConsumerState<ShoppingReviewPage> {
                     quantity: item.quantity,
                     unit: item.unit,
                     selected: selected ?? false,
+                    needsReview: item.needsReview,
+                    purchaseConfirmed: item.purchaseConfirmed,
                   ),
                 );
               },

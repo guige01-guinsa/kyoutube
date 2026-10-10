@@ -1,0 +1,10 @@
+{
+  "name": "Recipe Scout",
+  "short_name": "Recipe Scout",
+  "start_url": "./#/workspace",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#163f35",
+  "description": "Recipes, costs and purchasing in one workspace.",
+  "icons": [{"src": "icon.png", "sizes": "any", "type": "image/png", "purpose": "any"}]
+}

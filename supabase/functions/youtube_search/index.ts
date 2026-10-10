@@ -1,8 +1,10 @@
+import { fetchWithTimeout } from "../_shared/http.ts";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 
 import { createYoutubeSearchHandler } from "./handler.ts";
 import { searchYoutube } from "./youtube_client.ts";
+import { observeHttp } from "../_shared/operations.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +72,7 @@ async function authorizeAndConsumeRateLimit(
         persistSession: false,
       },
       global: {
+        fetch: fetchWithTimeout,
         headers: {
           Authorization: authorization,
         },
@@ -98,10 +101,7 @@ async function authorizeAndConsumeRateLimit(
     } = await authClient.rpc("consume_youtube_search_rate_limit");
 
     if (rateLimitError != null) {
-      console.error("youtube_search_rate_limit_check_failed", {
-        code: rateLimitError.code,
-        message: rateLimitError.message,
-      });
+      console.error("youtube_search_rate_limit_check_failed");
 
       return jsonResponse(
         {
@@ -125,10 +125,8 @@ async function authorizeAndConsumeRateLimit(
     }
 
     return null;
-  } catch (error) {
-    console.error("youtube_search_auth_check_failed", {
-      message: error instanceof Error ? error.message : "unknown_error",
-    });
+  } catch (_) {
+    console.error("youtube_search_auth_check_failed");
 
     return jsonResponse(
       {
@@ -141,29 +139,31 @@ async function authorizeAndConsumeRateLimit(
   }
 }
 
-serve(async (request: Request): Promise<Response> => {
-  if (request.method === "OPTIONS") {
+serve(
+  observeHttp("youtube_search", async (request: Request): Promise<Response> => {
+    if (request.method === "OPTIONS") {
+      return handler(request);
+    }
+
+    // 잘못된 HTTP method는 handler가 405 응답을 반환한다.
+    if (request.method !== "GET") {
+      return handler(request);
+    }
+
+    // 잘못된 검색어는 quota를 소비하지 않고 handler가 400 응답을 반환한다.
+    const url = new URL(request.url);
+    const query = (url.searchParams.get("q") ?? "").trim();
+
+    if (query.length < 2 || query.length > 80) {
+      return handler(request);
+    }
+
+    const authFailure = await authorizeAndConsumeRateLimit(request);
+
+    if (authFailure != null) {
+      return authFailure;
+    }
+
     return handler(request);
-  }
-
-  // 잘못된 HTTP method는 handler가 405 응답을 반환한다.
-  if (request.method !== "GET") {
-    return handler(request);
-  }
-
-  // 잘못된 검색어는 quota를 소비하지 않고 handler가 400 응답을 반환한다.
-  const url = new URL(request.url);
-  const query = (url.searchParams.get("q") ?? "").trim();
-
-  if (query.length < 2 || query.length > 80) {
-    return handler(request);
-  }
-
-  const authFailure = await authorizeAndConsumeRateLimit(request);
-
-  if (authFailure != null) {
-    return authFailure;
-  }
-
-  return handler(request);
-});
+  }),
+);

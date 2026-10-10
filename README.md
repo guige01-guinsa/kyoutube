@@ -1,3 +1,5 @@
+사무실 개발 기준: `codex/office-development-v99`. [집·사무실 개발 안내](docs/MULTI_PC_DEVELOPMENT_SETUP_KO.md), [홍보 기능 검토](docs/MARKETING_READINESS_REVIEW_KO.md).
+
 # K-youtube
 
 Flutter, Supabase, Firebase 기반의 Android-first AI 요리 플랫폼입니다.
@@ -97,3 +99,4 @@ adb reverse --list
 - Firebase 초기화 오류: 플랫폼별 Firebase 설정 파일이 로컬에 있는지 확인합니다. 해당 파일은 커밋하지 않습니다.
 
 상세 개발 흐름은 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md), 구성은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고하세요.
+

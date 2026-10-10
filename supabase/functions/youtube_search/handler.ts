@@ -38,6 +38,12 @@ const localeProfiles: Record<string, LocaleProfile> = {
     allowedRegionCodes: ["US", "GB", "CA", "AU", "SG"],
     cookingQuerySuffix: "cooking recipe",
   },
+  es: {
+    languageCode: "es",
+    defaultRegionCode: "MX",
+    allowedRegionCodes: ["MX", "AR", "BO", "CL", "CO", "CR", "DO", "EC", "ES", "GT", "HN", "NI", "PA", "PE", "PR", "PY", "SV", "US", "UY", "VE"],
+    cookingQuerySuffix: "receta de cocina",
+  },
 };
 
 const cors = {
@@ -57,8 +63,8 @@ const jsonResponse = (body: unknown, status: number) =>
   );
 
 const limitOf = (raw: string | null) => {
-  const parsed = Number(raw ?? "5");
-  return Number.isInteger(parsed) ? Math.max(1, Math.min(10, parsed)) : 5;
+  const parsed = Number(raw ?? "10");
+  return Number.isInteger(parsed) ? Math.max(1, Math.min(20, parsed)) : 10;
 };
 
 function localeOf(
@@ -70,8 +76,7 @@ function localeOf(
     .toLowerCase()
     .split("-")[0];
 
-  // 출시 초기에는 ko/en만 허용한다.
-  // 지원하지 않는 locale은 한국어 기본 profile로 안전하게 fallback한다.
+  // Unknown languages retain the Korean default; regions are language-specific.
   const profile = localeProfiles[languageCode] ?? localeProfiles.ko;
 
   const requestedRegion = (rawRegion ?? "")
@@ -112,7 +117,8 @@ export function createYoutubeSearchHandler(
     const url = new URL(request.url);
     const query = (url.searchParams.get("q") ?? "").trim();
 
-    if (query.length < 2 || query.length > 80) {
+    const queryLength = [...query].length;
+    if (queryLength < 1 || queryLength > 80) {
       return jsonResponse(failure("youtube_input_invalid", 400), 400);
     }
 

@@ -2,26 +2,29 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../ops/ops_monitor_service.dart';
 import 'oauth_callback_handler.dart';
+import 'oauth_redirect.dart';
+import '../web/browser_lifecycle.dart';
 
 class OAuthDeepLinkService {
   OAuthDeepLinkService({
     AppLinks? appLinks,
     OAuthCallbackHandler? callbackHandler,
-  }) : _appLinks = appLinks ?? AppLinks(),
-       _callbackHandler =
-           callbackHandler ??
-           OAuthCallbackHandler(
-             exchangeSessionFromUri: (Uri uri) async {
-               final response = await Supabase.instance.client.auth
-                   .getSessionFromUrl(uri);
+  })  : _appLinks = appLinks ?? AppLinks(),
+        _callbackHandler = callbackHandler ??
+            OAuthCallbackHandler(
+              webCallbackUri: kIsWeb ? Uri.parse(oauthRedirectUri) : null,
+              exchangeSessionFromUri: (Uri uri) async {
+                final response =
+                    await Supabase.instance.client.auth.getSessionFromUrl(uri);
 
-               return response.redirectType;
-             },
-           );
+                return response.redirectType;
+              },
+            );
 
   final AppLinks _appLinks;
   final OAuthCallbackHandler _callbackHandler;
@@ -35,6 +38,18 @@ class OAuthDeepLinkService {
     }
 
     _started = true;
+
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.queryParameters.containsKey('code') ||
+          uri.queryParameters.containsKey('error') ||
+          uri.fragment.contains('access_token=')) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(_handleUri(uri));
+        });
+      }
+      return;
+    }
 
     _subscription = _appLinks.uriLinkStream.listen(
       (Uri uri) {
@@ -79,7 +94,9 @@ class OAuthDeepLinkService {
     switch (result.outcome) {
       case OAuthCallbackOutcome.ignored:
       case OAuthCallbackOutcome.duplicate:
+        return;
       case OAuthCallbackOutcome.exchanged:
+        if (kIsWeb) clearBrowserAuthParameters();
         return;
       case OAuthCallbackOutcome.missingCode:
         OpsMonitorService.recordError(

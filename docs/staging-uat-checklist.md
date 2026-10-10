@@ -1,44 +1,22 @@
-# Staging UAT Checklist
+# Staging UAT — v53 및 운영 관측 후속 변경
 
-Last update: 2026-07-19
+갱신: 2026-09-12. 별도 staging 프로젝트·테스트 계정을 사용한다.
 
-## Purpose
-Use staging to catch P1/P2 issues before internal test promotion or production rollout.
+1. 빌드 번호·해시·DB 마이그레이션·함수 버전을 기록한다.
+2. [내부 검사](internal-track-release-checklist.md)의 한/영 흐름을 실행한다.
+3. 비로그인·일반 사용자·관리자를 비교한다. 집계·비용은 관리자만 접근 가능해야 한다.
+4. 통제된 AI 성공·불완전 초안·공급자 오류·인증/한도 거절의 분류와 원래 응답 보존을 확인한다.
+5. 수집 저장 실패 시 제품 응답이 유지되는지 staging에서 확인한다.
+6. 비용 미입력/일부 입력/실제 0/예산 초과/잘못된 입력을 확인한다. 저장 실패 시 입력값 유지.
+7. 작은 화면·큰 글자·오프라인·토큰 만료·계정 전환을 검사한다.
+8. 계정 삭제 시 연결된 앱 오류 삭제, 보관 정리 실행을 확인한다.
 
-## UAT rules
-- Use a staging Supabase project and staging Firebase config.
-- Clear local app data before the first run.
-- Record every failure with screen, step, and exact message.
-- Block promotion on any P1 issue.
+## 종료 조건
 
-## P1 defects
-- App launch failure.
-- Login or session recovery failure.
-- Public recipe browse failure.
-- Copy-to-my-recipes failure.
-- Creator CRUD failure.
-- Delete or undo failure that causes data loss.
+- [ ] P1(유실·권한 노출·시작/인증/핵심 작업 차단) 없음.
+- [ ] P2 해결 또는 승인된 우회 방법·수정 일정 존재.
+- [ ] 일시·담당자·결과·증거 기록.
+- [ ] 자동 청구 연동·외부 알림·실제 TTS 등 미구현 기능을 통과로 표시하지 않음.
+- [ ] 신규 관측 검사를 기존 v53 AAB 검사와 구분.
 
-## P2 defects
-- Incorrect empty state.
-- Missing loading state.
-- Confusing error copy.
-- Minor layout issues that do not block task completion.
-- Notification/voice guide inconsistencies that have a workaround.
-
-## UAT sequence
-1. Fresh install and launch.
-2. Login and logout.
-3. Public recipe search and detail.
-4. Copy to personal recipes.
-5. Bookmark add/remove.
-6. Creator create/edit/delete.
-7. Personal note save/delete undo.
-8. Voice guide start/stop.
-9. FCM permission and token check.
-10. Review ops report and close the session.
-
-## Exit criteria
-- No open P1 defects.
-- Any P2 defects have a workaround or an approved fix date.
-- All checklist items are signed off by QA or the product owner.
+로컬 테스트는 Play 결제·FCM·운영 연결·실기기 UAT를 대신하지 않는다.

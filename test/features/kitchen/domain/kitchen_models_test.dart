@@ -68,6 +68,28 @@ void main() {
     expect(item.updatedAt, DateTime.parse('2026-01-01T00:00:00Z'));
   });
 
+  test('accepts international and packaging purchase units', () {
+    for (final unit in <String>[
+      'oz',
+      'cup',
+      'bottle',
+      'bundle',
+      'bunch',
+      'carton',
+      'case',
+      'net',
+      'pouch',
+    ]) {
+      expect(
+        KitchenShoppingItem.fromJson(<String, dynamic>{
+          ...itemJson(),
+          'unit': unit,
+        }).unit,
+        unit,
+      );
+    }
+  });
+
   test('parses a canonical shopping list with reviewed items', () {
     final list = KitchenShoppingList.fromJson(<String, dynamic>{
       'id': 'list-1',

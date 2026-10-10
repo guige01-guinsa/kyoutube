@@ -35,6 +35,16 @@ const searchPayload = {
         thumbnails: { high: { url: "https://thumbnail.test/missing" } },
       },
     },
+    {
+      id: { videoId: "advertisement-video" },
+      snippet: {
+        title: "김치찌개 먹방 광고",
+        channelTitle: "광고 채널",
+        description: "협찬 상품 리뷰",
+        publishedAt: "2026-01-01T00:00:00Z",
+        thumbnails: { high: { url: "https://thumbnail.test/ad" } },
+      },
+    },
   ],
 };
 
@@ -47,6 +57,10 @@ const detailsPayload = {
     {
       id: "long-video",
       contentDetails: { duration: "PT3M1S" },
+    },
+    {
+      id: "advertisement-video",
+      contentDetails: { duration: "PT30S" },
     },
   ],
 };
@@ -74,7 +88,7 @@ Deno.test("429 and 5xx retry once, while other 4xx do not retry", async () => {
   }
 });
 
-Deno.test("returns only Korean cooking candidates at or under 180 seconds", async () => {
+Deno.test("returns embeddable cooking candidates at or under 60 minutes", async () => {
   const requestedUrls: URL[] = [];
 
   const items = await searchYoutube({
@@ -104,25 +118,29 @@ Deno.test("returns only Korean cooking candidates at or under 180 seconds", asyn
   const searchUrl = requestedUrls[0];
   assertEquals(searchUrl.searchParams.get("q"), "김치찌개 요리 레시피");
   assertEquals(searchUrl.searchParams.get("type"), "video");
-  assertEquals(searchUrl.searchParams.get("videoCategoryId"), "26");
-  assertEquals(searchUrl.searchParams.get("videoDuration"), "short");
+  assertEquals(searchUrl.searchParams.get("videoCategoryId"), null);
+  assertEquals(searchUrl.searchParams.get("videoDuration"), null);
+  assertEquals(searchUrl.searchParams.get("videoEmbeddable"), "true");
+  assertEquals(searchUrl.searchParams.get("safeSearch"), "moderate");
   assertEquals(searchUrl.searchParams.get("relevanceLanguage"), "ko");
   assertEquals(searchUrl.searchParams.get("regionCode"), "KR");
-  assertEquals(searchUrl.searchParams.get("maxResults"), "15");
+  assertEquals(searchUrl.searchParams.get("maxResults"), "20");
 
   const detailsUrl = requestedUrls[1];
   assertEquals(detailsUrl.searchParams.get("part"), "contentDetails");
   assertEquals(
     detailsUrl.searchParams.get("id"),
-    "short-video,long-video,missing-duration",
+    "short-video,long-video,missing-duration,advertisement-video",
   );
 
-  assertEquals(items.length, 1);
+  assertEquals(items.length, 2);
   assertEquals(items[0].videoId, "short-video");
   assertEquals(items[0].durationSec, 179);
+  assertEquals(items[1].videoId, "long-video");
+  assertEquals(items[1].durationSec, 181);
 });
 
-Deno.test("returns an empty list when no candidate is at or under 180 seconds", async () => {
+Deno.test("returns an empty list when every candidate exceeds 60 minutes", async () => {
   const items = await searchYoutube({
     apiKey: "test-key",
     query: "파스타",
@@ -138,11 +156,11 @@ Deno.test("returns an empty list when no candidate is at or under 180 seconds", 
         items: [
           {
             id: "short-video",
-            contentDetails: { duration: "PT3M1S" },
+            contentDetails: { duration: "PT1H1S" },
           },
           {
             id: "long-video",
-            contentDetails: { duration: "PT4M" },
+            contentDetails: { duration: "PT2H" },
           },
         ],
       });

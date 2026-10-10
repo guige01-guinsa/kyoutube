@@ -1,12 +1,15 @@
-/// Native mobile OAuth callback used by Supabase Auth.
-///
-/// This URI must match:
-/// - AndroidManifest.xml VIEW intent filter
-/// - Supabase Authentication redirect URL allow-list
-/// - OAuth redirectTo and emailRedirectTo values
-const String oauthRedirectUri = 'io.supabase.kyoutube://login-callback/';
+import 'package:flutter/foundation.dart';
 
-/// Forces Google OAuth to show the account chooser during authentication.
-const Map<String, String> googleOAuthQueryParams = <String, String>{
-  'prompt': 'select_account',
-};
+/// Must match the Android intent filter and Supabase redirect allow-list.
+const String mobileOAuthRedirectUri = 'io.supabase.kyoutube://login-callback/';
+
+/// Return only to this deployment's origin/path, never a query-supplied URL.
+String webOAuthRedirectUri(Uri page) => Uri(
+        scheme: page.scheme,
+        host: page.host,
+        port: page.hasPort ? page.port : null,
+        path: page.path)
+    .toString();
+
+String get oauthRedirectUri =>
+    kIsWeb ? webOAuthRedirectUri(Uri.base) : mobileOAuthRedirectUri;

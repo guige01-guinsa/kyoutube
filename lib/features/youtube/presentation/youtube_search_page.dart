@@ -1,10 +1,11 @@
+import '../../../core/auth/auth_return.dart';
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:youtube_recipe_search/youtube_recipe_search.dart';
 
-import '../../../core/config/env.dart';
 import '../../recipes/domain/recipe.dart';
 import '../../recipes/presentation/youtube_recipe_enrichment_page.dart';
 import '../data/supabase_youtube_search_transport.dart';
@@ -14,7 +15,7 @@ class YoutubeSearchPage extends StatefulWidget {
   const YoutubeSearchPage({
     super.key,
     this.transport,
-    this.enabled = Env.youtubeSearchEnabled,
+    this.enabled = true,
     this.initialQuery,
   });
 
@@ -28,17 +29,25 @@ class YoutubeSearchPage extends StatefulWidget {
 
 class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
   late final YoutubeSearchController _controller;
+  SupabaseYoutubeSearchTransport? _ownedTransport;
 
   @override
   void initState() {
     super.initState();
 
-    final transport = widget.transport ?? SupabaseYoutubeSearchTransport();
+    _ownedTransport =
+        widget.transport == null ? SupabaseYoutubeSearchTransport() : null;
+    final transport = widget.transport ?? _ownedTransport!;
 
     _controller = YoutubeSearchController(
       YoutubeSearchClient(transport),
     );
+  }
 
+  @override
+  void dispose() {
+    _ownedTransport?.close();
+    super.dispose();
   }
 
   bool _isAuthenticated() {
@@ -136,14 +145,14 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(content: LocalizedText(message)),
     );
   }
 
   Widget _buildLoginRequiredScreen(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('YouTube'),
+        title: const LocalizedText('YouTube'),
       ),
       body: Center(
         child: Padding(
@@ -159,14 +168,14 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
                   size: 52,
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                const LocalizedText(
                   'YouTube 레시피 검색은 로그인 후 사용할 수 있습니다.',
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
                 FilledButton(
-                  onPressed: () => context.go('/login'),
-                  child: const Text('로그인하기'),
+                  onPressed: () => context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true)),
+                  child: const LocalizedText('로그인하기'),
                 ),
               ],
             ),
@@ -181,12 +190,12 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
     if (!widget.enabled) {
       return Scaffold(
         appBar: AppBar(
-          title: const Text('YouTube'),
+          title: const LocalizedText('YouTube'),
         ),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
-            child: Text(
+            child: LocalizedText(
               'YouTube 검색 기능은 현재 사용할 수 없습니다.',
               textAlign: TextAlign.center,
             ),
@@ -201,7 +210,7 @@ class _YoutubeSearchPageState extends State<YoutubeSearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('YouTube'),
+        title: const LocalizedText('YouTube'),
       ),
       body: SafeArea(
         child: Padding(

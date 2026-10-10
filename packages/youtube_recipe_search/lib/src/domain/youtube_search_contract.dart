@@ -2,7 +2,7 @@ import 'youtube_search_exception.dart';
 import 'youtube_search_result.dart';
 
 class YoutubeSearchRequest {
-  const YoutubeSearchRequest({required this.query, this.limit = 5});
+  const YoutubeSearchRequest({required this.query, this.limit = 10});
   final String query;
   final int limit;
 }

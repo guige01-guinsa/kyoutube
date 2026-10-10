@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:k_youtube/features/ingredient_search/domain/shopping_plan.dart';
 import 'package:k_youtube/features/kitchen/data/shopping_persistence.dart';
 import 'package:k_youtube/features/kitchen/domain/shopping_review_drafts.dart';
 
@@ -35,6 +36,7 @@ ShoppingReviewDraftItem _item({String name = ''}) => ShoppingReviewDraftItem(
       quantityInput: '2',
       quantity: 2,
       unit: 'kg',
+      purchaseConfirmed: true,
     );
 
 void main() {
@@ -161,6 +163,110 @@ void main() {
         throwsA(isA<KitchenStorageException>()));
   });
 
+  test(
+      'edited rice and egg replace saved review while unchanged choices survive',
+      () async {
+    final memory = _MemoryStore();
+    final store = ShoppingReviewDraftStore(storage: memory);
+    List<ShoppingReviewDraftItem> items(List<String> ingredients) {
+      final plan = ShoppingPlanBuilder.build(
+          recipeIngredients: ingredients, availableIngredients: []);
+      return List.generate(plan.items.length, (index) {
+        final item = plan.items[index];
+        return ShoppingReviewDraftItem(
+          localId: 'ingredient-$index',
+          ingredientText: item.rawIngredientText,
+          name: item.normalizedName,
+          quantityInput: '',
+          quantity: null,
+          unit: null,
+          needsReview: item.needsReview,
+          selected: item.normalizedName != '참기름',
+        );
+      });
+    }
+
+    final first = await store.getOrCreateDraft(
+      userId: 'chef',
+      sourceRecipeId: 'creator:bibimbap',
+      initialItems: items([
+        '참기름 1 큰술',
+        '[확인 필요] 밥',
+        '[확인 필요] 달걀 (기호에 따라 올림)',
+      ]),
+    );
+    // A new store represents closing/reopening the app with a saved draft.
+    final reopened = ShoppingReviewDraftStore(storage: memory);
+    final edited = items(['밥 120g', '달걀 1개', '참기름 1 큰술', '당근 ½ 개 (채 썸)']);
+    final refreshed = await reopened.getOrCreateDraft(
+      userId: 'chef',
+      sourceRecipeId: 'creator:bibimbap',
+      initialItems: edited,
+    );
+    expect(refreshed.items.map((item) => item.ingredientText),
+        ['밥 120g', '달걀 1개', '참기름 1 큰술', '당근 ½ 개 (채 썸)']);
+    expect(refreshed.items[0].quantity, isNull);
+    expect(refreshed.items[0].unit, isNull);
+    expect(refreshed.items[1].quantity, isNull);
+    expect(refreshed.items[1].unit, isNull);
+    expect(refreshed.items.take(2).every((item) => !item.needsReview), isTrue);
+    expect(refreshed.items[2].selected, isFalse);
+    expect(refreshed.items[3].quantity, isNull);
+    expect(refreshed.createIdempotencyKey, isNot(first.createIdempotencyKey));
+    final retry = await reopened.getOrCreateDraft(
+      userId: 'chef',
+      sourceRecipeId: 'creator:bibimbap',
+      initialItems: edited,
+    );
+    expect(retry.createIdempotencyKey, refreshed.createIdempotencyKey);
+    expect(retry.serialize(), refreshed.serialize());
+    final removed = await reopened.getOrCreateDraft(
+      userId: 'chef',
+      sourceRecipeId: 'creator:bibimbap',
+      initialItems: items(['달걀 1개', '참기름 1 큰술']),
+    );
+    expect(removed.items.map((item) => item.name), ['달걀', '참기름']);
+    expect(removed.items.last.selected, isFalse);
+  });
+
+  test(
+      'legacy cooking amount is cleared without losing exclusion or original text',
+      () async {
+    final memory = _MemoryStore();
+    final store = ShoppingReviewDraftStore(storage: memory);
+    await store.getOrCreateDraft(
+        userId: 'chef',
+        sourceRecipeId: 'creator:half',
+        initialItems: [
+          const ShoppingReviewDraftItem(
+              localId: '0',
+              ingredientText: '당근 ½ 개',
+              name: '당근',
+              quantityInput: '0.5',
+              quantity: 0.5,
+              unit: 'ea',
+              needsReview: true,
+              selected: false),
+        ]);
+    final restored = await store.getOrCreateDraft(
+        userId: 'chef',
+        sourceRecipeId: 'creator:half',
+        initialItems: [
+          const ShoppingReviewDraftItem(
+              localId: '0',
+              ingredientText: '당근 ½ 개',
+              name: '당근',
+              quantityInput: '',
+              quantity: null,
+              unit: null),
+        ]);
+    expect(restored.items.single.quantity, isNull);
+    expect(restored.items.single.unit, isNull);
+    expect(restored.items.single.ingredientText, '당근 ½ 개');
+    expect(restored.items.single.needsReview, isFalse);
+    expect(restored.items.single.selected, isFalse);
+  });
+
   test('concurrent draft creation returns one persisted key', () async {
     final store = _MemoryStore();
     final drafts = ShoppingReviewDraftStore(
@@ -244,7 +350,7 @@ void main() {
                 name: '',
                 quantityInput: '1',
                 quantity: 1,
-                unit: 'cup'))
+                unit: 'unsupported-unit'))
             .validate(),
         throwsFormatException);
     expect(

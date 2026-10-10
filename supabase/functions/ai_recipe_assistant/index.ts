@@ -1,4 +1,13 @@
+import { outputLanguage, type OutputLocale } from "../_shared/output_locale.ts";
+import { fetchWithTimeout } from "../_shared/http.ts";
+const fetch: typeof globalThis.fetch = (input, init) => fetchWithTimeout(input, init, 75000);
+import { observeHttp } from "../_shared/operations.ts";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import {
+  type AiUsageReservation,
+  finishAiUsage,
+  reserveAiUsage,
+} from "../_shared/membership.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,6 +41,7 @@ type EnrichmentReference = {
 };
 
 type EnrichmentRequest = {
+  outputLocale: OutputLocale;
   recipe: RecipeInput;
   references: EnrichmentReference[];
 };
@@ -94,14 +104,13 @@ function normalizeReference(value: unknown): EnrichmentReference | null {
   }
 
   const source = value as Record<string, unknown>;
-  const type =
-    source.type === "youtube_description"
-      ? "youtube_description"
-      : source.type === "user_transcript"
-      ? "user_transcript"
-      : source.type === "youtube"
-      ? "youtube"
-      : "public";
+  const type = source.type === "youtube_description"
+    ? "youtube_description"
+    : source.type === "user_transcript"
+    ? "user_transcript"
+    : source.type === "youtube"
+    ? "youtube"
+    : "public";
   const title = sanitizeText(source.title, 120);
 
   if (!title) {
@@ -118,17 +127,15 @@ function normalizeReference(value: unknown): EnrichmentReference | null {
     channelName: sanitizeText(source.channelName, 120) || null,
     youtubeUrl: sanitizeText(source.youtubeUrl, 500) || null,
     videoId: sanitizeText(source.videoId, 160) || null,
-    description:
-      sanitizeText(
-        source.description,
-        type === "user_transcript" ? 16000 : 6000,
-      ) || null,
-    confidence:
-      source.confidence === "high" ||
-      source.confidence === "medium" ||
-      source.confidence === "low"
-        ? source.confidence
-        : "medium",
+    description: sanitizeText(
+      source.description,
+      type === "user_transcript" ? 16000 : 6000,
+    ) || null,
+    confidence: source.confidence === "high" ||
+        source.confidence === "medium" ||
+        source.confidence === "low"
+      ? source.confidence
+      : "medium",
   };
 }
 
@@ -146,12 +153,11 @@ function normalizeRequest(value: unknown): EnrichmentRequest | null {
 
   const references = Array.isArray(body.references)
     ? body.references
-        .map(normalizeReference)
-        .filter(
-          (item): item is EnrichmentReference =>
-            item !== null,
-        )
-        .slice(0, 3)
+      .map(normalizeReference)
+      .filter(
+        (item): item is EnrichmentReference => item !== null,
+      )
+      .slice(0, 3)
     : [];
 
   if (references.length === 0) {
@@ -161,6 +167,7 @@ function normalizeRequest(value: unknown): EnrichmentRequest | null {
   return {
     recipe,
     references,
+    outputLocale: body.outputLocale === "es-419" ? "es-419" : body.outputLocale === "en-US" ? "en-US" : "ko-KR",
   };
 }
 
@@ -212,7 +219,7 @@ function buildPrompt(input: EnrichmentRequest): string {
 - YouTube 설명란은 영상 제작자가 제공한 참고 자료입니다.
 - 설명란에 없는 계량값, 조리 시간, 양념 비율을 사실처럼 확정하지 마세요.
 - 불확실한 정보는 warnings에 "영상 확인 필요" 또는 "분량은 참고용입니다."를 포함하세요.
-- 반드시 한국어로 응답하세요.
+- Write every user-visible field in ${outputLanguage(input.outputLocale)}. Translate the example labels below into that language; preserve user ingredient identities.
 
 반드시 아래 JSON 객체만 반환하세요.
 
@@ -232,7 +239,7 @@ ${JSON.stringify(input.references)}
 `.trim();
 }
 
-serve(async (req) => {
+serve(observeHttp("ai_recipe_assistant", async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       status: 200,
@@ -279,7 +286,8 @@ serve(async (req) => {
   }
 
   const apiKey = (Deno.env.get("OPENAI_API_KEY") ?? "").trim();
-  const model = (Deno.env.get("OPENAI_RECIPE_MODEL") ?? "gpt-4o-mini").trim();
+  const allowedModels = new Set(["gpt-5.4-mini", "gpt-4o-mini"]);
+  const configuredModel = (Deno.env.get("OPENAI_RECIPE_MODEL") ?? "").trim();
 
   if (!apiKey) {
     return jsonResponse(
@@ -292,6 +300,37 @@ serve(async (req) => {
     );
   }
 
+  let reservation: AiUsageReservation;
+  try {
+    reservation = await reserveAiUsage(authorization, "ai_recipe_assistant");
+  } catch (error) {
+    const quota = error as {
+      code?: unknown;
+      status?: unknown;
+      message?: unknown;
+    };
+    return jsonResponse(
+      {
+        status: "error",
+        code: typeof quota.code === "string"
+          ? quota.code
+          : "membership_unavailable",
+        message: typeof quota.message === "string"
+          ? quota.message
+          : "회원 사용 한도를 확인할 수 없습니다.",
+      },
+      typeof quota.status === "number" ? quota.status : 503,
+    );
+  }
+  const model = reservation.recipeModel ??
+    (allowedModels.has(configuredModel) ? configuredModel : "gpt-5.4-mini");
+  const generationOptions = model === "gpt-5.4-mini"
+    ? { reasoning_effort: "low" }
+    : { temperature: 0.3 };
+  let generationSucceeded = false;
+  let requestTokens = 0;
+  let responseTokens = 0;
+
   try {
     const openAiResponse = await fetch(
       "https://api.openai.com/v1/chat/completions",
@@ -303,7 +342,8 @@ serve(async (req) => {
         },
         body: JSON.stringify({
           model,
-          temperature: 0.3,
+          ...generationOptions,
+          max_completion_tokens: 4000,
           response_format: {
             type: "json_object",
           },
@@ -311,7 +351,7 @@ serve(async (req) => {
             {
               role: "system",
               content:
-                "You generate safe, concise, structured Korean recipe enrichment drafts.",
+                `You generate safe, concise, structured recipe enrichment drafts in ${outputLanguage(input.outputLocale)}. All user-visible fields must use that language.`,
             },
             {
               role: "user",
@@ -338,8 +378,13 @@ serve(async (req) => {
     }
 
     const openAiPayload = await openAiResponse.json().catch(() => null);
-    const rawContent =
-      openAiPayload?.choices?.[0]?.message?.content;
+    requestTokens = Number.isInteger(openAiPayload?.usage?.prompt_tokens)
+      ? openAiPayload.usage.prompt_tokens
+      : 0;
+    responseTokens = Number.isInteger(openAiPayload?.usage?.completion_tokens)
+      ? openAiPayload.usage.completion_tokens
+      : 0;
+    const rawContent = openAiPayload?.choices?.[0]?.message?.content;
 
     if (typeof rawContent !== "string") {
       return jsonResponse(
@@ -366,6 +411,7 @@ serve(async (req) => {
       );
     }
 
+    generationSucceeded = true;
     return jsonResponse({
       status: "ok",
       data: {
@@ -383,7 +429,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("ai_recipe_enrichment_unexpected_error", {
-      message: error instanceof Error ? error.message : "unknown",
+      errorType: error instanceof Error ? error.name : "unknown",
     });
 
     return jsonResponse(
@@ -394,5 +440,18 @@ serve(async (req) => {
       },
       500,
     );
+  } finally {
+    await finishAiUsage(
+      reservation,
+      generationSucceeded,
+      model,
+      requestTokens,
+      responseTokens,
+    ).catch((error) => {
+      console.error("ai_usage_finalization_failed", {
+        function: "ai_recipe_assistant",
+        errorType: error instanceof Error ? error.name : "unknown",
+      });
+    });
   }
-});
+}));

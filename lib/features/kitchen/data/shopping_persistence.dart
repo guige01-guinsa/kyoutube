@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/shopping_review_drafts.dart';
+import '../domain/shopping_units.dart';
 
 abstract interface class UuidGenerator {
   String v4();
@@ -108,14 +109,52 @@ class ShoppingReviewDraftStore {
     final key = _key(userId, sourceRecipeId);
     return _withLock(key, () async {
       final stored = await _storage.read(key);
+      ShoppingReviewDraft? previous;
       if (stored != null) {
         try {
-          return ShoppingReviewDraft.fromJson(_decode(stored));
+          previous = ShoppingReviewDraft.fromJson(_decode(stored));
         } catch (_) {
           throw const KitchenStorageException(
               'Stored shopping review draft requires re-review');
         }
       }
+      // The recipe is authoritative. A saved review can outlive recipe edits,
+      // so only resume it unchanged when its ingredient source still matches.
+      if (previous != null &&
+          previous.sourceRecipeId == sourceRecipeId &&
+          previous.items.length == initialItems.length &&
+          List.generate(initialItems.length, (index) => index).every(
+            (index) =>
+                previous!.items[index].ingredientText ==
+                    initialItems[index].ingredientText &&
+                !_hasLegacyCookingAmount(previous.items[index]),
+          )) {
+        return previous;
+      }
+      final remaining = previous?.sourceRecipeId == sourceRecipeId
+          ? List<ShoppingReviewDraftItem>.of(previous!.items)
+          : <ShoppingReviewDraftItem>[];
+      final refreshedItems = initialItems.map((fresh) {
+        final index = remaining.indexWhere(
+          (old) => old.ingredientText == fresh.ingredientText,
+        );
+        if (index < 0) return fresh;
+        final old = remaining.removeAt(index);
+        final keepPurchase = !_hasLegacyCookingAmount(old);
+        // Preserve review edits and choices only for unchanged ingredients,
+        // including when their order changes. Changed/new rows use the recipe.
+        return ShoppingReviewDraftItem(
+          localId: fresh.localId,
+          ingredientText: fresh.ingredientText,
+          name: old.name,
+          quantityInput: keepPurchase ? old.quantityInput : '',
+          quantity: keepPurchase ? old.quantity : null,
+          unit: keepPurchase ? old.unit : null,
+          selected: old.selected,
+          needsReview: fresh.needsReview,
+          purchaseConfirmed: keepPurchase && old.purchaseConfirmed,
+        );
+      }).toList(growable: false);
       final now = _clock().toUtc();
       final draft = ShoppingReviewDraft(
         schemaVersion: shoppingReviewDraftSchemaVersion,
@@ -124,7 +163,7 @@ class ShoppingReviewDraftStore {
         createIdempotencyKey: _uuid.v4(),
         createdAt: now,
         updatedAt: now,
-        items: List.unmodifiable(initialItems),
+        items: List.unmodifiable(refreshedItems),
       );
       _validateIdentifiers(draft.draftId, draft.createIdempotencyKey);
       draft.validate();
@@ -139,6 +178,10 @@ class ShoppingReviewDraftStore {
     draft.validate();
     await _withLock(key, () => _storage.write(key, draft.serialize()));
   }
+
+  static bool _hasLegacyCookingAmount(ShoppingReviewDraftItem item) =>
+      item.quantity != null &&
+      (!item.purchaseConfirmed || !isPurchaseUnit(item.unit));
 
   Future<void> clearDraft(
       {required String userId, required String sourceRecipeId}) async {

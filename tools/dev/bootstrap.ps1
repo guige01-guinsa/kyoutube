@@ -50,10 +50,11 @@ Write-Host "npm: $(Get-FirstVersionLine -Executable $npm -Arguments @('--version
 if (Get-Command supabase -ErrorAction SilentlyContinue) { & supabase --version | Select-Object -First 1 | Write-Host } else { Write-Warning "Supabase CLI is not globally available. Local commands may use npx supabase@latest." }
 
 Write-Host "[5/6] Checking local-only files without reading values..."
-if (-not (Test-Path ".env.local")) { throw "Missing .env.local. Copy .env.example or .env.local.example and provide local values." }
+if (-not (Test-Path ".env.local")) { throw "Missing .env.local. Create it using docs/MULTI_PC_DEVELOPMENT_SETUP_KO.md and provide your local values." }
 Write-Host "Found .env.local (contents not inspected)."
 if (Test-Path "android/key.properties") { Write-Host "Found android/key.properties (contents not inspected)." } else { Write-Warning "android/key.properties is absent. This is expected for debug development; signed releases require it." }
 
 Write-Host "[6/6] Fetching Flutter packages..."
 if ($SkipPubGet) { Write-Host "Skipped flutter pub get by request." } else { & $flutter pub get }
 Write-Host "Bootstrap completed. Use run-local.ps1 to launch the app."
+

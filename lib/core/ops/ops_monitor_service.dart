@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
+import 'ops_telemetry.dart';
 
 class OpsErrorEvent {
   const OpsErrorEvent({
@@ -86,6 +88,7 @@ class OpsMonitorState {
 
 class OpsMonitorService {
   OpsMonitorService._();
+  static OpsTelemetry? telemetry;
 
   static const int _maxStoredErrors = 12;
   static const String _recentErrorsKey = 'ops.recent_errors';
@@ -214,16 +217,21 @@ class OpsMonitorService {
         .take(_maxStoredErrors)
         .toList(growable: false);
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _recentErrorsKey,
-      jsonEncode(updated.map((OpsErrorEvent event) => event.toJson()).toList()),
-    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _recentErrorsKey,
+        jsonEncode(
+            updated.map((OpsErrorEvent event) => event.toJson()).toList()),
+      );
+    } catch (_) {/* Keep in-memory diagnostics when local storage fails. */}
 
     state.value = state.value.copyWith(
       appEnv: Env.appEnv,
       recentErrors: updated,
     );
+    final reporter = telemetry;
+    if (reporter != null) unawaited(reporter.report(error, source, isFatal));
   }
 
   static Future<void> clearRecentErrors() async {

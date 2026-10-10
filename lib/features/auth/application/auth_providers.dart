@@ -24,3 +24,7 @@ final authUserProvider = StreamProvider<User?>((ref) {
 
   return controller.stream;
 });
+
+/// Changes only when the account changes, not on ordinary token refresh.
+final activeAccountIdProvider = Provider<String?>((ref) =>
+    ref.watch(authUserProvider.select((state) => state.valueOrNull?.id)));

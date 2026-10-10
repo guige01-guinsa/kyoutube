@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show Locale;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -28,7 +29,29 @@ class _FakeClient extends http.BaseClient {
 }
 
 void main() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => binding.platformDispatcher.localeTestValue = const Locale('ko'));
+  tearDown(binding.platformDispatcher.clearLocaleTestValue);
   const userAccessToken = 'test-user-access-token';
+
+  test('default transport follows app device language on every search',
+      () async {
+    final client = _FakeClient((_) async => http.Response('{}', 200));
+    final transport = SupabaseYoutubeSearchTransport(
+      httpClient: client,
+      supabaseUrl: 'https://project.supabase.co',
+      supabaseAnonKey: 'anon-key',
+      accessTokenProvider: () => userAccessToken,
+    );
+    for (final language in ['en', 'ko', 'fr']) {
+      binding.platformDispatcher.localeTestValue = Locale(language);
+      await transport.get(const YoutubeSearchRequest(query: 'bibimbap'));
+      expect(client.lastRequest!.url.queryParameters['lang'],
+          language == 'en' ? 'en' : 'ko');
+      expect(client.lastRequest!.url.queryParameters['region'],
+          language == 'en' ? 'US' : 'KR');
+    }
+  });
 
   test('sends authenticated GET request to youtube_search', () async {
     final client = _FakeClient(
@@ -69,7 +92,7 @@ void main() {
       request.url.queryParameters,
       <String, String>{
         'q': 'pasta recipe',
-        'limit': '10',
+        'limit': '20',
         'lang': 'ko',
         'region': 'KR',
       },

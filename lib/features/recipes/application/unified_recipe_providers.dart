@@ -1,3 +1,4 @@
+import '../../auth/application/auth_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/default_unified_recipe_repository.dart';
@@ -16,6 +17,7 @@ final unifiedRecipeRepositoryProvider =
 final unifiedRecipeByIdentityProvider =
     FutureProvider.family<UnifiedRecipe?, RecipeIdentity>(
   (ref, RecipeIdentity identity) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(unifiedRecipeRepositoryProvider);
 
     return repository.getRecipe(identity);
@@ -23,8 +25,9 @@ final unifiedRecipeByIdentityProvider =
 );
 
 final myUnifiedRecipesProvider =
-    FutureProvider.family<List<UnifiedRecipe>, String>(
+    FutureProvider.autoDispose.family<List<UnifiedRecipe>, String>(
   (ref, String search) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(unifiedRecipeRepositoryProvider);
 
     return repository.listMyRecipes(

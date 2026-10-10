@@ -1,6 +1,9 @@
+import '../../../core/auth/auth_return.dart';
+import 'package:k_youtube/core/widgets/scout_page.dart';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -120,7 +123,7 @@ class _IngredientSearchPageState extends ConsumerState<IngredientSearchPage> {
       if (_selectedIngredients.length >= 5) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('한 번에 최대 5개의 재료를 선택할 수 있습니다.'),
+            content: LocalizedText('한 번에 최대 5개의 재료를 선택할 수 있습니다.'),
           ),
         );
         return;
@@ -145,13 +148,13 @@ class _IngredientSearchPageState extends ConsumerState<IngredientSearchPage> {
     final user = ref.read(authUserProvider).valueOrNull;
 
     if (user == null) {
-      context.push('/login');
+      context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true));
       return;
     }
 
     if (_selectedIngredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('최소 1개 이상의 재료를 선택해 주세요.')),
+        const SnackBar(content: LocalizedText('최소 1개 이상의 재료를 선택해 주세요.')),
       );
       return;
     }
@@ -179,184 +182,190 @@ class _IngredientSearchPageState extends ConsumerState<IngredientSearchPage> {
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('보유 재료로 찾기')),
-        body: Center(
-          child: FilledButton(
-            onPressed: () => context.push('/login'),
-            child: const Text('로그인하기'),
-          ),
-        ),
+        appBar: AppBar(title: const LocalizedText('재료 찾기')),
+        body: ScoutPageBody(
+            maxWidth: 900,
+            child: Center(
+              child: FilledButton(
+                onPressed: () => context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true)),
+                child: const LocalizedText('로그인하기'),
+              ),
+            )),
       );
     }
 
     final ingredientsAsync = ref.watch(kitchenIngredientsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('보유 재료로 찾기')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
-          children: <Widget>[
-            Text(
-              '보유한 재료를 선택하면\n만들 수 있는 레시피를 찾아드려요.',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 24),
-            Row(
+      appBar: AppBar(title: const LocalizedText('재료 찾기')),
+      body: ScoutPageBody(
+          maxWidth: 900,
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    '선택 재료',
-                    style: Theme.of(context).textTheme.titleMedium,
+                ScoutPageHeading(
+                  title: context.tr('있는 재료로 바로 찾아요'),
+                  subtitle: context.tr('냉장고 재료를 선택하거나 직접 입력해 주세요.'),
+                  icon: Icons.kitchen_outlined,
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: LocalizedText(
+                        '선택 재료',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _selectedIngredients.isEmpty
+                          ? null
+                          : () => setState(_selectedIngredients.clear),
+                      child: const LocalizedText('전체 해제'),
+                    ),
+                  ],
+                ),
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(minHeight: 76),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 1.5,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  child: _selectedIngredients.isEmpty
+                      ? const Align(
+                          alignment: Alignment.centerLeft,
+                          child: LocalizedText('냉장고 재료를 선택하거나 직접 입력해 주세요.'),
+                        )
+                      : Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _selectedIngredients
+                              .map(
+                                (ingredient) => InputChip(
+                                  label: LocalizedText(ingredient),
+                                  onDeleted: () =>
+                                      _toggleIngredient(ingredient),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
                 ),
-                TextButton(
-                  onPressed: _selectedIngredients.isEmpty
-                      ? null
-                      : () => setState(_selectedIngredients.clear),
-                  child: const Text('전체 해제'),
+                const SizedBox(height: 8),
+                const LocalizedText('최대 5개까지 선택할 수 있습니다.'),
+                const SizedBox(height: 20),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: TextField(
+                        controller: _manualIngredientController,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _addManualIngredient(),
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
+                          hintText: context.tr('재료를 직접 입력하세요'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: _addManualIngredient,
+                      child: const LocalizedText('추가'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 76),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.5,
+                const SizedBox(height: 24),
+                LocalizedText(
+                  '내 냉장고 재료',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: _selectedIngredients.isEmpty
-                  ? const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text('냉장고 재료를 선택하거나 직접 입력해 주세요.'),
-                    )
-                  : Wrap(
+                const SizedBox(height: 8),
+                ingredientsAsync.when(
+                  data: (List<KitchenIngredient> ingredients) {
+                    if (ingredients.isEmpty) {
+                      return const LocalizedText('저장된 보유 재료가 없습니다.');
+                    }
+
+                    return Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _selectedIngredients
-                          .map(
-                            (ingredient) => InputChip(
-                              label: Text(ingredient),
-                              onDeleted: () => _toggleIngredient(ingredient),
-                            ),
-                          )
-                          .toList(growable: false),
-                    ),
-            ),
-            const SizedBox(height: 8),
-            const Text('최대 5개까지 선택할 수 있습니다.'),
-            const SizedBox(height: 20),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    controller: _manualIngredientController,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _addManualIngredient(),
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: '재료를 직접 입력하세요',
-                    ),
-                  ),
+                      children: ingredients.map((ingredient) {
+                        final selected = _selectedIngredients.any(
+                          (item) =>
+                              item.toLowerCase() ==
+                              ingredient.name.toLowerCase(),
+                        );
+
+                        return FilterChip(
+                          selected: selected,
+                          label: LocalizedText(ingredient.name),
+                          onSelected: (_) => _toggleIngredient(ingredient.name),
+                        );
+                      }).toList(growable: false),
+                    );
+                  },
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (_, __) => const LocalizedText('냉장고 재료를 불러오지 못했습니다.'),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _addManualIngredient,
-                  child: const Text('추가'),
+                const SizedBox(height: 24),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: LocalizedText(
+                        '최근 검색어',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _historyLoading || _recentSearches.isEmpty
+                          ? null
+                          : _clearHistory,
+                      child: const LocalizedText('전체 삭제'),
+                    ),
+                  ],
+                ),
+                if (_historyLoading)
+                  const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_recentSearches.isEmpty)
+                  const LocalizedText('최근 재료 검색어가 없습니다.')
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _recentSearches.map((entry) {
+                      return ActionChip(
+                        label: LocalizedText(entry.join(' · ')),
+                        onPressed: () {
+                          setState(() {
+                            _selectedIngredients
+                              ..clear()
+                              ..addAll(entry.take(5));
+                          });
+                        },
+                      );
+                    }).toList(growable: false),
+                  ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _search,
+                    icon: const Icon(Icons.search),
+                    label: const LocalizedText('레시피 찾기'),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            Text(
-              '내 냉장고 재료',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            ingredientsAsync.when(
-              data: (List<KitchenIngredient> ingredients) {
-                if (ingredients.isEmpty) {
-                  return const Text('냉장고 재료가 없습니다. 재료 관리에서 추가해 주세요.');
-                }
-
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: ingredients.map((ingredient) {
-                    final selected = _selectedIngredients.any(
-                      (item) =>
-                          item.toLowerCase() == ingredient.name.toLowerCase(),
-                    );
-
-                    return FilterChip(
-                      selected: selected,
-                      label: Text(ingredient.name),
-                      onSelected: (_) => _toggleIngredient(ingredient.name),
-                    );
-                  }).toList(growable: false),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Text('냉장고 재료를 불러오지 못했습니다.'),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    '최근 검색어',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                TextButton(
-                  onPressed: _historyLoading || _recentSearches.isEmpty
-                      ? null
-                      : _clearHistory,
-                  child: const Text('전체 삭제'),
-                ),
-              ],
-            ),
-            if (_historyLoading)
-              const Padding(
-                padding: EdgeInsets.all(12),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_recentSearches.isEmpty)
-              const Text('최근 재료 검색어가 없습니다.')
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _recentSearches.map((entry) {
-                  return ActionChip(
-                    label: Text(entry.join(' · ')),
-                    onPressed: () {
-                      setState(() {
-                        _selectedIngredients
-                          ..clear()
-                          ..addAll(entry.take(5));
-                      });
-                    },
-                  );
-                }).toList(growable: false),
-              ),
-            const SizedBox(height: 28),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _search,
-                icon: const Icon(Icons.search),
-                label: const Text('보유 재료로 레시피 찾기'),
-              ),
-            ),
-          ],
-        ),
-      ),
+          )),
     );
   }
 }

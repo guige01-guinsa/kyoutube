@@ -122,6 +122,7 @@ class KitchenWorkspaceCleanupResult {
     required this.ingredientCount,
     required this.activeListCount,
     required this.completedListCount,
+    required this.cookSessionCount,
     required this.openItemCount,
     required this.expiresAt,
     required this.replayed,
@@ -131,12 +132,16 @@ class KitchenWorkspaceCleanupResult {
   final int ingredientCount;
   final int activeListCount;
   final int completedListCount;
+  final int cookSessionCount;
   final int openItemCount;
   final DateTime expiresAt;
   final bool replayed;
 
   bool get hasChanges =>
-      ingredientCount > 0 || activeListCount > 0 || completedListCount > 0;
+      ingredientCount > 0 ||
+      activeListCount > 0 ||
+      completedListCount > 0 ||
+      cookSessionCount > 0;
 
   factory KitchenWorkspaceCleanupResult.fromJson(
     Map<String, dynamic> json,
@@ -145,6 +150,7 @@ class KitchenWorkspaceCleanupResult {
     final ingredientCount = json['ingredient_count'];
     final activeListCount = json['active_list_count'];
     final completedListCount = json['completed_list_count'];
+    final cookSessionCount = json['cook_session_count'];
     final openItemCount = json['open_item_count'];
     final expiresAtValue = json['expires_at'];
     final replayed = json['replayed'];
@@ -159,6 +165,8 @@ class KitchenWorkspaceCleanupResult {
         activeListCount < 0 ||
         completedListCount is! num ||
         completedListCount < 0 ||
+        cookSessionCount is! num ||
+        cookSessionCount < 0 ||
         openItemCount is! num ||
         openItemCount < 0 ||
         expiresAt == null ||
@@ -171,6 +179,7 @@ class KitchenWorkspaceCleanupResult {
       ingredientCount: ingredientCount.toInt(),
       activeListCount: activeListCount.toInt(),
       completedListCount: completedListCount.toInt(),
+      cookSessionCount: cookSessionCount.toInt(),
       openItemCount: openItemCount.toInt(),
       expiresAt: expiresAt.toLocal(),
       replayed: replayed,
@@ -183,11 +192,13 @@ class KitchenWorkspaceCleanupRestoreResult {
     required this.restoredIngredientCount,
     required this.restoredActiveListCount,
     required this.restoredCompletedListCount,
+    required this.restoredCookSessionCount,
   });
 
   final int restoredIngredientCount;
   final int restoredActiveListCount;
   final int restoredCompletedListCount;
+  final int restoredCookSessionCount;
 
   factory KitchenWorkspaceCleanupRestoreResult.fromJson(
     Map<String, dynamic> json,
@@ -195,13 +206,16 @@ class KitchenWorkspaceCleanupRestoreResult {
     final ingredients = json['restored_ingredient_count'];
     final activeLists = json['restored_active_list_count'];
     final completedLists = json['restored_completed_list_count'];
+    final cookSessions = json['restored_cook_session_count'];
 
     if (ingredients is! num ||
         ingredients < 0 ||
         activeLists is! num ||
         activeLists < 0 ||
         completedLists is! num ||
-        completedLists < 0) {
+        completedLists < 0 ||
+        cookSessions is! num ||
+        cookSessions < 0) {
       throw const FormatException('Invalid kitchen cleanup restore response');
     }
 
@@ -209,6 +223,7 @@ class KitchenWorkspaceCleanupRestoreResult {
       restoredIngredientCount: ingredients.toInt(),
       restoredActiveListCount: activeLists.toInt(),
       restoredCompletedListCount: completedLists.toInt(),
+      restoredCookSessionCount: cookSessions.toInt(),
     );
   }
 }
@@ -219,6 +234,7 @@ class KitchenWorkspaceCleanupSnapshot {
     required this.ingredientCount,
     required this.activeListCount,
     required this.completedListCount,
+    required this.cookSessionCount,
     required this.openItemCount,
     required this.createdAt,
     required this.expiresAt,
@@ -228,12 +244,16 @@ class KitchenWorkspaceCleanupSnapshot {
   final int ingredientCount;
   final int activeListCount;
   final int completedListCount;
+  final int cookSessionCount;
   final int openItemCount;
   final DateTime createdAt;
   final DateTime expiresAt;
 
   bool get hasChanges =>
-      ingredientCount > 0 || activeListCount > 0 || completedListCount > 0;
+      ingredientCount > 0 ||
+      activeListCount > 0 ||
+      completedListCount > 0 ||
+      cookSessionCount > 0;
 
   factory KitchenWorkspaceCleanupSnapshot.fromJson(
     Map<String, dynamic> json,
@@ -242,6 +262,7 @@ class KitchenWorkspaceCleanupSnapshot {
     final ingredientCount = json['ingredient_count'];
     final activeListCount = json['active_list_count'];
     final completedListCount = json['completed_list_count'];
+    final cookSessionCount = json['cook_session_count'];
     final openItemCount = json['open_item_count'];
     final createdAtValue = json['created_at'];
     final expiresAtValue = json['expires_at'];
@@ -258,6 +279,8 @@ class KitchenWorkspaceCleanupSnapshot {
         activeListCount < 0 ||
         completedListCount is! num ||
         completedListCount < 0 ||
+        cookSessionCount is! num ||
+        cookSessionCount < 0 ||
         openItemCount is! num ||
         openItemCount < 0 ||
         createdAt == null ||
@@ -270,6 +293,7 @@ class KitchenWorkspaceCleanupSnapshot {
       ingredientCount: ingredientCount.toInt(),
       activeListCount: activeListCount.toInt(),
       completedListCount: completedListCount.toInt(),
+      cookSessionCount: cookSessionCount.toInt(),
       openItemCount: openItemCount.toInt(),
       createdAt: createdAt.toLocal(),
       expiresAt: expiresAt.toLocal(),
@@ -278,17 +302,27 @@ class KitchenWorkspaceCleanupSnapshot {
 }
 
 class KitchenApi {
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
   KitchenApi({
     SupabaseClient? client,
     http.Client? httpClient,
     Future<String?> Function()? accessTokenProvider,
   })  : _client = client,
         _httpClient = httpClient ?? http.Client(),
+        _ownsHttpClient = httpClient == null,
         _accessTokenProvider = accessTokenProvider;
 
   final SupabaseClient? _client;
   final http.Client _httpClient;
+  final bool _ownsHttpClient;
   final Future<String?> Function()? _accessTokenProvider;
+
+  void close() {
+    if (_ownsHttpClient) {
+      _httpClient.close();
+    }
+  }
 
   Future<String> _requireAccessToken() async {
     final providedToken = await _accessTokenProvider?.call();
@@ -325,30 +359,38 @@ class KitchenApi {
     http.Response response;
     switch (method) {
       case 'GET':
-        response = await _httpClient.get(uri, headers: headers);
+        response = await _httpClient
+            .get(uri, headers: headers)
+            .timeout(_requestTimeout);
         break;
       case 'POST':
-        response = await _httpClient.post(
-          uri,
-          headers: <String, String>{
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: body == null ? null : jsonEncode(body),
-        );
+        response = await _httpClient
+            .post(
+              uri,
+              headers: <String, String>{
+                ...headers,
+                'Content-Type': 'application/json',
+              },
+              body: body == null ? null : jsonEncode(body),
+            )
+            .timeout(_requestTimeout);
         break;
       case 'PATCH':
-        response = await _httpClient.patch(
-          uri,
-          headers: <String, String>{
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: body == null ? null : jsonEncode(body),
-        );
+        response = await _httpClient
+            .patch(
+              uri,
+              headers: <String, String>{
+                ...headers,
+                'Content-Type': 'application/json',
+              },
+              body: body == null ? null : jsonEncode(body),
+            )
+            .timeout(_requestTimeout);
         break;
       case 'DELETE':
-        response = await _httpClient.delete(uri, headers: headers);
+        response = await _httpClient
+            .delete(uri, headers: headers)
+            .timeout(_requestTimeout);
         break;
       default:
         throw StateError('Unsupported method: $method');
@@ -374,10 +416,18 @@ class KitchenApi {
     String? code;
     try {
       final payload = jsonDecode(response.body);
-      if (payload is Map<String, dynamic> &&
-          payload['error'] is Map<String, dynamic>) {
-        final rawCode = (payload['error'] as Map<String, dynamic>)['code'];
-        if (rawCode is String && rawCode.length <= 80) code = rawCode;
+      if (payload is Map<String, dynamic>) {
+        // recipe_api returns details.code; retain the older error.code shape.
+        final details = payload['details'] is Map<String, dynamic>
+            ? payload['details'] as Map<String, dynamic>
+            : payload['error'] is Map<String, dynamic>
+                ? payload['error'] as Map<String, dynamic>
+                : null;
+        final rawCode = details?['code'];
+        if (rawCode is String &&
+            RegExp(r'^[a-z0-9_]{1,80}$').hasMatch(rawCode)) {
+          code = rawCode;
+        }
       }
     } catch (_) {
       // Never expose the response body to the app.
@@ -571,8 +621,9 @@ class KitchenApi {
       );
     }
 
-    final selectedItems =
-        items.where((item) => item.selected).toList(growable: false);
+    final selectedItems = mergeShoppingReviewItems(
+      items.where((item) => item.selected),
+    );
 
     if (selectedItems.isEmpty) {
       throw const KitchenApiException(
@@ -613,6 +664,7 @@ class KitchenApi {
     required bool clearIngredients,
     required bool clearActiveShopping,
     required bool clearCompletedHistory,
+    required bool clearCookHistory,
     required String idempotencyKey,
   }) async {
     final key = idempotencyKey.trim();
@@ -624,7 +676,10 @@ class KitchenApi {
       );
     }
 
-    if (!clearIngredients && !clearActiveShopping && !clearCompletedHistory) {
+    if (!clearIngredients &&
+        !clearActiveShopping &&
+        !clearCompletedHistory &&
+        !clearCookHistory) {
       throw const KitchenApiException(
         kind: KitchenApiErrorKind.badRequest,
         statusCode: 400,
@@ -642,6 +697,7 @@ class KitchenApi {
         'clear_ingredients': clearIngredients,
         'clear_active_shopping': clearActiveShopping,
         'clear_completed_history': clearCompletedHistory,
+        'clear_cook_history': clearCookHistory,
       },
     );
 

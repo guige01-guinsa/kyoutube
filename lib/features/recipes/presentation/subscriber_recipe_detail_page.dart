@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/widgets/centered_state_view.dart';
 import 'widgets/unified_recipe_detail_layout.dart';
 import '../../cooking/presentation/cooking_completion_feedback_card.dart';
 import '../application/recipe_providers.dart';
@@ -32,16 +34,16 @@ class _SubscriberRecipeDetailPageState
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('개인 레시피 삭제'),
-          content: const Text('이 개인 레시피를 삭제하시겠습니까?'),
+          title: const LocalizedText('개인 레시피 삭제'),
+          content: const LocalizedText('이 개인 레시피를 삭제하시겠습니까?'),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('취소'),
+              child: const LocalizedText('취소'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('삭제'),
+              child: const LocalizedText('삭제'),
             ),
           ],
         );
@@ -66,19 +68,25 @@ class _SubscriberRecipeDetailPageState
 
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('개인 레시피를 삭제했습니다.'),
+          content: LocalizedText('개인 레시피를 삭제했습니다.'),
           duration: Duration(seconds: 3),
         ),
       );
 
-      context.go('/my-recipes');
+      // 목록에서 상세로 들어온 경우에는 기존 목록을 유지한 채 돌아가야
+      // 삭제 후에도 다른 레시피를 바로 선택하거나 새 레시피를 만들 수 있다.
+      if (context.canPop()) {
+        context.pop(true);
+      } else {
+        context.go('/my-recipes');
+      }
     } catch (err) {
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('개인 레시피 삭제에 실패했습니다.\n$err')),
+        SnackBar(content: LocalizedText('개인 레시피 삭제에 실패했습니다.\n$err')),
       );
     }
   }
@@ -109,7 +117,7 @@ class _SubscriberRecipeDetailPageState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('메모를 저장했습니다.')),
+        const SnackBar(content: LocalizedText('메모를 저장했습니다.')),
       );
     } catch (err) {
       if (!mounted) {
@@ -117,7 +125,7 @@ class _SubscriberRecipeDetailPageState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('메모 저장에 실패했습니다.\n$err')),
+        SnackBar(content: LocalizedText('메모 저장에 실패했습니다.\n$err')),
       );
     } finally {
       if (mounted) {
@@ -137,18 +145,18 @@ class _SubscriberRecipeDetailPageState
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('내 레시피로 편집'),
-          content: const Text(
+          title: const LocalizedText('내 레시피로 편집'),
+          content: const LocalizedText(
             '이 레시피를 편집 가능한 내 레시피로 만들까요?\n원본 저장 레시피는 유지됩니다.',
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('취소'),
+              child: const LocalizedText('취소'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('만들기'),
+              child: const LocalizedText('만들기'),
             ),
           ],
         );
@@ -186,7 +194,7 @@ class _SubscriberRecipeDetailPageState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('편집 가능한 내 레시피를 만들지 못했습니다.\n$error'),
+          content: LocalizedText('편집 가능한 내 레시피를 만들지 못했습니다.\n$error'),
         ),
       );
     } finally {
@@ -202,7 +210,7 @@ class _SubscriberRecipeDetailPageState
     if (recipe.ingredients.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('재료 정보가 없어 장보기 목록을 만들 수 없습니다.'),
+          content: LocalizedText('재료 정보가 없어 장보기 목록을 만들 수 없습니다.'),
         ),
       );
       return;
@@ -223,10 +231,14 @@ class _SubscriberRecipeDetailPageState
         if (recipe == null) {
           return Scaffold(
             appBar: AppBar(
-              title: const Text('레시피 상세'),
+              title: const LocalizedText('레시피 상세'),
             ),
-            body: const Center(
-              child: Text('레시피를 찾을 수 없습니다.'),
+            body: CenteredStateView(
+              icon: Icons.search_off,
+              title: '레시피를 찾을 수 없습니다',
+              message: '삭제되었거나 접근할 수 없는 레시피입니다.',
+              actionLabel: context.tr('내 레시피로 이동'),
+              onAction: () => context.go('/my-recipes'),
             ),
           );
         }
@@ -249,12 +261,12 @@ class _SubscriberRecipeDetailPageState
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.edit_outlined),
-              tooltip: '내 레시피로 편집',
+              tooltip: context.tr('내 레시피로 편집'),
             ),
             IconButton(
               onPressed: _isPromoting ? null : () => _deleteRecipe(recipe),
               icon: const Icon(Icons.delete_outline),
-              tooltip: '삭제',
+              tooltip: context.tr('삭제'),
             ),
           ],
           primaryActions: <Widget>[
@@ -282,21 +294,15 @@ class _SubscriberRecipeDetailPageState
                   }
                 },
                 icon: const Icon(Icons.auto_awesome),
-                label: const Text('AI로 레시피 보강'),
+                label: const LocalizedText('AI로 레시피 보강'),
               ),
             FilledButton.icon(
               onPressed: () => _goShoppingReview(context, recipe),
               icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('장보기 준비'),
+              label: const LocalizedText('장보기 준비'),
             ),
           ],
           extraSections: <Widget>[
-            CookingCompletionFeedbackCard(
-              recipeType: 'user',
-              recipeId: recipe.id,
-              recipeTitle: recipe.title,
-            ),
-            const SizedBox(height: 24),
             const _SubscriberExtraSectionTitle(
               title: '개인 메모',
               icon: Icons.note_alt_outlined,
@@ -305,28 +311,35 @@ class _SubscriberRecipeDetailPageState
             TextField(
               controller: _notesController,
               maxLines: 5,
-              decoration: const InputDecoration(
-                hintText: '조리 중 수정 사항이나 메모를 기록해 보세요.',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: context.tr('조리 중 수정 사항이나 메모를 기록해 보세요.'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _isSaving ? null : _saveNotes,
-              child: Text(_isSaving ? '저장 중...' : '메모 저장'),
+              child: LocalizedText(_isSaving ? '저장 중...' : '메모 저장'),
             ),
+            const SizedBox(height: 24),
+            CookingCompletionFeedbackCard(
+              recipeType: 'user',
+              recipeId: recipe.id,
+              recipeTitle: recipe.title,
+            ),
+            const SizedBox(height: 24),
           ],
         );
       },
       error: (Object err, StackTrace _) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('레시피 상세'),
+            title: const LocalizedText('레시피 상세'),
           ),
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Text(
+              child: LocalizedText(
                 '개인 레시피를 불러오지 못했습니다.\n$err',
                 textAlign: TextAlign.center,
               ),
@@ -336,7 +349,7 @@ class _SubscriberRecipeDetailPageState
       },
       loading: () => Scaffold(
         appBar: AppBar(
-          title: const Text('레시피 상세'),
+          title: const LocalizedText('레시피 상세'),
         ),
         body: const Center(
           child: CircularProgressIndicator(),
@@ -361,7 +374,7 @@ class _SubscriberExtraSectionTitle extends StatelessWidget {
       children: <Widget>[
         Icon(icon, size: 20),
         const SizedBox(width: 8),
-        Text(
+        LocalizedText(
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,

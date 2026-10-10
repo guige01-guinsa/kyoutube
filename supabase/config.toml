@@ -70,15 +70,74 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/ai_youtube_recipe_assistant/index.ts"
 
+[functions.ai_youtube_video_assistant]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ai_youtube_video_assistant/index.ts"
+
 [functions.ai_recipe_assistant]
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/ai_recipe_assistant/index.ts"
 
+[functions.membership]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/membership/index.ts"
+
+[functions.membership_notifications]
+enabled = true
+# Google OIDC is validated in the handler; this is not a Supabase JWT.
+verify_jwt = false
+entrypoint = "./functions/membership_notifications/index.ts"
+
 [functions.youtube_search]
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/youtube_search/index.ts"
+
+# Scheduler-only endpoint. A separate >=32-character secret is verified in handler.
+[functions.operations_monitor]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/operations_monitor/index.ts"
+
+[functions.prelaunch_growth]
+enabled = true
+# Public opt-in endpoint: bounded input, allowed origin, server-validated CAPTCHA.
+verify_jwt = false
+entrypoint = "./functions/prelaunch_growth/index.ts"
+
+[functions.prelaunch_delivery]
+enabled = true
+# Scheduled worker authenticates its separate secret in the handler.
+verify_jwt = false
+entrypoint = "./functions/prelaunch_delivery/index.ts"
+
+[functions.supplier_discovery]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/supplier_discovery/index.ts"
+
+[functions.ai_purchase_request_review]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ai_purchase_request_review/index.ts"
+
+[functions.coupang_partners]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/coupang_partners/index.ts"
+
+[functions.integration_readiness]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/integration_readiness/index.ts"
+
+[functions.marketing_video_draft]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/marketing_video_draft/index.ts"
 
 [functions.marketing_generate]
 enabled = true

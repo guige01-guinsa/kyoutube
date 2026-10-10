@@ -160,6 +160,7 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
   @override
   Widget build(BuildContext context) {
     final items = _items;
+    final strings = _YoutubeSearchStrings.of(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -171,7 +172,7 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
           onChanged: (_) => _schedule(),
           onSubmitted: (_) => _search(),
           decoration: InputDecoration(
-            labelText: 'YouTube \uB808\uC2DC\uD53C \uAC80\uC0C9',
+            labelText: strings.searchLabel,
             suffixIcon: IconButton(
               key: const Key('youtube-search-submit'),
               onPressed: widget.enabled ? _search : null,
@@ -179,16 +180,14 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
             ),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('검색 결과에는 재생시간 3분 이내 영상만 표시됩니다.'),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(strings.durationNotice),
         ),
         if (!widget.enabled)
-          const Padding(
-            padding: EdgeInsets.only(top: 8),
-            child: Text(
-              'YouTube \uAC80\uC0C9\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.',
-            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(strings.searchUnavailable),
           ),
         if (_loading)
           const Padding(
@@ -201,16 +200,16 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              '\uAC80\uC0C9\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4. ($_error)',
+              '${strings.searchFailed} ($_error)',
               key: const Key('youtube-search-error'),
             ),
           ),
         if (!_loading && items != null && items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(16),
+          Padding(
+            padding: const EdgeInsets.all(16),
             child: Text(
-              '\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.',
-              key: Key('youtube-search-empty'),
+              strings.noResults,
+              key: const Key('youtube-search-empty'),
             ),
           ),
         if (items != null)
@@ -221,7 +220,7 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
               itemBuilder: (BuildContext context, int index) {
                 final item = items[index];
 
-                return _YoutubeSearchResultCard(
+                return YoutubeSearchResultCard(
                   item: item,
                   canCreateRecipe:
                       widget.enabled && widget.onCreateRecipe != null,
@@ -237,13 +236,15 @@ class _YoutubeRecipeSearchViewState extends State<YoutubeRecipeSearchView> {
   }
 }
 
-class _YoutubeSearchResultCard extends StatelessWidget {
-  const _YoutubeSearchResultCard({
+class YoutubeSearchResultCard extends StatelessWidget {
+  const YoutubeSearchResultCard({
+    super.key,
     required this.item,
     required this.canCreateRecipe,
     required this.isCreatingRecipe,
     required this.onOpenUrl,
     required this.onCreateRecipe,
+    this.onExcludeFromSearch,
   });
 
   final YoutubeSearchResult item;
@@ -251,49 +252,114 @@ class _YoutubeSearchResultCard extends StatelessWidget {
   final bool isCreatingRecipe;
   final VoidCallback onOpenUrl;
   final VoidCallback onCreateRecipe;
+  final VoidCallback? onExcludeFromSearch;
 
   @override
   Widget build(BuildContext context) {
+    final strings = _YoutubeSearchStrings.of(context);
+    final thumbnailCacheWidth = (MediaQuery.sizeOf(context).width *
+            MediaQuery.devicePixelRatioOf(context))
+        .ceil()
+        .clamp(1, 4096)
+        .toInt();
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(item.title),
-              subtitle: Text(
-                item.durationSec == null
-                    ? item.channelTitle
-                    : '${item.channelTitle} · ${_durationLabel(item.durationSec!)}',
-              ),
-              trailing: IconButton(
-                tooltip: 'YouTube \uC5F4\uAE30',
-                onPressed: onOpenUrl,
-                icon: const Icon(Icons.open_in_new),
-              ),
-              onTap: onOpenUrl,
-            ),
-            if (canCreateRecipe)
-              FilledButton.icon(
-                key: Key('youtube-create-recipe-${item.videoId}'),
-                onPressed: isCreatingRecipe ? null : onCreateRecipe,
-                icon: isCreatingRecipe
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.restaurant_menu),
-                label: Text(
-                  isCreatingRecipe
-                      ? '\uB808\uC2DC\uD53C \uC800\uC7A5 \uC911...'
-                      : '\uC774 \uC601\uC0C1\uC73C\uB85C \uB808\uC2DC\uD53C \uB9CC\uB4E4\uAE30',
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenUrl,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    item.thumbnailUrl,
+                    key: Key('youtube-thumbnail-${item.videoId}'),
+                    fit: BoxFit.cover,
+                    cacheWidth: thumbnailCacheWidth,
+                    semanticLabel: strings.thumbnailLabel(item.title),
+                    loadingBuilder: (
+                      BuildContext context,
+                      Widget child,
+                      ImageChunkEvent? loadingProgress,
+                    ) {
+                      if (loadingProgress == null) {
+                        return child;
+                      }
+
+                      return const ColoredBox(
+                        color: Color(0xFFF1F3F4),
+                        child: Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (
+                      BuildContext context,
+                      Object error,
+                      StackTrace? stackTrace,
+                    ) =>
+                        const ColoredBox(
+                      color: Color(0xFFF1F3F4),
+                      child: Center(
+                        child: Icon(Icons.ondemand_video_outlined, size: 40),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-          ],
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(item.title),
+                subtitle: Text(
+                  item.durationSec == null
+                      ? item.channelTitle
+                      : '${item.channelTitle} · ${_durationLabel(item.durationSec!)}',
+                ),
+                trailing: IconButton(
+                  tooltip: strings.openYoutube,
+                  onPressed: onOpenUrl,
+                  icon: const Icon(Icons.open_in_new),
+                ),
+                onTap: onOpenUrl,
+              ),
+              if (canCreateRecipe)
+                FilledButton.icon(
+                  key: Key('youtube-create-recipe-${item.videoId}'),
+                  onPressed: isCreatingRecipe ? null : onCreateRecipe,
+                  icon: isCreatingRecipe
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.restaurant_menu),
+                  label: Text(
+                    isCreatingRecipe
+                        ? strings.savingRecipe
+                        : strings.createFromVideo,
+                  ),
+                ),
+              if (onExcludeFromSearch != null)
+                TextButton.icon(
+                  onPressed: onExcludeFromSearch,
+                  icon: const Icon(Icons.visibility_off_outlined),
+                  label: Text(
+                    strings.isEnglish ? 'Hide from search' : '검색에서 제외',
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -304,4 +370,31 @@ class _YoutubeSearchResultCard extends StatelessWidget {
     final remainder = seconds % 60;
     return '$minutes:${remainder.toString().padLeft(2, '0')}';
   }
+}
+
+class _YoutubeSearchStrings {
+  const _YoutubeSearchStrings(this.isEnglish);
+
+  factory _YoutubeSearchStrings.of(BuildContext context) =>
+      _YoutubeSearchStrings(
+          Localizations.localeOf(context).languageCode == 'en');
+
+  final bool isEnglish;
+
+  String get searchLabel =>
+      isEnglish ? 'Search YouTube recipes' : 'YouTube 레시피 검색';
+  String get durationNotice => isEnglish
+      ? 'Search results only show videos up to 60 minutes long.'
+      : '검색 결과에는 재생시간 60분 이내 영상만 표시됩니다.';
+  String get searchUnavailable =>
+      isEnglish ? 'YouTube search is unavailable.' : 'YouTube 검색을 사용할 수 없습니다.';
+  String get searchFailed => isEnglish ? 'Search failed.' : '검색에 실패했습니다.';
+  String get noResults => isEnglish ? 'No search results.' : '검색 결과가 없습니다.';
+  String get openYoutube => isEnglish ? 'Open YouTube' : 'YouTube 열기';
+  String get savingRecipe => isEnglish ? 'Saving recipe...' : '레시피 저장 중...';
+  String get createFromVideo =>
+      isEnglish ? 'Create recipe from this video' : '이 영상으로 레시피 만들기';
+
+  String thumbnailLabel(String title) =>
+      isEnglish ? 'Video thumbnail for $title' : '$title 대표 영상 이미지';
 }

@@ -10,9 +10,6 @@ void main() {
     expect(uri.scheme, 'io.supabase.kyoutube');
     expect(uri.host, 'login-callback');
     expect(uri.path, '/');
-    expect(googleOAuthQueryParams, const <String, String>{
-      'prompt': 'select_account',
-    });
   });
 
   test(
@@ -37,20 +34,54 @@ void main() {
     },
   );
 
-  test('LoginPage uses the shared OAuth redirect URI', () {
+  test('LoginPage uses a secure browser tab for Google OAuth callbacks', () {
     final loginPage = File(
       'lib/features/auth/presentation/login_page.dart',
-    ).readAsStringSync();
+    ).readAsStringSync().replaceAll('\r\n', '\n');
 
     expect(loginPage, contains('redirectTo: oauthRedirectUri'));
-    expect(loginPage, contains('queryParams: googleOAuthQueryParams'));
+    expect(loginPage,
+        isNot(contains("package:google_sign_in/google_sign_in.dart")));
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    expect(pubspec, isNot(contains('google_sign_in:')));
+    expect(loginPage, isNot(contains('GoogleSignIn(')));
+    expect(loginPage, isNot(contains('auth.signInWithIdToken(')));
+    expect(loginPage,
+        contains('auth.signInWithOAuth(\n        OAuthProvider.google,'));
+    final googleSignInStart =
+        loginPage.indexOf('Future<void> _signInWithGoogle');
+    final kakaoSignInStart = loginPage.indexOf('Future<void> _signInWithKakao');
+    final googleSignIn =
+        loginPage.substring(googleSignInStart, kakaoSignInStart);
     expect(
-      loginPage,
-      contains('authScreenLaunchMode: LaunchMode.externalApplication'),
+      googleSignIn,
+      contains(': LaunchMode.inAppBrowserView'),
+    );
+    expect(googleSignIn, isNot(contains('LaunchMode.externalApplication')));
+    expect(
+      googleSignIn,
+      contains('안전한 로그인 탭으로 열었습니다'),
     );
     expect(loginPage, contains('emailRedirectTo: oauthRedirectUri'));
     expect(loginPage, contains('OAuthProvider.kakao'));
-    expect(loginPage, contains("const Text('카카오로 로그인')"));
+    expect(loginPage, contains("const LocalizedText('Google로 로그인')"));
+    expect(loginPage, isNot(contains('_isGoogleLoginVisible')));
+    expect(loginPage, contains("const LocalizedText('카카오로 로그인')"));
+  });
+
+  test('release features cannot be removed by optional build flags', () {
+    final home = File(
+      'lib/features/home/presentation/home_page.dart',
+    ).readAsStringSync();
+    final releaseScript = File(
+      'tools/release/run-internal-track-validation.ps1',
+    ).readAsStringSync();
+
+    expect(home, contains("Key('video-recipe-entry')"));
+    expect(home, contains("context.push(AppRoutes.youtube)"));
+    expect(home, isNot(contains('youtubeSearchEnabled')));
+    expect(releaseScript, isNot(contains('DisableYoutubeSearch')));
+    expect(releaseScript, isNot(contains('EnableYoutubeSearch')));
   });
 
   test('local Supabase config keeps Kakao credentials out of source', () {

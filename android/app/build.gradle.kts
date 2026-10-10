@@ -63,8 +63,9 @@ android {
                         "or run with -PallowDebugSigningForRelease=true for local verification only.",
                 )
             }
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // Keep Flutter's optimized default and plugin consumer rules.
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
 }

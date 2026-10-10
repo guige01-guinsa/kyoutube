@@ -1,37 +1,23 @@
-# Operations Smoke Checklist
+# 운영 스모크 점검
 
-Last update: 2026-07-19
+갱신: 2026-09-12. 앱 기준 v53, 중앙 관측은 후속 배포 항목.
 
-## Goal
-Validate the highest-risk user journeys before release or after any backend/config change.
+- [ ] Android 시작·세션 복구·로그아웃.
+- [ ] 비로그인 한식 10종·외부 영상·한/영 튜토리얼.
+- [ ] 검색·상세·개인 복사·수정·삭제·검색 제외 복원.
+- [ ] AI 성공·인증/한도 거절·시간 초과/불완전 초안 복구.
+- [ ] 조리 단계·진행 복구·장보기 저장. 실제 TTS는 비활성.
+- [ ] 사용자 메뉴의 진단 화면에서 환경·초기화·최근 오류 확인. 과거 홈 운영 카드 위치로 검사하지 않음.
 
-## Must pass
-- App launches without startup error on Android and iOS targets.
-- Login and logout work.
-- Public recipe list loads.
-- Public recipe detail loads.
-- "내 레시피로 복사" works for a logged-in user.
-- Bookmark add/remove works.
-- Creator recipe create/update/delete works.
-- Subscriber note save works.
-- Subscriber delete undo works.
-- Voice guide start/next/previous/stop works.
-- FCM debug panel shows a token on a real device.
+## 중앙 관측 적용 후
 
-## Release monitoring checks
-- Open the home screen and confirm the 운영 상태 card shows the current environment.
-- Confirm recent errors are empty after a clean launch.
-- Copy the ops report from the 운영 상태 card before internal testing.
-- If startup fails, capture the displayed phase and error text.
+- [ ] 관리자 화면 집계 시각·최근 요청 수집 확인.
+- [ ] 데이터 없음/조회 실패를 정상 상태로 해석하지 않음.
+- [ ] AI 분류·성공률·P95·15분 초과 미완료 사용 예약 확인.
+- [ ] UTC 당월 토큰과 공급자 사용량 대조. 토큰 0/0은 무료로 간주하지 않음.
+- [ ] 실제 누적 청구액 갱신, 70%/95% 예산 및 7일 초과 기록 안내 확인.
+- [ ] ops_delivery_failed 로그·90일 정리 작업 실패 확인.
 
-## Failure triage
-- P1: app cannot launch, auth is broken, copy/delete fails broadly, or publish/CRUD is blocked.
-- P2: a feature works but has a serious recovery issue, incorrect state, or repeated user confusion.
-- P3: cosmetic issues, wording, or non-blocking layout defects.
+화면 주의 표시는 외부 자동 알림이 아니다. 함수 호출 전 장애·네트워크 단절은 누락될 수 있어 플랫폼 로그·실기기 검사를 병행한다.
 
-## Recommended run order
-1. Clean launch check.
-2. Login and recipe browse.
-3. CRUD and bookmark check.
-4. Voice guide and notifications.
-5. Capture ops report and sign off.
+P1: 광범위 시작/인증 장애·데이터 유실·권한 노출·핵심 작업 중단. P2: 반복 실패·잘못된 상태·복구 문제. P3: 비차단 문구/디자인 문제. 시각(UTC 포함)·버전·재현 단계·분류·영향·복구 결과를 기록한다. 내용·인증 토큰·전체 오류 덤프는 붙이지 않는다. [운영 안내서](OPERATIONS_RUNBOOK.md) 참조.

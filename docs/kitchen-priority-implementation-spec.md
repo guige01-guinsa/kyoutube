@@ -22,7 +22,7 @@ Out of scope for this slice:
 
 Current app already has:
 1. Public/creator/user recipe entities
-2. Bookmark flow
+2. Recipe search-exclusion flow
 3. Supabase auth/RLS foundation
 
 Biggest gap is "decision-to-action" flow:

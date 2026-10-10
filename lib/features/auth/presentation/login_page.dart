@@ -1,16 +1,22 @@
+import 'dart:async';
+import '../../../core/auth/auth_return.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/auth/oauth_redirect.dart';
 
 import '../application/auth_providers.dart';
+import '../../workspace/domain/workspace_profile.dart';
+import '../../workspace/presentation/workspace_menu.dart';
 import '../application/password_policy.dart';
 import 'widgets/password_strength_panel.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.returnTo});
+  final String? returnTo;
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
@@ -23,10 +29,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
 
   bool _isSignUp = false;
+  WorkspaceMode? _signupPurpose;
   bool _isSubmitting = false;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   String? _message;
+  bool _verificationNeeded = false;
+  DateTime? _resendAfter;
+  Timer? _resendTimer;
 
   String _friendlyAuthMessage(AuthException error) {
     final message = error.message.toLowerCase();
@@ -42,6 +52,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
 
     if (message.contains('email not confirmed')) {
+      _verificationNeeded = true;
       return '이메일 확인이 필요합니다. 받은 이메일의 인증을 완료해 주세요.';
     }
 
@@ -57,13 +68,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   void _goHomeAfterAuthentication() {
-    if (mounted) {
-      context.go('/');
-    }
+    // The app auth listener performs one navigation after successful sign-in.
   }
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -77,13 +87,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
+      await AuthReturnStore.remember(widget.returnTo);
       final auth = ref.read(authClientProvider);
 
       final launched = await auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: oauthRedirectUri,
-        queryParams: googleOAuthQueryParams,
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        // Google OAuth must stay in a secure browser context. A Custom Tab
+        // keeps the authentication navigation out of the default browser's
+        // standalone task while still avoiding an unsupported embedded WebView.
+        authScreenLaunchMode:
+            kIsWeb ? LaunchMode.platformDefault : LaunchMode.inAppBrowserView,
       );
 
       if (!mounted) {
@@ -92,7 +106,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
       setState(() {
         _message = launched
-            ? 'Google 로그인 창을 열었습니다. 인증 후 앱으로 돌아와 주세요.'
+            ? 'Google 로그인 창을 안전한 로그인 탭으로 열었습니다. 인증 후 앱으로 돌아와 주세요.'
             : 'Google 로그인 창을 열지 못했습니다. 잠시 후 다시 시도해 주세요.';
       });
     } on AuthException catch (error) {
@@ -123,6 +137,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
+      await AuthReturnStore.remember(widget.returnTo);
       final auth = ref.read(authClientProvider);
 
       final launched = await auth.signInWithOAuth(
@@ -209,6 +224,38 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
+  Future<void> _resendVerification() async {
+    if (_isSubmitting || (_resendAfter?.isAfter(DateTime.now()) ?? false)) {
+      return;
+    }
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await ref.read(authClientProvider).resend(
+          type: OtpType.signup,
+          email: email,
+          emailRedirectTo: oauthRedirectUri);
+      if (!mounted) return;
+      setState(() {
+        _message = '인증 이메일을 다시 보냈습니다. 받은편지함과 스팸함을 확인해 주세요.';
+        _resendAfter = DateTime.now().add(const Duration(seconds: 60));
+      });
+      _resendTimer?.cancel();
+      _resendTimer = Timer(const Duration(seconds: 60), () {
+        if (mounted) setState(() {});
+      });
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _message = _friendlyAuthMessage(e));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _message = '인증 이메일을 보내지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -219,6 +266,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       _message = null;
     });
 
+    await AuthReturnStore.remember(widget.returnTo);
     final auth = ref.read(authClientProvider);
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -229,6 +277,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           email: email,
           password: password,
           emailRedirectTo: oauthRedirectUri,
+          data: {
+            WorkspaceProfile.metadataKey: WorkspaceProfile(
+                active: _signupPurpose!, enabled: {_signupPurpose!}).toJson()
+          },
         );
 
         if (!mounted) {
@@ -241,6 +293,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         }
 
         setState(() {
+          _verificationNeeded = true;
           _message = '회원가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.';
         });
       } else {
@@ -286,7 +339,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isSignUp ? '회원가입' : '로그인')),
+      appBar: AppBar(title: LocalizedText(_isSignUp ? '회원가입' : '로그인')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
@@ -325,7 +378,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       children: <Widget>[
                                         Icon(Icons.info_outline),
                                         SizedBox(width: 8),
-                                        Text(
+                                        LocalizedText(
                                           '회원가입 안내',
                                           style: TextStyle(
                                             fontWeight: FontWeight.w700,
@@ -334,12 +387,36 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       ],
                                     ),
                                     SizedBox(height: 8),
-                                    Text('이메일 주소가 로그인 아이디로 사용됩니다.'),
+                                    LocalizedText('이메일 주소가 로그인 아이디로 사용됩니다.'),
                                     SizedBox(height: 4),
-                                    Text('가입 후 이메일 인증이 필요할 수 있습니다.'),
+                                    LocalizedText('가입 후 이메일 인증이 필요할 수 있습니다.'),
                                   ],
                                 ),
                               ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          if (_isSignUp) ...[
+                            DropdownButtonFormField<WorkspaceMode>(
+                              key: const Key('signup-purpose'),
+                              initialValue: _signupPurpose,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                  labelText: workspaceText(context, '이용 목적',
+                                      'How will you use Recipe Scout?')),
+                              items: WorkspaceMode.values
+                                  .map((mode) => DropdownMenuItem(
+                                      value: mode,
+                                      child: Text(modeTitle(context, mode))))
+                                  .toList(),
+                              onChanged: _isSubmitting
+                                  ? null
+                                  : (value) =>
+                                      setState(() => _signupPurpose = value),
+                              validator: (value) => value == null
+                                  ? workspaceText(context, '이용 목적을 선택해 주세요.',
+                                      'Choose your purpose.')
+                                  : null,
                             ),
                             const SizedBox(height: 16),
                           ],
@@ -347,12 +424,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             autocorrect: false,
-                            decoration: const InputDecoration(labelText: '이메일'),
+                            decoration:
+                                InputDecoration(labelText: context.tr('이메일')),
                             validator: (String? value) {
                               final email = value?.trim() ?? '';
 
                               if (email.isEmpty || !email.contains('@')) {
-                                return '유효한 이메일을 입력해 주세요.';
+                                return context.tr('유효한 이메일을 입력해 주세요.');
                               }
 
                               return null;
@@ -368,12 +446,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               }
                             },
                             decoration: InputDecoration(
-                              labelText: '비밀번호',
-                              helperText:
-                                  _isSignUp ? '8자 이상, 영문과 숫자를 포함해 주세요.' : null,
+                              labelText: context.tr('비밀번호'),
+                              helperText: _isSignUp
+                                  ? context.tr('8자 이상, 영문과 숫자를 포함해 주세요.')
+                                  : null,
                               suffixIcon: IconButton(
-                                tooltip:
-                                    _isPasswordVisible ? '비밀번호 숨기기' : '비밀번호 보기',
+                                tooltip: context.tr(_isPasswordVisible
+                                    ? '비밀번호 숨기기'
+                                    : '비밀번호 보기'),
                                 onPressed: () {
                                   setState(() {
                                     _isPasswordVisible = !_isPasswordVisible;
@@ -386,9 +466,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                               ),
                             ),
-                            validator: _isSignUp
-                                ? PasswordPolicy.validateForSignUp
-                                : PasswordPolicy.validateForLogin,
+                            validator: (String? value) {
+                              final message = _isSignUp
+                                  ? PasswordPolicy.validateForSignUp(value)
+                                  : PasswordPolicy.validateForLogin(value);
+                              return message == null
+                                  ? null
+                                  : context.tr(message);
+                            },
                           ),
                           if (_isSignUp) ...<Widget>[
                             const SizedBox(height: 12),
@@ -400,11 +485,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               controller: _confirmPasswordController,
                               obscureText: !_isConfirmPasswordVisible,
                               decoration: InputDecoration(
-                                labelText: '비밀번호 확인',
+                                labelText: context.tr('비밀번호 확인'),
                                 suffixIcon: IconButton(
-                                  tooltip: _isConfirmPasswordVisible
+                                  tooltip: context.tr(_isConfirmPasswordVisible
                                       ? '비밀번호 숨기기'
-                                      : '비밀번호 보기',
+                                      : '비밀번호 보기'),
                                   onPressed: () {
                                     setState(() {
                                       _isConfirmPasswordVisible =
@@ -420,11 +505,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               ),
                               validator: (String? value) {
                                 if ((value ?? '').isEmpty) {
-                                  return '비밀번호를 한 번 더 입력해 주세요.';
+                                  return context.tr('비밀번호를 한 번 더 입력해 주세요.');
                                 }
 
                                 if (value != _passwordController.text) {
-                                  return '비밀번호가 일치하지 않습니다.';
+                                  return context.tr('비밀번호가 일치하지 않습니다.');
                                 }
 
                                 return null;
@@ -434,19 +519,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(height: 20),
                           FilledButton(
                             onPressed: _isSubmitting ? null : _submit,
-                            child: Text(
+                            child: LocalizedText(
                               _isSubmitting
                                   ? '처리 중...'
                                   : (_isSignUp ? '회원가입' : '로그인'),
                             ),
                           ),
+                          if (_verificationNeeded)
+                            TextButton(
+                                onPressed: _isSubmitting ||
+                                        (_resendAfter
+                                                ?.isAfter(DateTime.now()) ??
+                                            false)
+                                    ? null
+                                    : _resendVerification,
+                                child: LocalizedText(Localizations.localeOf(context)
+                                            .languageCode ==
+                                        'en'
+                                    ? 'Resend verification email'
+                                    : '인증 이메일 다시 보내기')),
+                          if (_message != null) ...<Widget>[
+                            const SizedBox(height: 12),
+                            Semantics(
+                              liveRegion: true,
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: LocalizedText(
+                                  _message!,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ],
                           if (!_isSignUp) ...<Widget>[
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
                               onPressed:
                                   _isSubmitting ? null : _signInWithGoogle,
                               icon: const Icon(Icons.login),
-                              label: const Text('Google로 로그인'),
+                              label: const LocalizedText('Google로 로그인'),
                             ),
                             const SizedBox(height: 8),
                             FilledButton.icon(
@@ -457,13 +574,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 foregroundColor: const Color(0xFF191919),
                               ),
                               icon: const Icon(Icons.chat_bubble),
-                              label: const Text('카카오로 로그인'),
+                              label: const LocalizedText('카카오로 로그인'),
                             ),
                             TextButton(
                               onPressed: _isSubmitting
                                   ? null
                                   : _sendPasswordResetEmail,
-                              child: const Text('비밀번호를 잊으셨나요?'),
+                              child: const LocalizedText('비밀번호를 잊으셨나요?'),
                             ),
                             TextButton.icon(
                               onPressed: _isSubmitting
@@ -473,8 +590,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                         context: context,
                                         builder: (BuildContext context) {
                                           return AlertDialog(
-                                            title: const Text('아이디를 잊으셨나요?'),
-                                            content: const Text(
+                                            title: const LocalizedText(
+                                                '아이디를 잊으셨나요?'),
+                                            content: const LocalizedText(
                                               '가입할 때 사용한 이메일 주소가 로그인 아이디입니다.\n\n'
                                               '이메일 주소가 기억나지 않으면 가입에 사용한 메일함을 확인해 주세요.',
                                             ),
@@ -482,7 +600,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                               TextButton(
                                                 onPressed: () =>
                                                     Navigator.of(context).pop(),
-                                                child: const Text('확인'),
+                                                child:
+                                                    const LocalizedText('확인'),
                                               ),
                                             ],
                                           );
@@ -490,7 +609,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       );
                                     },
                               icon: const Icon(Icons.help_outline),
-                              label: const Text('아이디를 잊으셨나요?'),
+                              label: const LocalizedText('아이디를 잊으셨나요?'),
                             ),
                           ],
                           TextButton(
@@ -502,14 +621,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       _message = null;
                                     });
                                   },
-                            child: Text(
+                            child: LocalizedText(
                               _isSignUp ? '이미 계정이 있으면. 로그인' : '계정이 없으면. 회원가입',
                             ),
                           ),
-                          if (_message != null) ...<Widget>[
-                            const SizedBox(height: 12),
-                            Text(_message!, textAlign: TextAlign.center),
-                          ],
                         ],
                       ),
                     ),

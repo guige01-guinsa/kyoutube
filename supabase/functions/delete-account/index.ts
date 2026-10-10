@@ -1,4 +1,8 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { fetchWithTimeout } from "../_shared/http.ts";
+import { observeHttp } from "../_shared/operations.ts";
+import { deleteSupplierImages } from "./supplier_images.ts";
+import { deleteBusinessDocuments } from "./business_documents.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.112.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,7 +60,7 @@ async function deleteCreatorRecipeImages(
       });
 
     if (listError != null) {
-      throw new Error(`storage_list_failed:${listError.message}`);
+      throw new Error("storage_list_failed");
     }
 
     // Supabase Storage list result always has a string name.
@@ -88,7 +92,7 @@ async function deleteCreatorRecipeImages(
       .remove(paths);
 
     if (removeError != null) {
-      throw new Error(`storage_remove_failed:${removeError.message}`);
+      throw new Error("storage_remove_failed");
     }
   }
 }
@@ -110,13 +114,13 @@ async function deleteUserApplicationData(
 
     if (error != null) {
       throw new Error(
-        `application_data_delete_failed:${table}:${error.message}`,
+        "application_data_delete_failed",
       );
     }
   }
 }
 
-Deno.serve(async (request: Request) => {
+Deno.serve(observeHttp("delete-account", async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", {
       headers: corsHeaders,
@@ -167,6 +171,7 @@ Deno.serve(async (request: Request) => {
 
   const authClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: {
+      fetch: fetchWithTimeout,
       headers: {
         Authorization: authorization,
       },
@@ -178,7 +183,7 @@ Deno.serve(async (request: Request) => {
     error: userError,
   } = await authClient.auth.getUser();
 
-  if (userError != null || user == null) {
+  if (userError != null || user == null || user.is_anonymous === true) {
     return jsonResponse(
       {
         error: "unauthorized",
@@ -189,6 +194,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    global: { fetch: fetchWithTimeout },
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -198,6 +204,8 @@ Deno.serve(async (request: Request) => {
   try {
     // Auth 계정 삭제 전에 공개 Storage 파일과 사용자 AI 데이터를 먼저 제거한다.
     await deleteCreatorRecipeImages(adminClient, user.id);
+    await deleteSupplierImages(adminClient, user.id);
+    await deleteBusinessDocuments(adminClient, user.id);
     await deleteUserApplicationData(adminClient, user.id);
 
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(
@@ -205,10 +213,7 @@ Deno.serve(async (request: Request) => {
     );
 
     if (deleteError != null) {
-      console.error("delete_account_auth_delete_failed", {
-        code: deleteError.code,
-        message: deleteError.message,
-      });
+      console.error("delete_account_auth_delete_failed");
 
       return jsonResponse(
         {
@@ -223,10 +228,8 @@ Deno.serve(async (request: Request) => {
       success: true,
       message: "회원탈퇴가 완료되었습니다.",
     });
-  } catch (error) {
-    console.error("delete_account_cleanup_failed", {
-      message: error instanceof Error ? error.message : "unknown_error",
-    });
+  } catch (_) {
+    console.error("delete_account_cleanup_failed");
 
     return jsonResponse(
       {
@@ -236,4 +239,4 @@ Deno.serve(async (request: Request) => {
       500,
     );
   }
-});
+}));

@@ -20,6 +20,7 @@ void main() {
       expect(request.method, 'GET');
       expect(request.url.path, contains('recipe_api'));
       expect(request.url.queryParameters['type'], 'public');
+      expect(request.url.queryParameters['limit'], '10');
       expect(request.url.queryParameters['search'], '감자');
       expect(request.url.queryParameters['search_mode'], 'keyword');
       expect(request.headers['authorization'], startsWith('Bearer'));
@@ -34,12 +35,14 @@ void main() {
                 'title': '감자 요리',
                 'ingredients': <String>['감자'],
                 'steps': <String>['조리'],
+                'image_url': 'https://example.test/recipe-1.jpg',
               },
               <String, dynamic>{
                 'id': 'recipe-2',
                 'title': '감자 수프',
                 'ingredients': <String>['감자'],
                 'steps': <String>['끓이기'],
+                'image_url': 'https://example.test/recipe-2.jpg',
               },
             ],
           }),

@@ -9,15 +9,18 @@ import '../domain/recipe.dart';
 import '../domain/recipe_enrichment_suggestion.dart';
 
 class RecipeEnrichmentException implements Exception {
-  const RecipeEnrichmentException(this.message);
+  const RecipeEnrichmentException(this.message, {this.code});
 
   final String message;
+  final String? code;
 
   @override
   String toString() => message;
 }
 
 class RecipeEnrichmentService {
+  static const Duration _requestTimeout = Duration(seconds: 60);
+
   RecipeEnrichmentService({
     SupabaseClient? supabaseClient,
     http.Client? httpClient,
@@ -28,6 +31,7 @@ class RecipeEnrichmentService {
         youtubeContextLoader,
   })  : _supabaseClient = supabaseClient ?? Supabase.instance.client,
         _httpClient = httpClient ?? http.Client(),
+        _ownsHttpClient = httpClient == null,
         _supabaseUrl = supabaseUrl ?? Env.supabaseUrl,
         _supabaseAnonKey = supabaseAnonKey ?? Env.supabaseAnonKey,
         _accessTokenProvider = accessTokenProvider,
@@ -35,15 +39,23 @@ class RecipeEnrichmentService {
 
   final SupabaseClient _supabaseClient;
   final http.Client _httpClient;
+  final bool _ownsHttpClient;
   final String _supabaseUrl;
   final String _supabaseAnonKey;
   final String? Function()? _accessTokenProvider;
   final Future<YoutubeRecipeContext> Function(String youtubeUrl)?
       _youtubeContextLoader;
 
+  void close() {
+    if (_ownsHttpClient) {
+      _httpClient.close();
+    }
+  }
+
   Future<RecipeEnrichmentSuggestion> createSuggestion({
     required Recipe recipe,
     required List<Recipe> references,
+    String outputLocale = 'ko-KR',
   }) async {
     if (references.isEmpty) {
       throw const RecipeEnrichmentException(
@@ -62,32 +74,35 @@ class RecipeEnrichmentService {
       '$_supabaseUrl/functions/v1/ai_recipe_assistant',
     );
 
-    final response = await _httpClient.post(
-      uri,
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'apikey': _supabaseAnonKey,
-        'Authorization': 'Bearer $accessToken',
-      },
-      body: jsonEncode(
-        <String, dynamic>{
-          'recipe': _recipePayload(recipe),
-          'references': references
-              .map(
-                (reference) => <String, dynamic>{
-                  'type': 'public',
-                  'id': reference.id,
-                  'title': reference.title,
-                  'summary': reference.summary,
-                  'ingredients': reference.ingredients,
-                  'steps': reference.steps,
-                  'youtubeUrl': reference.youtubeUrl,
-                },
-              )
-              .toList(growable: false),
-        },
-      ),
-    );
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            'apikey': _supabaseAnonKey,
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: jsonEncode(
+            <String, dynamic>{
+              'recipe': _recipePayload(recipe),
+              'outputLocale': outputLocale,
+              'references': references
+                  .map(
+                    (reference) => <String, dynamic>{
+                      'type': 'public',
+                      'id': reference.id,
+                      'title': reference.title,
+                      'summary': reference.summary,
+                      'ingredients': reference.ingredients,
+                      'steps': reference.steps,
+                      'youtubeUrl': reference.youtubeUrl,
+                    },
+                  )
+                  .toList(growable: false),
+            },
+          ),
+        )
+        .timeout(_requestTimeout);
 
     Object? decoded;
 
@@ -138,7 +153,11 @@ class RecipeEnrichmentService {
 
   Future<RecipeEnrichmentSuggestion> createSuggestionFromSelectedYoutubeVideo({
     required Recipe recipe,
+    String outputLocale = 'ko-KR',
+    bool videoAnalysis = false,
     String? transcript,
+    String? recipeNameHint,
+    String? ingredientHints,
   }) async {
     final youtubeUrl = (recipe.youtubeUrl ?? '').trim();
 
@@ -160,11 +179,15 @@ class RecipeEnrichmentService {
           httpClient: _httpClient,
           supabaseClient: _supabaseClient,
         ).loadFromYoutubeUrl(youtubeUrl));
+    final normalizedTranscript = (transcript ?? '').trim();
+    final normalizedRecipeNameHint = (recipeNameHint ?? '').trim();
+    final normalizedIngredientHints = (ingredientHints ?? '').trim();
+    final normalizedOutputLocale = _normalizeOutputLocale(outputLocale);
 
     final durationSec = context.durationSec;
-    if (durationSec == null || durationSec > 180) {
+    if (durationSec == null || durationSec > 3600) {
       throw const RecipeEnrichmentException(
-        '3분 이내로 확인된 YouTube 영상만 AI로 보강할 수 있습니다.',
+        '60분 이내로 확인된 YouTube 영상만 AI로 보강할 수 있습니다.',
       );
     }
 
@@ -173,6 +196,11 @@ class RecipeEnrichmentService {
       youtubeUrl: youtubeUrl,
       context: context,
       durationSec: durationSec,
+      outputLocale: normalizedOutputLocale,
+      transcript: normalizedTranscript,
+      recipeNameHint: normalizedRecipeNameHint,
+      ingredientHints: normalizedIngredientHints,
+      videoAnalysis: videoAnalysis,
       failureMessage: '영상 설명란 기반 AI 보강을 처리하지 못했습니다.',
       invalidResponseMessage: '영상 설명란 AI 보강 응답 형식이 올바르지 않습니다.',
       invalidResultMessage: '영상 설명란 AI 보강 결과가 올바르지 않습니다.',
@@ -185,11 +213,20 @@ class RecipeEnrichmentService {
     required String youtubeUrl,
     required YoutubeRecipeContext context,
     required int durationSec,
+    required String outputLocale,
+    bool videoAnalysis = false,
+    String? transcript,
+    String? recipeNameHint,
+    String? ingredientHints,
     required String failureMessage,
     required String invalidResponseMessage,
     required String invalidResultMessage,
     required String insufficientResultMessage,
   }) async {
+    final normalizedTranscript = (transcript ?? '').trim();
+    final normalizedRecipeNameHint = (recipeNameHint ?? '').trim();
+    final normalizedIngredientHints = (ingredientHints ?? '').trim();
+
     final accessToken = _accessTokenProvider?.call() ??
         _supabaseClient.auth.currentSession?.accessToken;
 
@@ -197,34 +234,46 @@ class RecipeEnrichmentService {
       throw const RecipeEnrichmentException('로그인이 필요합니다.');
     }
 
-    final response = await _httpClient.post(
-      Uri.parse('$_supabaseUrl/functions/v1/ai_youtube_recipe_assistant'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'apikey': _supabaseAnonKey,
-        'Authorization': 'Bearer $accessToken',
-      },
-      body: jsonEncode(
-        <String, dynamic>{
-          'recipe': <String, dynamic>{
-            'title': recipe.title,
-            'youtubeUrl': youtubeUrl,
+    final response = await _httpClient
+        .post(
+          Uri.parse(
+              '$_supabaseUrl/functions/v1/${videoAnalysis ? 'ai_youtube_video_assistant' : 'ai_youtube_recipe_assistant'}'),
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            'apikey': _supabaseAnonKey,
+            'Authorization': 'Bearer $accessToken',
           },
-          'selectedVideo': <String, dynamic>{
-            'videoId': context.videoId,
-            'youtubeUrl': context.youtubeUrl,
-            'originalTitle': context.title,
-            'inferredRecipeTitle': _inferRecipeTitle(
-              recipe.title,
-              context.title,
-            ),
-            'channelName': context.channelTitle,
-            'description': context.description,
-            'durationSec': durationSec,
-          },
-        },
-      ),
-    );
+          body: jsonEncode(
+            <String, dynamic>{
+              'outputLocale': outputLocale,
+              'recipe': <String, dynamic>{
+                'title': recipe.title,
+                'youtubeUrl': youtubeUrl,
+              },
+              'selectedVideo': <String, dynamic>{
+                'videoId': context.videoId,
+                'youtubeUrl': context.youtubeUrl,
+                'originalTitle': context.title,
+                'inferredRecipeTitle': _inferRecipeTitle(
+                  recipe.title,
+                  context.title,
+                  outputLocale: outputLocale,
+                ),
+                'channelName': context.channelTitle,
+                'description': context.description,
+                if (normalizedTranscript.isNotEmpty)
+                  'transcript': normalizedTranscript,
+                if (normalizedRecipeNameHint.isNotEmpty)
+                  'recipeNameHint': normalizedRecipeNameHint,
+                if (normalizedIngredientHints.isNotEmpty)
+                  'ingredientHints': normalizedIngredientHints,
+                'durationSec': durationSec,
+              },
+            },
+          ),
+        )
+        .timeout(
+            videoAnalysis ? const Duration(seconds: 180) : _requestTimeout);
 
     Object? decoded;
 
@@ -237,6 +286,7 @@ class RecipeEnrichmentService {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RecipeEnrichmentException(
         _extractMessage(decoded) ?? failureMessage,
+        code: _extractCode(decoded),
       );
     }
 
@@ -249,6 +299,7 @@ class RecipeEnrichmentService {
     if (decoded['status'] != 'ok') {
       throw RecipeEnrichmentException(
         _extractMessage(decoded) ?? failureMessage,
+        code: _extractCode(decoded),
       );
     }
 
@@ -273,15 +324,36 @@ class RecipeEnrichmentService {
     return suggestion;
   }
 
-  String _inferRecipeTitle(String recipeTitle, String videoTitle) {
+  String _normalizeOutputLocale(String value) {
+    final language = value.trim().toLowerCase();
+    if (language.startsWith('en')) return 'en-US';
+    if (language.startsWith('es')) return 'es-419';
+    return 'ko-KR';
+  }
+
+  String _inferRecipeTitle(
+    String recipeTitle,
+    String videoTitle, {
+    required String outputLocale,
+  }) {
+    final usesLatinTitle = outputLocale == 'en-US' || outputLocale == 'es-419';
     var value =
         recipeTitle.trim().isNotEmpty ? recipeTitle.trim() : videoTitle.trim();
     value = value
         .replaceAll(RegExp(r'[\[\(【].*?[\]\)】]'), ' ')
         .replaceAll(
-          RegExp(
-            r'(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|맛있는|만드는|만들기|황금레시피|레시피)',
-          ),
+          RegExp(r'(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|황금레시피)'),
+          ' ',
+        )
+        .replaceAll(
+          usesLatinTitle
+              ? RegExp(
+                  r'\b(?:must\s*watch|viral|sponsored|paid\s+promotion)\b',
+                  caseSensitive: false,
+                )
+              : RegExp(
+                  r'(초간단|대박|역대급|무조건|강력추천|필수시청|레전드|맛있는|만드는|만들기|황금레시피|레시피)',
+                ),
           ' ',
         )
         .replaceAll(RegExp(r'[^가-힣A-Za-z0-9\s]'), ' ')
@@ -289,7 +361,16 @@ class RecipeEnrichmentService {
         .trim();
 
     if (value.isEmpty) {
-      value = '영상레시피';
+      value = outputLocale == 'es-419'
+          ? 'Receta en video'
+          : usesLatinTitle
+              ? 'Video recipe'
+              : '영상레시피';
+    }
+
+    if (usesLatinTitle) {
+      final words = value.split(' ').where((word) => word.isNotEmpty).take(10);
+      return String.fromCharCodes(words.join(' ').runes.take(80));
     }
 
     final words = value.split(' ').where((word) => word.isNotEmpty).toList();
@@ -324,5 +405,14 @@ class RecipeEnrichmentService {
     }
 
     return null;
+  }
+
+  String? _extractCode(Object? payload) {
+    if (payload is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final code = payload['code'];
+    return code is String && code.trim().isNotEmpty ? code.trim() : null;
   }
 }

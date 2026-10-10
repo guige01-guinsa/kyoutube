@@ -1,6 +1,12 @@
+import 'core/auth/auth_return.dart';
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/auth/oauth_deep_link_service.dart';
@@ -9,8 +15,14 @@ import 'core/debug/runtime_diagnostics_overlay.dart';
 import 'core/firebase/firebase_bootstrap.dart';
 import 'core/firebase/firebase_messaging_service.dart';
 import 'core/router/app_router.dart';
+import 'core/router/app_exit_confirmation.dart';
+import 'features/auth/application/account_service.dart';
+import 'features/auth/application/auth_providers.dart';
 import 'core/theme/app_theme.dart';
+import 'core/localization/app_localizations.dart';
 import 'core/ops/ops_monitor_service.dart';
+import 'core/ops/ops_telemetry.dart';
+import 'features/operations/data/ops_push_service.dart';
 
 class KYoutubeBootstrapApp extends StatefulWidget {
   const KYoutubeBootstrapApp({super.key});
@@ -42,6 +54,8 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
         ),
       );
 
+      OpsMonitorService.telemetry =
+          OpsTelemetry.forClient(Supabase.instance.client);
       _oauthDeepLinkService ??= OAuthDeepLinkService();
       await _oauthDeepLinkService!.start();
 
@@ -49,10 +63,13 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
       // 초기화 실패가 핵심 앱 기능의 시작을 막으면 안 된다.
       try {
         await OpsMonitorService.markPhase('Firebase 초기화');
-        await FirebaseBootstrap.initialize();
+        await FirebaseBootstrap.initialize()
+            .timeout(const Duration(seconds: 8));
 
         await OpsMonitorService.markPhase('FCM 초기화');
-        await FirebaseMessagingService.initialize();
+        await FirebaseMessagingService.initialize()
+            .timeout(const Duration(seconds: 8));
+        OpsPushService.start();
       } catch (error, stackTrace) {
         OpsMonitorService.recordError(
           error,
@@ -93,6 +110,13 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            localeResolutionCallback: (locale, supported) =>
+                AppLocalizations.resolveLocale(locale),
             builder: (BuildContext context, Widget? child) {
               return RuntimeDiagnosticsOverlay(
                 child: child ?? const SizedBox.shrink(),
@@ -106,6 +130,13 @@ class _KYoutubeBootstrapAppState extends State<KYoutubeBootstrapApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
+            localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            localeResolutionCallback: (locale, supported) =>
+                AppLocalizations.resolveLocale(locale),
             builder: (BuildContext context, Widget? child) {
               return RuntimeDiagnosticsOverlay(
                 child: child ?? const SizedBox.shrink(),
@@ -133,22 +164,85 @@ class KYoutubeApp extends StatefulWidget {
 
 class _KYoutubeAppState extends State<KYoutubeApp> {
   StreamSubscription<AuthState>? _authSubscription;
+  final _messenger = GlobalKey<ScaffoldMessengerState>();
+  late final _exitDispatcher =
+      AppExitBackButtonDispatcher(confirmExit: _confirmExit);
+  bool get _android =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  Future<void> _confirmExit() async {
+    final navigatorContext =
+        AppRouter.router.routerDelegate.navigatorKey.currentContext;
+    if (navigatorContext == null || !mounted) return;
+    final container =
+        ProviderScope.containerOf(navigatorContext, listen: false);
+    await showAppExitConfirmation(navigatorContext,
+        signedIn: container.read(activeAccountIdProvider) != null,
+        signOut: () =>
+            container.read(accountServiceProvider).signOutCurrentAccount(),
+        exitApp: () => SystemNavigator.pop());
+  }
+
+  void _showOperationsAlert() {
+    final english =
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode != 'ko';
+    _messenger.currentState?.showSnackBar(SnackBar(
+        content: Text(
+            english ? 'An operational status changed.' : '운영 상태가 변경되었습니다.'),
+        action: SnackBarAction(
+            label: english ? 'View' : '확인',
+            onPressed: () => AppRouter.router.go(AppRoutes.operationsInbox))));
+  }
+
+  void _openOperationsAlert() {
+    if (!OpsPushService.openRequested.value) return;
+    OpsPushService.openRequested.value = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) AppRouter.router.go(AppRoutes.operationsInbox);
+    });
+  }
 
   @override
   void initState() {
     super.initState();
 
     // 실제 앱에서는 Supabase 초기화 이후 실행됩니다.
+    OpsPushService.openRequested.addListener(_openOperationsAlert);
+    OpsPushService.received.addListener(_showOperationsAlert);
+    _openOperationsAlert();
     // Widget Test에서는 Supabase가 초기화되지 않을 수 있으므로 안전하게 무시합니다.
     try {
       _authSubscription =
-          Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+          Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
         switch (data.event) {
           case AuthChangeEvent.passwordRecovery:
             AppRouter.router.go(AppRoutes.resetPassword);
             break;
+          case AuthChangeEvent.signedOut:
+            AppRouter.router.go(AppRoutes.workspace);
+            break;
           case AuthChangeEvent.signedIn:
-            AppRouter.router.go(AppRoutes.home);
+            final router = AppRouter.router;
+            final before = router.routeInformationProvider.value.uri;
+            if (before.path == '/account/mfa') return;
+            final saved = await AuthReturnStore.take();
+            if (!mounted) return;
+            final current = router.routeInformationProvider.value.uri;
+            if (current != before) return;
+            final target = (current.path == '/login'
+                    ? safeAuthReturn(current.queryParameters['returnTo'])
+                    : null) ??
+                saved;
+            if (current.path == '/login' &&
+                current.queryParameters['resume'] == '1' &&
+                router.canPop() &&
+                (current.queryParameters['account'] == null ||
+                    current.queryParameters['account'] ==
+                        data.session?.user.id)) {
+              router.pop(true);
+            } else if (target != null || current.path == '/login') {
+              router.go(target ?? AppRoutes.workspace);
+            }
             break;
           default:
             break;
@@ -162,15 +256,37 @@ class _KYoutubeAppState extends State<KYoutubeApp> {
   @override
   void dispose() {
     _authSubscription?.cancel();
+    OpsPushService.openRequested.removeListener(_openOperationsAlert);
+    OpsPushService.received.removeListener(_showOperationsAlert);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'playscout',
+      scaffoldMessengerKey: _messenger,
+      onGenerateTitle: (context) => AppLocalizations.of(context).appName,
       theme: AppTheme.light,
-      routerConfig: AppRouter.router,
+      routeInformationProvider: AppRouter.router.routeInformationProvider,
+      routeInformationParser: AppRouter.router.routeInformationParser,
+      routerDelegate: AppRouter.router.routerDelegate,
+      backButtonDispatcher:
+          _android ? _exitDispatcher : AppRouter.router.backButtonDispatcher,
+      // Android must send root back gestures to Flutter before closing the
+      // activity, including when predictive back would otherwise exit directly.
+      onNavigationNotification: _android
+          ? (_) {
+              unawaited(SystemNavigator.setFrameworkHandlesBack(true));
+              return true;
+            }
+          : null,
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeResolutionCallback: (locale, supported) =>
+          AppLocalizations.resolveLocale(locale),
       builder: (BuildContext context, Widget? child) {
         return RuntimeDiagnosticsOverlay(
           child: child ?? const SizedBox.shrink(),
@@ -192,7 +308,7 @@ class _BootstrapLoadingScreen extends StatelessWidget {
           children: <Widget>[
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('앱을 준비하는 중입니다...'),
+            LocalizedText('앱을 준비하는 중입니다...'),
           ],
         ),
       ),
@@ -227,7 +343,7 @@ class _BootstrapErrorScreen extends StatelessWidget {
                     size: 56,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  const LocalizedText(
                     '앱 시작에 실패했습니다',
                     textAlign: TextAlign.center,
                     style: TextStyle(
@@ -236,14 +352,14 @@ class _BootstrapErrorScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Text(
+                  LocalizedText(
                     error,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
                     onPressed: onRetry,
-                    child: const Text('다시 시도'),
+                    child: const LocalizedText('다시 시도'),
                   ),
                 ],
               ),
@@ -270,6 +386,13 @@ class BootstrapFailureApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      localeResolutionCallback: (locale, supported) =>
+          AppLocalizations.resolveLocale(locale),
       builder: (BuildContext context, Widget? child) {
         return RuntimeDiagnosticsOverlay(
           child: child ?? const SizedBox.shrink(),
@@ -291,7 +414,7 @@ class BootstrapFailureApp extends StatelessWidget {
                       size: 56,
                     ),
                     const SizedBox(height: 16),
-                    Text(
+                    LocalizedText(
                       title,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
@@ -300,7 +423,7 @@ class BootstrapFailureApp extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Text(
+                    LocalizedText(
                       message,
                       textAlign: TextAlign.center,
                     ),

@@ -11,6 +11,7 @@ class Recipe {
     this.notes,
     this.visibility,
     this.sourceType,
+    this.contentStyles = const <String, dynamic>{},
   });
 
   final String id;
@@ -28,4 +29,5 @@ class Recipe {
   ///
   /// 예: manual, public_import, youtube_import, creator_copy
   final String? sourceType;
+  final Map<String, dynamic> contentStyles;
 }

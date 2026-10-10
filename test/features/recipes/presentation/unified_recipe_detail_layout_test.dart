@@ -36,19 +36,20 @@ void main() {
     expect(find.text('Tomato Soup'), findsOneWidget);
     expect(find.text('Simple soup'), findsOneWidget);
     await tester.scrollUntilVisible(
-      find.text('\u2022 Tomato'),
+      find.text('Tomato'),
       200,
     );
 
-    expect(find.text('\u2022 Tomato'), findsOneWidget);
+    expect(find.text('Tomato'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('1. Boil'),
+      find.text('Boil'),
       200,
     );
 
-    expect(find.text('1. Boil'), findsOneWidget);
+    expect(find.text('Boil'), findsOneWidget);
     expect(find.text('Prepare shopping'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Extra recipe section'), 200);
     expect(find.text('Extra recipe section'), findsOneWidget);
   });
 

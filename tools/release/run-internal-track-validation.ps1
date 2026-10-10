@@ -12,6 +12,9 @@ param(
     [string]$SupabaseAnonKeyProduction,
 
     [Parameter(Mandatory = $false)]
+    [string]$DartDefineFile,
+
+    [Parameter(Mandatory = $false)]
     [string]$PublicRecipeSyncFunctionUrl,
 
     [Parameter(Mandatory = $false)]
@@ -19,9 +22,6 @@ param(
 
     [Parameter(Mandatory = $false)]
     [int]$PublicRecipeSyncSmokeSize = 1,
-
-    [Parameter(Mandatory = $false)]
-    [switch]$EnableYoutubeSearch,
 
     [Parameter(Mandatory = $false)]
     [switch]$SkipPublicRecipeSyncSmoke
@@ -101,6 +101,28 @@ function Assert-PathExists {
     if (-not (Test-Path $Path)) {
         throw "Missing required file: $Path`nHint: $Hint"
     }
+}
+
+function Get-DartDefineFileValues {
+    param(
+        [string]$Path
+    )
+
+    $values = @{}
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+            continue
+        }
+
+        if ($trimmed -notmatch "^([A-Za-z_][A-Za-z0-9_]*)=(.*)$") {
+            throw "Invalid dart-define entry in $Path. Use KEY=value format."
+        }
+
+        $values[$Matches[1]] = $Matches[2]
+    }
+
+    return $values
 }
 
 function Invoke-HttpPostJson {
@@ -194,9 +216,20 @@ if ($isCi -and $LocalVerification.IsPresent) {
     throw "LocalVerification is not allowed in CI. Remove -LocalVerification and use strict release signing."
 }
 
-Assert-ConfiguredValue -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction -Hint "Pass a real production Supabase URL."
-Assert-ConfiguredValue -Name "SupabaseAnonKeyProduction" -Value $SupabaseAnonKeyProduction -Hint "Pass a real production Supabase anon key."
-Assert-HttpsUrl -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction
+if (-not [string]::IsNullOrWhiteSpace($DartDefineFile)) {
+    Assert-PathExists -Path $DartDefineFile -Hint "Create an ignored .env.production file with production runtime values."
+    $dartDefines = Get-DartDefineFileValues -Path $DartDefineFile
+    Assert-ConfiguredValue -Name "SUPABASE_URL_PRODUCTION" -Value $dartDefines["SUPABASE_URL_PRODUCTION"] -Hint "Set a real production Supabase URL in $DartDefineFile."
+    Assert-ConfiguredValue -Name "SUPABASE_ANON_KEY_PRODUCTION" -Value $dartDefines["SUPABASE_ANON_KEY_PRODUCTION"] -Hint "Set a real production Supabase anon key in $DartDefineFile."
+    Assert-HttpsUrl -Name "SUPABASE_URL_PRODUCTION" -Value $dartDefines["SUPABASE_URL_PRODUCTION"]
+    if ($dartDefines["APP_ENV"] -ne "production") {
+        throw "APP_ENV in $DartDefineFile must be production for a Play release."
+    }
+} else {
+    Assert-ConfiguredValue -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction -Hint "Pass a real production Supabase URL."
+    Assert-ConfiguredValue -Name "SupabaseAnonKeyProduction" -Value $SupabaseAnonKeyProduction -Hint "Pass a real production Supabase anon key."
+    Assert-HttpsUrl -Name "SupabaseUrlProduction" -Value $SupabaseUrlProduction
+}
 
 if (-not $SkipPublicRecipeSyncSmoke.IsPresent) {
     Assert-ConfiguredValue -Name "PublicRecipeSyncFunctionUrl" -Value $PublicRecipeSyncFunctionUrl -Hint "Pass the public_recipe_sync production function URL."
@@ -235,6 +268,24 @@ Assert-PathExists -Path $keystoreFullPath -Hint "Place the upload keystore at th
 
 Write-Host "[3/6] Checking Firebase Android config..."
 Assert-PathExists -Path "android/app/google-services.json" -Hint "Download from Firebase Console for package name and place under android/app/."
+$firebaseConfig = Get-Content "android/app/google-services.json" -Raw | ConvertFrom-Json
+$firebaseClients = @($firebaseConfig.client)
+$androidOAuthClients = @(
+    $firebaseClients.client_info.android_client_info.package_name |
+        Where-Object { $_ -eq "com.kyoutube.app" }
+)
+$oauthClientTypes = @(
+    $firebaseClients.oauth_client.client_type |
+        Where-Object { $null -ne $_ }
+)
+
+if ($androidOAuthClients.Count -eq 0) {
+    throw "Firebase Android config does not contain package com.kyoutube.app. Download the correct google-services.json."
+}
+
+if (1 -notin $oauthClientTypes -or 3 -notin $oauthClientTypes) {
+    throw "Firebase Android config is missing Android or Web OAuth clients required for Google Sign-In. Download it again after registering both app signing certificates."
+}
 
 Write-Host "[4/6] Building signed release appbundle..."
 $buildArgs = @("build", "appbundle")
@@ -247,13 +298,12 @@ if ($LocalVerification.IsPresent) {
     Write-Warning "LocalVerification enabled. This should NOT be used for Play submission."
 }
 
-$buildArgs += "--dart-define=SUPABASE_URL_PRODUCTION=$SupabaseUrlProduction"
-$buildArgs += "--dart-define=SUPABASE_ANON_KEY_PRODUCTION=$SupabaseAnonKeyProduction"
-
-$buildArgs += "--dart-define=APP_ENV=production"
-
-if ($EnableYoutubeSearch.IsPresent) {
-    $buildArgs += "--dart-define=YOUTUBE_SEARCH_ENABLED=true"
+if (-not [string]::IsNullOrWhiteSpace($DartDefineFile)) {
+    $buildArgs += "--dart-define-from-file=$DartDefineFile"
+} else {
+    $buildArgs += "--dart-define=SUPABASE_URL_PRODUCTION=$SupabaseUrlProduction"
+    $buildArgs += "--dart-define=SUPABASE_ANON_KEY_PRODUCTION=$SupabaseAnonKeyProduction"
+    $buildArgs += "--dart-define=APP_ENV=production"
 }
 
 & $FlutterPath @buildArgs

@@ -1,5 +1,5 @@
 import '../domain/recipe.dart';
-import '../domain/bookmarked_recipe.dart';
+import '../domain/recipe_search_exclusion.dart';
 
 abstract class RecipeRepository {
   Future<Map<String, int>> getKitchenSummary();
@@ -15,6 +15,7 @@ abstract class RecipeRepository {
     String? tips,
     String? imagePath,
     String? youtubeUrl,
+    Map<String, dynamic> contentStyles = const <String, dynamic>{},
   });
   Future<void> deleteCreatorRecipe(String id);
   Future<void> deleteSubscriberRecipe(String id);
@@ -26,10 +27,22 @@ abstract class RecipeRepository {
 
   Future<Recipe?> getCreatorRecipeById(String id);
   Future<Recipe?> getSubscriberRecipeById(String id);
-  Future<bool> isBookmarked({required String recipeType, required String recipeId});
-  Future<void> addBookmark({required String recipeType, required String recipeId});
-  Future<void> removeBookmark({required String recipeType, required String recipeId});
-  Future<List<BookmarkedRecipe>> listBookmarkedRecipes();
+  Future<List<RecipeSearchExclusion>> listRecipeSearchExclusions();
+  Future<Set<String>> listExcludedRecipeSourceKeys();
+  Future<void> excludeRecipeFromSearch({
+    required String sourceType,
+    required String sourceId,
+    required String title,
+    String? summary,
+    List<String> ingredients = const <String>[],
+    List<String> steps = const <String>[],
+    String? imageUrl,
+    String? youtubeUrl,
+    List<String> reasonCodes = const <String>['user_hidden'],
+    String status = 'hidden',
+  });
+  Future<void> resolveRecipeSearchExclusion(String id);
+  Future<void> deleteRecipeSearchExclusion(String id);
   Future<List<Recipe>> listPublicRecipes({
     String? search,
     bool useAiSearch,
@@ -45,6 +58,7 @@ abstract class RecipeRepository {
     String? tips,
     String? imagePath,
     String? youtubeUrl,
+    Map<String, dynamic> contentStyles = const <String, dynamic>{},
   });
   Future<Recipe?> getRecipeById(String id);
   Future<Recipe> updateSubscriberRecipeNotes({

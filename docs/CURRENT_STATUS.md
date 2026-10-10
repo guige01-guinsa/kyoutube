@@ -1,141 +1,369 @@
-﻿# Current Status
+# 완성도 보완 — 소스 검증 완료, 운영 반영 전 (2026-10-02)
 
-Last updated: 2026-08-15
+스페인어 고정 문구 3,815개 추가, 검색·AI 언어 전달과 초안 근거 검사, 수량 입력 통일, 장보기 준비 목록의 계정 동기화·수정 충돌 보호, 관리자 외부 연결 진단, 복구 도구를 보완했다. Flutter 전체 824개·후속 관련 35개, 서버 90개·합성 AI 품질 사례 10개, 별도 DB 계약 21개 검사 통과. 정적 분석 오류 없음. [변경·검증·남은 외부 조건](completeness-hardening-20261002.md).
 
-## Project
+현재 기존 산출물은 **v94 (1.0.1+94)**이며 SHA-256을 재확인했다. 이번 변경은 **운영 DB·서버·웹·AAB에 아직 반영하지 않았다**. 신규 DB 변경은 0084~0086이다. 실제 쿠팡 API·Play 결제·Firebase 알림 검증은 발급 파일 위치 확인 후 진행해야 한다. 휴대폰 연결은 확인됐으나 설치본은 v86이다.
 
-K-youtube-youtube-integration
+아래 기록은 이전 버전의 이력이다. 최신 기준은 위 보완 문서와 [v94 산출물 기록](release-v94.md)을 따른다.
 
-## Current branch
+---
 
-feat/unified-recipe-experience
+# v86 Android AAB 생성·검증 완료 (2026-09-26)
 
-## Source of truth
+사용자 요청으로 모바일 홈 배치·하단 `내 레시피`·Android 종료 확인 기능을 포함한 **1.0.1+86** 서명 AAB를 생성했다. [AAB](../release/recipe-scout-v86.aab) · [출시 노트](../release/recipe-scout-v86-release-notes.txt) · [검증 기록](release-v86.md).
 
-Do not rely on chat history as the source of truth.
+릴리스 정적 분석 오류 없음, 전체 Flutter **658개 통과·기존 4개 제외**. 실제 AAB 버전/패키지/서명·공식 bundletool·R8·폰트/아이콘·16개 Android 진입점 검증 통과. 85번 업로드 서명 및 9개 네이티브 의존성 유지. DEX 1,544,840 bytes 유지. SHA-256 `6cac3cc632e2c4424fe2d9eadac9e277be7011e2bc5ef2e3b0adecaaf37dadd7`.
 
-Start with:
+**Play 업로드·출시·86번 실기기 설치는 아직 하지 않았다.** 이번 요청은 AAB 생성이며 운영 웹·DB 배포는 하지 않았다. 아래 배포 전 기록은 구현 당시 상태이며, 해당 수정은 이제 v86 AAB에 포함되어 있다.
 
-1. AGENTS.md
-2. docs/CURRENT_STATUS.md
-3. docs/AI_HANDOFF.md
-4. docs/unified-recipe-experience-design.md
-5. docs/unified-recipe-migration-plan.md
-6. git status
-7. git log --oneline -10
+---
 
-## Recent local commits
+# 모바일 홈·Android 종료 확인 — 소스 반영, 배포 전 (2026-09-26)
 
-The local branch is ahead of origin.
+사용자 휴대폰 화면 요청에 따라 홈의 `레시피 가져오기`·`직접 만들기`를 같은 행에 배치하고 제목 크기/여백을 줄였다. 큰 글자(1.3배 초과)는 세로 배치하며, 매우 좁은 화면에서는 두 버튼의 아이콘을 생략해 글자를 우선 표시한다. 하단 메뉴는 개인 이름 대신 `내 레시피`로 표시하고 화면 제목/저장 위치/툴팁의 개인 이름은 유지한다.
 
-Recent relevant commits:
+Android 루트 뒤로 가기는 기존 GoRouter history / editor onExit 보호를 먼저 실행한 뒤 종료 확인창을 표시한다. 로그인 사용자는 `계속 사용`·`로그인 유지하고 종료`·`로그아웃 후 종료`를 선택한다. 게스트는 로그인 상태를 안내하고 `계속 사용`·`종료`를 선택한다. 로그아웃은 기존 AccountService 경로로 처리하며 실패하면 종료하지 않는다. Android 시스템 back 전달을 켜 예측 뒤로 가기로 확인창을 건너뛰지 않도록 한다. 웹/iOS 라우터 dispatcher는 기존 동작을 유지한다.
 
-- e7f61ec feat: add unified recipe detail layout
-- 14a2846 feat: apply unified layout to recipe detail routes
-- 54c67de fix: persist YouTube thumbnail for generated recipes
+최종 `flutter analyze --no-pub` 오류 없음. 전체 `flutter test --no-pub` **658개 통과·기존 4개 제외**. 종료 확인 신규 10개 검사(성공/실패/취소/반복 back/기존 history/이탈 보호/한영 200% 글자) 포함. 320·360 홈과 종료 확인창을 실제 Flutter로 렌더링해 확인했다.
 
-## Verification
+이번 변경은 기존 v85 AAB에 포함되지 않았다. 새 AAB 생성·운영 웹 배포·DB 변경은 하지 않았다. 320/360 너비 Flutter 렌더링과 전체 검사 로그는 `.artifacts/mobile-home-compact/`에 보관한다.
 
-Latest verification command:
+---
 
-powershell -ExecutionPolicy Bypass -File tools/dev/verify.ps1
+# v85 Android 최적화 AAB 준비 — Play/실기기 업데이트 전 (2026-09-26)
 
-Result:
+사용자 승인으로 Android R8 코드 최적화·리소스 축소를 켰다. DEX **12.07MB → 1.54MB(87.2% 감소)**, R8 메타데이터와 오류 추적 매핑 포함. [새 서명 AAB85](../release/recipe-scout-v85.aab) · [출시 문구](../release/recipe-scout-v85-release-notes.txt) · [검증·제한](release-v85.md).
 
-- flutter analyze: No issues found
-- flutter test: 64 tests passed
+분석 성공, 전체 Flutter **648개 통과·기존4개 제외**. 최종 AAB의 버전·패키지·서명, 공식 bundletool 구조 검사,16개 Android 진입점, 폰트/9개 네이티브 라이브러리 보존 확인. 릴리스 검증기에 R8 필수 검사를 추가하고 오래된 중간 Manifest 대신 실제 AAB 버전을 확인하도록 수정했다. 새 검증기12개 회귀검사 통과.
 
-Known flutter doctor warnings are local environment warnings and were not introduced by the current feature work.
+연결한 휴대폰은 Google Play82번이며 Play 서명과 업로드 서명이 달라 직접 덮어쓸 수 없다. 기존 앱/데이터를 변경하지 않았다. 기기 사양에 맞는 APK 세트 생성은 성공했지만 **실제85번 설치·로그인/파일/알림/구매/식단 기능 검증은 미완료**다. v85는 먼저 Play 내부 테스트에 올려 테스터 계정으로 업데이트하고 실기기 검증 후 프로덕션 승격한다. 이번에 Play 업로드·운영 웹/DB 배포는 하지 않았다. 웹은84번 유지. 사용자 화면에서84번 프로덕션 검토 중을 확인했다.
 
-## Completed work
+아래 기록은 이전 릴리스 당시 상태다.
 
-- Added UnifiedRecipeDetailLayout.
-- Added widget tests for unified recipe detail layout.
-- Wired creator recipe detail page to the shared unified layout.
-- Wired subscriber recipe detail page to the shared unified layout.
-- Added YouTube thumbnail URL helper.
-- YouTube-generated recipes now save image_path from the YouTube thumbnail URL instead of null.
-- Added tests for YouTube thumbnail URL generation.
+---
 
-## Image issue result
+# v84 운영 웹·식단 DB 배포 완료 / 새 AAB 준비 (2026-09-25)
 
-The YouTube image issue was caused by this previous behavior:
+사용자의 운영 웹·앱 배포 승인으로 **아이보리·플럼·살구 디자인과 업소별 식단 관리**를 운영에 반영했다. 운영 웹은 `1.0.1+84`, DB에는 `0072_business_meal_planning.sql`을 선택 적용하고 권한·이력·인덱스를 검증했다. 고정 SDK 정적 분석 0건, 전체 Flutter 테스트 **648개 통과·기존 조건부 4개 제외**. 이전 디자인 검사에서 실패했던 3개를 포함해 이번 전체 검사가 성공했다.
 
-image_path: null
+실제 운영 JS 해시가 검증 빌드와 일치하고, 한영 PC/모바일 및 로그인 진입·CORS 검사를 통과했다. 실제 PC·모바일 홈 캡처에서 새 디자인과 정상 아이콘을 확인했다. [운영 웹](https://recipe-scout-workspace.web.app/) · [릴리스 검증](release-v84.md).
 
-in:
+[새 서명 AAB](../release/recipe-scout-v84.aab)와 [출시 문구](../release/recipe-scout-v84-release-notes.txt)를 준비했다. **v84 Play Console 업로드·출시·휴대폰 업데이트는 미완료**다. 연결 도구가 실행 환경 오류로 두 번 실패해 자동 업로드하지 못했다. AAB의 기존 서명 유지·폰트 등록·아이콘 SDK 원본 일치를 검증했다. 운영 로그인 계정의 식단 작성/구매 전 과정과 실제 Android 기기 설치 검사는 수행하지 않았다.
 
-lib/features/youtube/data/youtube_recipe_creation_service.dart
+이 배포에는 이미 사용자 승인이 있다. DB0072를 재적용하거나 기존 누락 이력 0048/0057을 일괄 적용하지 않는다. 제휴 상품 100개 검토 초안은 이번에 재등록·공개하지 않았다. 아래 ‘운영 반영 전’ 문구는 당시의 과거 기록이다.
 
-The fix now uses:
+---
 
-youtubeThumbnailUrlFromUrl(youtubeUrl)
+# 승인된 아이보리·플럼·살구 디자인 실제 적용 — 운영 반영 전 (2026-09-25)
 
-New helper:
+기존 녹색이 남아 있다는 사용자 지적을 반영했다. 공통 테마, 밝은 PC 상단 메뉴, 사진 중심 홈, 레시피 가져오기·직접 만들기, 공통 제목과 카드, 식단 날짜·상태 표시를 실제 Flutter 코드에 적용했다. [적용 범위·화면·검증](design-plum-apricot.md).
 
-lib/features/youtube/domain/youtube_thumbnail_url.dart
+최종 정적 분석 오류 0. 전체 검사에서 645개 통과·4개 조건부 제외 후 화면 위치/문구를 가정하던 테스트 3개를 수정했다. 해당 3개를 포함한 관련 회귀 테스트 33개가 최종 통과했다. PC/모바일 실제 캡처를 확인했다. 운영 웹·AAB·DB는 이번 디자인 수정에서 배포하지 않았다. 새 식단 기능을 함께 운영 반영할 때는 0072 마이그레이션이 선행되어야 한다.
 
-New test:
+아래는 앞선 식단 기능 및 릴리스 작업 기록이다.
 
-test/features/youtube/domain/youtube_thumbnail_url_test.dart
+# 업소별 식단 관리 구현·검증 완료 — 운영 반영 전 (2026-09-25)
 
-## Important note
+업소 업무홈에 **식단 달력**을 추가했다. 일간·주간·월간 조회, 요리별 인분과 레시피/판매 메뉴 선택, 날짜·주간 복사, 담당자 확정·조리 완료·취소 및 변경 이력을 제공한다. 확정 식단의 레시피 버전과 재료량을 보관하며, 기존 업체별 구매 준비로 연결한다. 같은 식단의 중복 구매 준비는 DB에서도 차단한다.
 
-Existing YouTube recipes already saved with image_path null will not automatically get thumbnails.
+검증: 고정 Flutter 3.44.8 정적 분석 **오류·경고 0**, 전체 테스트 **647개 통과·기존 조건부 4개 제외**. 격리 PGlite PostgreSQL 계약 검사 **280개 통과**, 최종 0072 파일 해시와 보고서 일치, 운영 쓰기 0. 실제 글꼴/아이콘으로 PC 캘린더 캡처를 확인했고 모바일 360px 확대 글자 및 영문 화면을 검사했다. 로컬 Supabase Docker 검사는 서버 상태 조회 불가로 실행되지 않았다. doctor의 기존 PATH/Android 라이선스/Windows 설치 경고는 [사용·구현 안내](business-meal-planning.md)에 기록했다.
 
-To see the fix, create a new YouTube recipe and open its detail page.
+**이번 기능은 운영 DB·웹·AAB에 아직 반영하지 않았다.** 운영 반영 시 `0072_business_meal_planning.sql` 적용 후 클라이언트를 배포해야 한다. 이번 작업에서 릴리스 버전·서명·환경 설정은 변경하지 않았다. 기존 일반 식단 기록은 그대로 접근할 수 있다.
 
-## Known source-specific image behavior
+[사용·구현 안내](business-meal-planning.md) · [실제 위젯 화면](../.artifacts/meal-calendar-desktop.png).
 
-- New YouTube recipes should now have thumbnails.
-- Existing YouTube recipes with null image_path remain without image unless repaired later.
-- Subscriber/user recipes currently do not store or select image fields.
-- Public recipes depend on upstream image_url availability.
+사용자가 제공한 Play Console 화면에서는 v83 공개 테스트가 9월 25일 17:34에 출시된 것이 확인된다(제출 62). 아래 v83 작업 당시의 ‘Play 업로드 전’ 기록보다 이 확인을 우선한다. 식단 기능 구현 당시에는 새 플럼/살구색 시안을 적용하지 않았으며, 이 문제는 문서 상단의 후속 디자인 수정에서 해결했다.
 
-## Next tasks
+아래는 이전 작업 당시 기록이다.
 
-1. Commit this documentation.
-2. Push branch after user approval.
-3. Run the app with run-local.ps1.
-4. Create a new YouTube recipe.
-5. Confirm the new recipe detail page displays the thumbnail.
-6. Consider adding placeholder UI for recipes with no image.
-7. Defer subscriber image/provenance preservation to Phase 5.
+# v83 전체 디자인 정리·운영 배포·AAB 완료 (2026-09-25)
 
-## Safety
+홈뿐 아니라 레시피 작성·상세, 업소 메뉴·구매·재고, 공급업체, 관리자·계정 화면의 배치와 공통 디자인을 정리했다. 정적 분석 오류 0건, 전체 테스트 **639개 통과·기존 조건부 4개 제외**. 운영 웹 v83의 실제 배포 해시와 한영 PC/모바일 읽기 전용 검사를 통과했다.
 
-Do not run without explicit approval:
+[새 AAB](../release/recipe-scout-v83.aab)는 `1.0.1+83`이다. 최종 ZIP의 글꼴 등록·폰트·자산 및 서명을 검사했고 MaterialIcons는 SDK 원본과 일치한다. **Play 업로드·휴대폰 업데이트는 아직 수행하지 않았다.**
 
-- supabase db reset
-- supabase db push
-- production migrations
-- Edge Function deployment
-- release build
-- package upgrades
-- destructive Git commands such as git reset --hard or git clean -fd
+[릴리스 검증](release-v83.md) · [화면별 범위](design-completion-v83.md) · [사용자 확인 안내](design-v83-user-guide.md). 이번에는 DB/함수 배포가 없으며 제휴 상품100개는 기존 검토 초안 상태를 유지한다.
 
-## 2026-08-15 Public keyword search recovery
+아래는 이전 작업 당시 기록이다. 최신 상태는 v83 기록을 우선한다.
 
-### Issue
+# v82 Android 아이콘 복구·100개 제휴 초안 등록 완료 (2026-09-24)
 
-In local app testing, public recipe search with a normal keyword query such as `감자` returned no results, while AI search returned relevant results.
+v81 AAB의 빈 FontManifest.json이 Android 아이콘 대체문자 표시의 원인이었다. 글리프 자체 누락은 확인되지 않았다. Flutter 3.44.8/JDK 17 clean build로 정상 글꼴 등록을 복원하고 AAB 자산 검증을 릴리스 필수 검사로 추가했다. 정적 분석 오류 0건, 전체 테스트 617개 통과·기존 조건부 4개 제외. v82 서명과 기존 업로드 인증서 일치, 글꼴 원본 일치를 확인했다. **v81 Android AAB는 재배포하지 말 것.**
 
-### Root cause
+[새 AAB](../release/recipe-scout-v82.aab): `com.kyoutube.app` / `1.0.1+82`, SHA-256 `66E8EE857E82FCEA60B42B32C4CA6439EE4696CB0B3AC9055034E7E856865163`. Play 업로드와 휴대폰 업데이트 후 아이콘 확인은 남아 있다. 운영 웹은 이전에 배포된 v82이며 이번 Android 복구 중 재배포하지 않았다.
 
-The public keyword search path used strict token matching only. If strict keyword matching returned no rows from the fetched Food Safety Korea COOKRCP01 page set, the UI showed an empty result even though related recipes were available through ranked AI-style scoring.
+운영 DB에 사용자 제공 제휴 상품 **100개 초안 등록 완료**, 공개 0건. **관리자 홈 → 제휴 상품 관리**에서 확인한다. 실제 상품·규격 확인은 Coupang 상품 페이지 HTTP 403으로 완료하지 못해 공개하지 않았다. 이번 작업에서 추가 DB 마이그레이션은 없다. [상세 기록](release-v82.md).
 
-### Fix
+아래는 이전 작업 당시 기록이며 현재 상태는 위 v82 기록을 우선한다.
+# v81 운영 배포·서명 AAB 완료 (2026-09-24)
 
-Updated `supabase/functions/recipe_api/index.ts` so keyword search preserves exact keyword results when available, but falls back to the existing ranking logic when strict keyword matching returns no results.
+사용자 승인으로 디자인 개편과 식자재 제휴 카탈로그 관리 기능을 운영에 반영했다. Firebase Hosting `recipe-scout-workspace`는 `1.0.1+81`을 제공하며, 공개 URL과 보안 헤더를 확인했다. 운영 DB에는 `0071_affiliate_catalog_management`만 선택 적용했다. 기존 누락 이력 `0048`, `0057`은 적용하거나 변경하지 않았다.
 
-### Verified
+관리자 카탈로그의 이력 테이블 RLS, 관리자 RPC, 추가 열을 확인했고 운영 제휴 상품은 **0건**이다. 사용자 제공 100개 링크 초안은 자동 등록·공개하지 않았으며, 실제 상품·규격·공개 여부 검토 후 관리자 화면에서 별도로 가져와야 한다.
 
-- Normal public keyword search for `감자` now returns results in the app.
-- AI search for `감자` continues to return results.
-- Direct Edge Function checks returned HTTP 200 for both:
-  - `search_mode=keyword`
-  - `search_mode=ai`
+지정 Flutter 3.44.8 전체 검증은 분석 오류 0건, Flutter **616개 통과·기존 조건부 4개 제외**로 끝났다. [v81 AAB](../release/recipe-scout-v81.aab)는 `com.kyoutube.app`, `1.0.1+81`, SHA-256 `8DDA641BFF656F14B52B6A6A512E435CF602F34CACAEEBA69562FF731BD35C26`이며 서명을 검증했다. Play Console 업로드는 수행하지 않았다.
+아래 기록은 이전 작업 당시 상태다.
 
-### Commit
+# 통합 업무 개편 운영 반영 — v79 (2026-09-22)
 
-- `fd7f070 fix: improve public keyword search fallback`
+사용자 승인으로 **1~3차 업무 개편 + 담당자 프로필 + 메뉴 후보·선정 권한·판매 메뉴 빠른 구매**를 운영 DB/웹과 **1.0.1+79 서명 AAB**에 반영했다. DB0064·0068·0069·0070 적용, 분석 0건, 전체 576개 통과·기존 4개 제외, 격리 PostgreSQL 343개, 운영 롤백 15개·익명 차단 13개 통과. 기존 v78 서명 유지. Play 업로드·휴대폰 설치는 별도다. [배포 및 검증 기록](release-v79.md) · [빠른 구매 사용법](business-menu-fast-purchase.md).
+
+아래 내용은 각 단계 당시의 기록이다. 1~3차 및 담당자 프로필의 미배포 표시는 v79 통합 배포로 해소되었다.
+
+> 2026-09-21 3차 소스 변경: [품목별 입고·반품과 재고·조리 예약](business-inventory.md). 부분 입고, 원본 입고별 반품, 잔량 확인 마감, 재고 수불·예약·실제 사용, 메뉴 구매의 재고·중복 요청 확인. 정적 분석 0건, Flutter 570개 통과·기존 제외 4개, 격리 DB 305개 및 직원 프로필 미적용 구성 216개 통과. **DB0069·운영 배포·AAB 생성 전 상태**이며 1·2차 미배포 소스와 함께 검증했다.
+
+> 2026-09-21 2차 소스 변경: [업소 공동 거래처·상품 규격](business-shared-suppliers.md). 거래처 검색, 개인 정보 선택 복사, 메뉴 재료와 상품 포장 규격 연결, 구매 당시 사본 보존. 정적 분석 0건, Flutter 557개 통과·기존 제외 4개, 격리 DB 239개 검사 통과. DB0068·운영 배포·AAB 생성 전 상태.
+
+> 2026-09-21 소스 변경: [사용자 영역·업소 업무 흐름 1차 개편](workspace-reorganization.md). 소속 업소/개인 작업실 구분, 공동 업무 내비게이션, 공급업체 상품·거래조건 분리. 정적 분석 통과, 전체 테스트 549개 통과·기존 제외 4개. 운영 배포·AAB 생성 전 상태.
+
+# 메뉴 개발·출시·구매 연결 운영 반영 — v78 (2026-09-20)
+
+사용자 승인으로 DB0067·운영 웹·**1.0.1+78 서명 AAB**를 배포/생성했다. 레시피 시험·승인·버전 비교, 승인 버전을 고정한 메뉴 관리, 메뉴/개발 레시피를 먼저 참조하는 인분·재고·포장 기반 구매 초안 작성을 제공한다. 추가 AI 비용 없음. 분석 0건, Flutter 536개 통과·기존 4개 제외, 실제 PostgreSQL 158개·운영 DB 롤백 21개 검사 통과. 기존 데이터·권한·v77 서명을 보존했다. Play 업로드·휴대폰 설치는 별도다. [v78 배포 기록](release-v78.md) · [사용법](business-menu-lifecycle.md).
+
+# 구매요청서 문서형 미리보기·PDF 공유 운영 반영 — v73 (2026-09-18)
+
+문서형 기본 미리보기, PDF 중심 공유 버튼, 품목별 금액과 미입력 품목을 제외한 소계, 새 PDF 표·거래 정보 구성을 **운영 웹과 1.0.1+73 서명 AAB**에 반영했다. 기존 v72 서명·PDF 권한·등록증 선택 첨부·계정 보호를 유지하며 DB·함수 변경은 없다.
+
+분석 0건, 전체 **439개 통과·기존 조건부 4개 제외**. 운영 웹 역할/메뉴 6개·로그인 보호 8개 흐름과 한영 샘플 PDF 렌더링/다운로드·새 소계·저장 복원을 확인했다. 샘플 서버 쓰기 0건. Play 업로드·휴대폰 설치·실제 업체 발송·실물 인쇄는 하지 않았다. [릴리스 기록](release-v73.md) · [문서·공유 사용법](purchase-request-document-design.md).
+
+# 샘플 레코드 체험 작업실 운영 반영 — v72 (2026-09-18)
+
+한영 24개 실습의 **샘플로 바로 체험**을 운영 웹과 **1.0.1+72 서명 AAB**에 반영했다. 레시피 5개·가상 업체 4곳·일러스트 상품 6개·매출 8건·대장 3건과 메뉴 비교 버전을 준비한다. 수정·로컬 저장·이어하기·초기화, 구매 단위 환산, 원가·비교 계산, 업체별 요청서, 연습 표시 PDF와 모의 발송·공개·AI 검토를 제공한다.
+
+분석 0건, 전체 **432개 통과·기존 조건부 4개 제외**. 운영 Chrome 한영 샘플 저장→요청서→PDF 다운로드→복원 통과, 서버 쓰기 0건. 기존 역할/메뉴 6개·로그인 보호 8개·튜토리얼 역할 6개·예제 4개 흐름 확인. v71 업로드 서명 유지. DB·함수 변경 없음. Play 업로드·휴대폰 설치·실물 인쇄는 수행하지 않았다. [릴리스 기록](release-v72.md) · [샘플 사용법](tutorial-sample-workspace.md).
+
+# 역할별 체험 튜토리얼 운영 반영 — v71 (2026-09-17)
+
+한영 24개 실습(일반 5·업소/전문가 14·공급업체 5), 추천 세 실습, 가상 예제, 진도·건너뛰기·다시 연습, 문맥 도움말을 **운영 웹과 1.0.1+71 서명 AAB**에 반영했다. v70 서명 유지, DB·함수·요금제·권한 변경 없음. 분석 0건, 전체 **416개 통과·기존 4개 건너뜀**. 공개 자산 9개, 역할 흐름 6개, 로그인 보호 8개, 튜토리얼 역할 6개·예제 4개 흐름을 Chrome에서 확인했다. 튜토리얼의 서버 쓰기 요청 0건. Play 업로드·휴대폰 설치는 수행하지 않았다. [배포·산출물](release-v71.md) · [튜토리얼 사용법](hands-on-tutorial.md).
+
+# 구매 흐름·메뉴 간소화 운영 반영 — v70 (2026-09-17)
+
+사용자 승인으로 역할별 주요 메뉴와 구매 허브·단계별 작성·이어서 작성·이전 요청 재사용을 **운영 웹과 1.0.1+70 서명 AAB**에 반영했다. 기존 v69 서명 유지, DB·함수 변경 없음. 분석 0건, 전체 **405개 통과·기존 4개 건너뜀**. 공개 웹 자산 9개, 한영 역할 흐름 6개, 로그인 보호 8개를 실제 Chrome에서 확인했다. Play 업로드·휴대폰 설치·실제 회원 자료 쓰기는 수행하지 않았다. [배포·산출물](release-v70.md) · [사용 방법과 임시 보관 범위](purchase-navigation.md).
+
+# 역할별 첫 화면·메뉴 운영 반영 — v69 (2026-09-16)
+
+일반 사용자·업소/전문가·공급업체의 첫 화면, 주요 메뉴, 목적 선택·추가·전환을 **운영 웹과 1.0.1+69 서명 AAB**에 반영했다. 기존 자료·권한·요금제를 유지하며 DB·함수 변경 없음. 분석 0건, 전체 395개 통과·기존 4개 건너뜀. 두 웹 도메인 자산 일치, 한영 6개 역할 흐름과 4개 로그인 보호 경로를 실제 Chrome에서 확인했다. 기존 v68 서명 유지. Play 업로드·휴대폰 설치는 수행하지 않았다. [배포·산출물](release-v69.md) · [변경 범위](role-based-workspaces.md).
+
+# 운영 적용·서명 AAB 완료 — v68 (2026-09-16)
+
+양쪽 사업자등록번호·비공개 등록증, PDF 미리보기·저장·프린터 연결, 구매요청 대장·검색·통화별 집계·이력·CSV/PDF 출력을 **DB0061 · delete-account v25 · 운영 웹 · 1.0.1+68 서명 AAB**에 반영했다. 분석 0건, 전체 테스트 373개 통과·기존 4개 건너뜀, 운영 권한·인증 차단 및 Chrome PDF 검증을 완료했다. 기존 서명 인증서 유지. Play 업로드/휴대폰 설치와 실물 프린터 검증은 수행하지 않았다. [v68 산출물·검증](release-v68.md) · [상세 사용법](purchase-request-ledger-and-documents.md).
+
+# 최신 서명 AAB — v67 (2026-09-16)
+
+사용자 승인으로 공개 업체 조회·관리자 검색/검토/공개·공급업체 검색 화면 개선을 포함한 **1.0.1+67 production 서명 AAB**를 생성·검증했다. 기존 v66 서명 유지, 분석 0건·전체 테스트 359개 통과·기존 4개 건너뜀, 소스 218개와 서명·버전·production 연결 설정·파일 무결성을 확인했다. Play 업로드/휴대폰 설치와 관리자 실제 로그인 후 인터넷 검색 검증은 남아 있다. [v67 AAB와 검증](release-v67.md).
+
+# 운영 적용 완료 — 공개 정보 업체 20곳·관리자 검색 (2026-09-16)
+
+공식 자료로 조사한 전국 배송 식자재 관련 업체 20곳과 관리자 인터넷 검색 → 후보 선택 → 정보/출처 검토 → 공개 저장 기능을 구현했다. 별도 DB0060으로 업체 직접 등록과 구분하고 로그인한 무료/유료 회원에게 공개하며 개인 거래처로 가져올 수 있다. 기존 업체 중복·동시 수정·관리자 역할/MFA를 서버에서 검사한다.
+
+사용자 승인으로 **DB0060·공개 업체 20곳·`supplier_discovery` 함수 v1·운영 웹 배포 완료**. 공개 웹 9개·한영 신규 경로 로그인 보호 4개·운영 DB 읽기 전용 역할 검증 8개 통과. 함수 배포 원문 일치·무인증 거부·CORS 확인. 기존 Android v66 AAB는 변경하지 않았다. 전체 로컬 검증 358개 통과·기존 조건부 4개 제외, 최종 관련/미리보기 29개·분석 0건·Deno 모의 9개 통과. **실제 관리자 로그인·2단계 인증 후 인터넷 검색 1회 확인은 남아 있다.** 서버 키를 반출하거나 관리자 인증을 우회하지 않았다. [사용 흐름과 검증 범위](public-supplier-directory.md) · [20곳 공식 출처 검토표](public-supplier-seed-review.md) · [운영 배포 기록](../release/verify-web-v66-public-suppliers.json).
+
+# 최신 웹 화면 수정 — 공급업체 검색·등록·공개 안내 (2026-09-15)
+
+공급업체 검색 조건의 글자 겹침을 수정하고 처음부터 조건을 펼친다. 검색창 위에 **업체·상품 등록**을 표시하며, 선택창에서도 등록 화면을 열고 돌아올 수 있다. **공개하기를 완료한 업체·상품·사진은 로그인한 모든 무료·유료 회원이 조회**하며, 타인 수정·개인 거래처 정보 접근은 차단한다.
+
+운영 웹 반영 완료. 정적 분석 0건·최종 관련 검사 47개·로컬 DB 계약·공개 웹 9개·로그인 보호 6개 통과. 전체 검사 실행 중 추가 안내 수정으로 실패한 2개도 최신 소스의 관련 검사에서 통과했다. DB·함수·Android AAB는 변경하지 않았으며 설치된 앱에는 다음 앱 릴리스가 필요하다. [변경·검증 범위](supplier-directory-ui.md) · [운영 검증 JSON](../release/verify-web-v66-supplier-ui.json).
+
+# 최신 운영 수정 — 웹 장보기 생성 차단 해소 (2026-09-15)
+
+사용자 승인으로 `recipe_api` 서버 함수 v54 배포를 완료했다. CORS 허용 헤더에 `Idempotency-Key`가 빠져 웹의 장보기 생성 요청이 차단되던 문제를 수정했다. 두 공개 웹 주소의 사전 요청 허용·로그인 차단과 배포 원문 일치를 확인했다. 기존 DB·웹 산출물·v66 AAB·다른 함수는 유지했다.
+
+서버 회귀 3개·타입 검사 통과, Flutter 정적 분석 0건·전체 **342개 통과·기존 선택형 4개 건너뜀**, 장보기 쓰기 CORS를 추가한 공개 웹 검사 **9개 통과**. 실제 사용자 목록 생성은 수행하지 않았으며, 사용자는 현재 장보기 준비 화면에서 다시 만들기를 시도할 수 있다. [수정과 검증](shopping-web-cors-hotfix.md) · [운영 검증 JSON](../release/verify-v66-shopping-cors.json).
+
+# 최신 운영 배포·서명 AAB — v66 (2026-09-15)
+
+사용자 승인으로 **DB0059 적용, 계정 삭제 함수 1개(v24) 배포, 운영 웹 v66 배포, 1.0.1+66 production 서명 AAB 생성·검증**을 완료했다. 업체 직접 등록·상품 사진·분류 검색, 공개 업체의 내 거래처 등록/우선 표시, **재료별 후보 최대 3곳** 선택 후 구매 기준 1개로 업체별 초안 생성·최종 편집·저장·공유를 지원한다.
+
+정적 분석 0건, 전체 Flutter **342개 통과·기존 선택형 4개 건너뜀**. 로컬 DB 계약·Deno 이미지 정리 검사와 운영 DB 본문/권한, 계정 삭제 함수 인증 차단을 검증했다. 공개 웹 8개·OAuth 연결 4개·신규 업체 화면 한영 로그인 보호 6개 검사를 통과했다. v65 서명 유지·AAB 무결성·비밀키 미포함을 확인했다.
+
+[v66 AAB](../release/recipe-scout-v66.aab) · [운영 웹](https://recipe-scout-workspace.web.app/) · [배포·검증·남은 작업](release-v66.md) · [업체 등록과 구매요청 설계](supplier-marketplace.md).
+
+Google Play 업로드·휴대폰 설치와 실제 업체/구매자 계정의 사진 업로드·공유 수신 확인은 남아 있다. 휴대폰 설치는 사용자가 직접 진행한다. 0057 사전 모집은 미적용이며 Play 실제 결제 활성화도 별도 후속 작업이다. 아래는 이전 단계의 당시 기록이다.
+
+# 최신 웹 배포 — 공개 주소·로그인 복귀 설정 완료 (2026-09-15)
+
+https://recipe-scout-workspace.web.app/ 에 운영 Supabase를 사용하는 Flutter 웹을 배포했다. 정적 분석 0건·인증/작업실 25개 검사·실제 공개 웹 8개 검사가 통과했다. 기존 모바일 설정과 AAB, DB/함수는 변경하지 않았다.
+
+명시적 승인을 받아 운영 OAuth 복귀 허용 목록에 웹 주소 4개를 추가하고 재조회했다. 기존 모바일 복귀 주소·기본 주소·암호/MFA 설정 보존을 확인했다. 두 공개 도메인에서 Google·Kakao 버튼의 웹 복귀 주소·PKCE·실제 서버의 제공자 연결 검사 4개도 통과했다. 개인 계정의 실제 소셜 로그인 완료와 저장 자료 확인은 아직 검증하지 않았다. [공개 배포와 검증 범위](web-public-release.md).
+
+# 최초 로컬 개발 기록 — 앱·웹 통합 작업실 (2026-09-15)
+
+v65 Flutter 소스를 브라우저로 확장했다. 앱과 웹이 같은 계정·서버 권한·저장 규칙을 사용하며, PC에는 작업 홈과 왼쪽 메뉴, 두 열의 내 레시피, 셰프 재료 표와 원가/판매가 요약을 제공한다. 작은 화면은 모바일 배치를 사용한다. 한영 화면, 브라우저 OAuth 복귀 처리, 편집 이탈 확인, 구매 요청서 텍스트 복사/PDF 다운로드, 웹 회원권 조회를 연결했다.
+
+이 단계의 미리보기는 **로컬 Supabase 전용**이었다. 이후 위 공개 배포 단계에서 운영 Supabase 연결과 OAuth 허용 주소 등록을 완료했다. 웹 신규 결제·오프라인 업무·실시간 공동 편집·웹 푸시는 구현 범위에 포함하지 않는다. 앱 출시 산출물은 아래 v65 그대로다.
+
+전체 Flutter 323개 통과·기존 선택형 4개 건너뜀. 이후 웹 안내 수정의 정적 분석 0건·회원권 검사 24개 통과. 실제 로컬 백엔드 8개와 Edge 브라우저 8개 검사도 통과했고 테스트 계정을 정리했다.
+
+[구현 범위·실행·검증·공개 전 작업](web-workspace.md). 미리보기: `http://127.0.0.1:8767/` (개발 서버 실행 중인 PC에서만 접근).
+
+# 최신 운영 수정·서명 AAB — v65 (2026-09-15)
+
+사용자 승인으로 **DB 0058 운영 적용과 1.0.1+65 production 서명 AAB 생성·검증**을 완료했다. 수정한 레시피 재료의 장보기 반영, 조리/구매 수량 분리, 구매 단위 환산, 소수점 6자리 보존, 미입력 구매량의 목록 생성을 포함한다. 조리 완료는 재고를 차감하지 않으며 과거 보유량만으로 구매 재료를 자동 제외하지 않는다.
+
+운영 적용은 0058만이며 DB 함수 2개 및 구매 수량 열을 변경했다. 실제 함수 원문·권한·RLS 유지와 익명 접근 차단을 검증했다. **0057 사전 모집은 미적용**이며 Edge Function 재배포는 필요하지 않았다. 전체 Flutter **311개 통과·기존 선택형 4개 건너뜀**, 정적 분석 0건, 기존 v64 업로드 서명·ZIP·manifest·production 출처·비밀키 미포함 확인.
+
+[v65 AAB](../release/recipe-scout-v65.aab) · [배포/검증 기록](release-v65.md) · [장보기 변경 상세](shopping-create-fix-v65.md).
+
+**휴대폰 설치는 사용자가 직접 진행한다.** Play 업로드와 실기기 검증은 수행하지 않았다. Play 실제 결제 활성화와 사전 모집 배포는 여전히 별도 남은 작업이다. 아래는 각 이전 버전의 당시 기록이다.
+
+# 이전 서명 AAB — v64 (2026-09-14)
+
+사용자 승인으로 **1.0.1+64 production 서명 AAB** 생성·검증 완료. 전문가/일반 튜토리얼, 검색 메뉴와 음식 분류 정리를 포함한다. 릴리스 검사: 정적 분석 0건, Flutter 300개 통과·기존 선택형 4개 건너뜀, v63 업로드 서명·ZIP·manifest·빌드 출처·비밀키 미포함 확인.
+
+[v64 AAB](../release/recipe-scout-v64.aab) · [릴리스/설치 기록](release-v64.md) · [검증 JSON](../release/verify-v64.json).
+
+**휴대폰 설치는 사용자가 직접 진행하기로 했다.** 연결된 Play 설치본 v63과 로컬 업로드 서명의 차이를 확인했으며, 기존 앱과 데이터를 변경하지 않았다. Play Console 업로드·배포와 운영 DB/함수 추가 배포도 하지 않았다. 기존 CupertinoIcons 빌드 경고와 Play 실제 결제/사전 모집 백엔드의 미완료 항목은 릴리스 문서에 기록했다.
+
+# 최신 로컬 작업 — 검색 메뉴와 사용자별 튜토리얼 (2026-09-14)
+
+하단 첫 메뉴를 검색 / Search로 바꾸고, 한식 분류를 전체 + 2×2 분류로 정렬했다. 전문가 9개·일반 사용자 5개 한영 과정을 만들고, 과정 선택/진도 분리·인분/수율/판매가 예제·셰프 화면 바로가기를 추가했다. 상세는 [사용자별 튜토리얼](hands-on-tutorial.md)을 따른다.
+
+이 앱 변경은 위 v64 서명 AAB에 포함됐다. 추가 운영 배포와 휴대폰 설치는 하지 않았다. 아래 사전 모집 백엔드도 아직 로컬 준비 상태이다.
+
+검증: 고정 Flutter 3.44.8로 최종 정적 분석 0건, 전체 테스트 **300개 통과·기존 선택형 검사 4개 건너뜀**. 두 과정 진도 분리/복원, 실제 화면 이동 후 복귀, 인분·수율·가산율 예제 계산, 한영 14개 실습의 320px·200% 글자 크기, 기존 검색/분류/네 메뉴 동작을 검증했다. 최초 분석의 테스트 코드 `const` 지적과 예제/퀴즈의 중복 숫자를 잘못 찾던 테스트를 수정한 뒤 전체 검사를 다시 통과했다.
+
+한영 실제 Flutter 위젯 캡처 4개 검사(홈·튜토리얼)와 최종 문구 반영 후 튜토리얼 캡처 2개 검사가 통과했다. 전문가/일반 첫 화면, 숫자 실습, 한영 검색 분류를 육안 확인했다. 로그는 `.artifacts/audience-guide-final-analyze.log`, `audience-guide-final-test.log`, `audience-guide-captures.log`, `audience-guide-final-captures.log`. 화면은 `.artifacts/guide-pro-ko.png`, `guide-home-ko.png`, `guide-example-ko.png` 및 각 `-en.png`, `home-ko.png`, `home-en.png`이다. 캡처 재실행 중 크레딧 부족에 따른 자동 승인 거절이 있었으나 사용자의 계속 진행 요청 후 동일 검사 재실행이 정상 승인되어 완료됐다.
+
+`tools/dev/verify.ps1`의 doctor에는 기존 PATH의 다른 Flutter/Dart, Android 라이선스 상태 확인 불가, Windows Visual Studio 설치 미완료 경고가 남는다. 이번 분석·테스트는 프로젝트 고정 SDK로 완료했으며 Android 출시 빌드/실기기 검증은 수행하지 않았다.
+
+# 최신 로컬 작업 — 출시 전 전문 사용자 모집 (2026-09-14)
+
+한영 모집 홈페이지·브라우저 원가 체험·이메일 동의/확인/철회·선택 동의자 팁·채널별 관리자 집계와 14일 홍보 초안 생성기를 준비했다. YouTube는 `https://www.youtube.com/@guige01`, 카카오톡은 사용자가 제공한 ‘레시피스카우트’ 채널 `https://pf.kakao.com/_TgJrX`를 연결했다. 모집 페이지의 한영 카카오 버튼과 공개용 ZIP에도 반영했다.
+
+카카오 주소 반영 후 브라우저의 한국어·영어 버튼 표시와 정확한 HTTPS 연결 주소를 확인했다. ZIP의 파일 목록·CRC·최신 설정 포함 검증도 통과했다. 이번 수정은 공개 링크/문서에만 해당한다.
+
+기존 홈페이지/도메인이 없음을 사용자에게 확인했다. Cloudflare Pages Free 주소로 공개할 정적 ZIP과 [14일 홍보 초안](prelaunch-channel-drafts.md)을 준비했다. 공개 주소는 아직 생성하지 않았고 이메일 자동 발송에는 별도 발신 도메인 인증이 필요하다.
+
+검증: 최종 `flutter analyze` 0건. 전체 앱 검사 294개 통과·기존 4개 건너뜀·번역 사전 누락 1개 발견 후 수정. 번역/관리자 집계 5개 재검사 통과(수정 후 전체 재실행은 안 함). Deno 12개, 로컬 DB 계약, 홍보 초안 생성기 3개 및 한영 모바일 브라우저 확인 통과. 로그는 `.artifacts/growth-final-analyze.log`, `growth-flutter-validation.log`, `growth-final-targeted-test.log`, `growth-deno-test.log`, `growth-db-test.log`, `growth-content-test.log`.
+
+**운영 미적용**: DB 0057, `prelaunch_growth`·`prelaunch_delivery`, 5분 예약 SQL과 공개 페이지. 실제 접수·발송은 비활성이다. 공개 도메인·발신 설정·개인정보 안내 확정과 적용 승인이 필요하다. 모집 백엔드는 여전히 미배포이며 최신 준비 앱 파일은 위 v64 AAB다. 자세한 설정·범위·제한은 [모집 운영 문서](prelaunch-growth.md)를 따른다.
+
+# 최신 운영 배포 — v63 (2026-09-14)
+
+사용자 승인으로 새 요금제 DB **0054·0055·0056**, 함수 **membership·membership_notifications·ai_youtube_video_assistant**의 운영 배포와 **1.0.1+63 서명 AAB** 생성·검증을 완료했습니다.
+
+- [v63 AAB](../release/recipe-scout-v63.aab), [배포·서명·검증 기록](release-v63.md).
+- 정적 분석 0건, Flutter 293개 통과·기존 4개 건너뜀, Deno 51개 및 로컬 DB 계약 통과.
+- 암호화 복구 백업의 70개 테이블 전체 행 일치, 운영 SQL 원본·보안 규칙·함수 원격 소스·익명 요청 차단 확인.
+- **Google Play 결제는 아직 비활성 상태입니다.** 신규 상품/base plan, 서비스 계정·RTDN 설정, 실제 내부 테스트 결제 검증이 남아 있습니다. Play 업로드·폰 설치는 수행하지 않았습니다.
+- 새 요금제와 기능 기준은 [출시 결제 문서](launch-billing-implementation.md)를 따릅니다. 기존 가격·권한 보존안은 폐기됐습니다.
+
+아래는 이전 단계의 당시 기록입니다. 현재 운영 적용 여부와 출시 파일은 위 v63 기록을 따릅니다.
+
+# 레시피 스카우트 현재 상태
+
+## 이전 기록: 회원·메뉴 개편 로컬 준비 (2026-09-13)
+
+네 메뉴(발견·내 레시피·장보기·셰프), 셰프 진입 화면, 빈 장보기에서도 구매처/요청서 접근,
+현재 회원 기능 안내와 회원 조회 실패 시 신규 결제 차단을 구현했습니다.
+DB 0054는 기존 권한을 기능 프로필로 분리하고 신규 가격/기능은 비활성 초안으로 보관합니다.
+기존 회원·구독 금액·AI 한도·저장 데이터를 자동 전환하지 않습니다.
+아직 DB 0054 운영 적용, 새 함수 운영 배포, v63 AAB 생성 또는 새 요금제 판매는 하지 않았습니다.
+상세 순서·기존 회원 보호·새 요금제 제안·판매 전 남은 구현은
+[회원·메뉴 안전 전환안](membership-workspace-redesign.md)을 따릅니다.
+
+- 최종 정적 분석 지적 0건(45.0초). Flutter 전체 테스트 **283개 통과·기존 선택형 4개 건너뜀**(3분 55초).
+- 로컬 DB 계약 5종(회원 기능, 셰프 금융/RLS, 장보기 도우미, 구매처 관리, 구매 요청서) 통과 후 전체 롤백.
+- 기존 DB 0051·0052·0053 파일 SHA-256은 v62 배포 기록과 동일합니다. 버전은 `1.0.1+62` 유지.
+- 한영 셰프 화면 예시 이미지를 생성해 배치를 확인했으며, 320px·200% 글자 크기에서 메뉴·레시피 선택을 검증했습니다.
+- 최종 로그: `.artifacts/membership-redesign-validation.log`, `.artifacts/membership-redesign-db-test.log`.
+  실제 운영 결제·휴대폰 설치 검증은 이번 로컬 검증에 포함되지 않습니다.
+
+## 이전 출시 준비 — v62 (2026-09-13)
+
+사용자 승인으로 DB 0051·0052·0053 운영 적용과 v62 서명 AAB 생성·검증을 완료했습니다.
+장보기 도우미, 협력업체 요청서/한영 PDF 공유, 사용자의 구매처 등록·수정·삭제·검색·즐겨찾기가 포함됩니다.
+
+- 파일: [recipe-scout-v62.aab](../release/recipe-scout-v62.aab), `1.0.1+62`, `production`, 72,414,036 bytes.
+- SHA-256: `27868A557CD5CF9331E7A70F5ADDD9C810EC6BC11FBBCB9EA75874E1A370FD14`.
+- 정적 분석 오류 없음, Flutter 266개 통과·기존 선택형 테스트 4개 건너뜀. 기존 v61 서명과 일치하며 ZIP·manifest·출처 해시·한글 PDF 글꼴 검증 통과.
+- 운영 DB SQL 원본 일치, RLS/제한된 수정 권한 검증, 새 REST 테이블 4개의 익명 접근 HTTP 401 차단 확인. 다른 마이그레이션 이력은 전후 동일합니다.
+- Play 업로드·휴대폰 설치·실제 카카오톡 수신 검증은 수행하지 않았습니다. 공개 정책/Play 데이터 보안 신고 갱신도 배포 전에 확인해야 합니다.
+- 상세: [v62 출시 기록](release-v62.md), [내 구매처 관리](shopping-store-management.md).
+
+아래는 이전 버전의 당시 기록입니다. 이후 변경을 포함한 최신 운영 상태는 문서 맨 위 v63 기록을 따릅니다.
+
+2026-09-13 운영 확인: REST 경로의 safeupdate 호환성 수정 0041을 추가 적용했다. 03:20 KST 정시 예약에서 점검 시간과 비용 자료 누락 경고 저장을 확인했다. Firebase 발송 자격 증명 미설정으로 발송 상태는 실패이며 HTTP 503을 반환한다. 앱 알림함 평가는 동작하지만 휴대폰 푸시는 아직 완료되지 않았다.
+
+갱신: 2026-09-13. 저장소: K-youtube-release-v1.0.0-13.
+
+## v57 — 관리자 운영 알림 배포
+
+사용자 승인으로 운영 DB 0036·0040, 관측 함수 7개와 operations_monitor, Vault/전용 인증값과 5분 예약을 적용했다. v57 서명 AAB 생성 완료. Firebase 발송 서비스 계정 설정과 실제 관리자 휴대폰 수신 검증은 남아 있다. 상세 상태는 [v57 출시 기록](release-notes-v57-ko.md), [운영 알림](operations-alerts.md)을 참조한다.
+
+유료2,000명·무료10,000명 [비용/환경 비교](capacity-cost-review-2026-09-13.md)도 작성했다. 실제 청구서와 시나리오를 구분하며 토큰 최적화 효과는 아직 실측되지 않았다.
+
+## 2026-09-13 — v56 및 원가·매출 DB 적용 완료
+
+원가 항목 추가·수정·삭제, 재료 단가 바로 수정, 0~100% 원가 가산 판매가, 일·주·월 매출액/예상이익 및 판매 수량 기록을 구현했다. 전체 테스트 203개와 추가 슬라이더 검증, 로컬 DB 계약 검증을 통과했다. 새 비용 내역의 구버전 덮어쓰기 방지 및 과거 판매가·원가 보존을 포함한다.
+
+사용자 승인 후 운영 DB 0038·0039를 같은 트랜잭션으로 적용하고 이력·RLS·소유자 정책·직접 금액 수정 차단을 검증했다. v56 서명 AAB 생성 및 별도 서명 검증 완료. 상세 내용은 [v56 출시 기록](release-notes-v56-ko.md), [원가·판매가·매출 관리](chef-costs-and-sales.md)를 참조한다. 유료 전용 제한은 아직 구현되지 않았다.
+
+## 이전 AAB — 1.0.1+57
+
+- release/recipe-scout-v57.aab, 65,746,400바이트.
+- SHA-256: 44FE94F87449E8E78FA1641F579B458315219DAD15D50AFECE630145B9390B6A.
+- analyze 0건, Flutter 208개 통과·캡처 4개 생략, Deno 10개 통과·8개 진입점 검사, 로컬 SQL 계약 통과.
+- v56 업로드 서명 일치, ZIP 무결성·manifest·production provenance 검증 통과.
+- Play 업로드와 실제 기기 설치·푸시 수신은 수행하지 않았다.
+
+## 이전 AAB — 1.0.1+56
+
+- release/recipe-scout-v56.aab, 65,633,974바이트.
+- SHA-256: 08AEDB774C54CCB353F2045ECFDCD5607E2A2D4A39BDB570AF54C582058C7EF5.
+- analyze 0건, Flutter 204개 통과·화면 캡처 4개 기본 생략, 로컬 SQL 계약 통과.
+- v55 업로드 서명 일치, ZIP 무결성·manifest·production provenance 검증 통과.
+- Play 업로드와 실기기 설치는 수행하지 않았다. 0036 운영 관측 및 신규 운영 알림은 별도 적용이 필요하다.
+
+## 이전 AAB — 1.0.1+55
+
+- 파일: `release/recipe-scout-v55.aab`, 65,177,058바이트(약 62.2 MiB), 패키지 `com.kyoutube.app`.
+- SHA-256: `9F47D63B7C4AA82B8B013E3280342587183C2E736B4C046B5871A0D8E9069472`.
+- `release/build-v55.log`: analyze 문제 0개, Flutter 테스트 191개 통과, 서명 릴리스 빌드 성공.
+- 셰프 작업실의 인분 환산·재료비/추가 비용·수율·버전 관리, 영어 검색 및 초안 오류 개선, 편집 실행 취소·다시 실행 아이콘 포함.
+- 운영 DB **0037 적용 완료**. 적용 이력을 같은 트랜잭션에 기록하고 RLS·소유자 정책·RPC 및 직접 쓰기 제한을 검증했다.
+- 운영 `ai_youtube_recipe_assistant` **버전 25 ACTIVE**, JWT 검증 유지. 실제 배포 소스 3개 해시 일치 및 익명 HTTP 401 확인.
+- **0036 운영 관측 DB와 관련 함수 전체 배포는 계속 보류**. 이번 단일 AI 함수 배포에는 관측 래퍼를 포함하지 않았다.
+- Play 업로드·v55 휴대폰 설치는 수행하지 않았다. 영어 생성률 90% 및 조리 정확도는 실영상 표본 검증이 남아 있다.
+- 자세한 변경과 검증은 [v55 릴리스 안내](release-notes-v55-ko.md), 파일 검증은 `release/verify-v55.json`과 provenance JSON 참조.
+
+## 이전 AAB — 1.0.1+54
+
+- 파일: `release/recipe-scout-v54.aab`, 64,882,001바이트(약 61.9 MiB).
+- SHA-256: `73582115087B16279A2D8E84CC7609BFD65388E2B852D7AA1F1E48895DF59D25`.
+- `release/build-v54.log`: analyze 지적 없음, 테스트 172개 통과, 릴리스 빌드 성공.
+- 버전·ZIP 무결성·provenance·서명 검증 통과, v53 업로드 인증서 일치.
+- 운영 관리 UI와 앱 오류 보고 코드 포함. **운영 DB 0036 및 함수 7개는 아직 미배포**이므로 중앙 조회·저장은 서버 적용 후 사용 가능.
+- 자동 승인 검토가 이번 요청을 AAB 생성 승인으로만 판단하여 운영 DB 적용을 거부함. 함수 배포·정리 예약·공개 정책 게시도 수행하지 않음.
+- Play 업로드는 수행하지 않음. 자세한 내용은 [v54 릴리스 안내](release-notes-v54-ko.md).
+
+## 이전 AAB — 1.0.1+53
+
+- 파일: `release/recipe-scout-v53.aab`, 패키지 `com.kyoutube.app`.
+- SHA-256: `08B77FB4702A975B7006E67F5F791F6510B6CB14D7E3BC0D7C730B4C5ADB5332`.
+- v53 빌드 로그: `release/build-v53.log`, analyze 오류 없음·Flutter 테스트 164개 통과.
+- provenance JSON 및 서명 검증으로 버전·이전 업로드 인증서 일치 확인.
+- Play 업로드·설치·운영 출시 상태는 별도 확인 필요. 과거 Windows AOT/서명 차단은 현재 v53 차단 사유가 아니다.
+
+## v53 기능
+
+한/영 체험 튜토리얼 8개와 기기 내 진행 저장, 비로그인 대표 한식 영상 10종·분류·출처 상세, 외부 YouTube 열기, 로그인 후 AI 초안·편집·개인 저장. 영문 초안은 사용자 실사용 확인을 받았다. 검색·검색 제외·장보기·회원 관리자 흐름도 포함된다.
+
+## v54 운영 기능 — 서버 적용 대기
+
+이번 중앙 운영 관측의 앱 코드는 v54에 포함된다. 기존 v53 서명 파일은 보존했다. 서버 배포는 아직 수행하지 않았다.
+
+- 0036 마이그레이션: 관리자 집계·실제 비용·감사 이력·앱 오류 제한 수집.
+- Edge Function 7개: 요청 결과·실패 분류·응답 시간.
+- 회원 관리자 → 서비스 운영 현황: 1/7/30일 장애·AI 성공률·P95, UTC 당월 토큰·비용·예산.
+- 실제 청구 누적액은 수동 입력. 자동 청구 연동·지출 차단·외부 알림은 미구현.
+- 적용 순서·검증은 [운영 안내서](OPERATIONS_RUNBOOK.md). 운영 DB·함수 적용과 v54 테스트 트랙 검증이 필요하다.
+- 후속 소스 검증: analyze 지적 없음·Flutter 172개·Deno 42개·로컬 SQL 통과. [검증 기록](operations-verification-2026-09-12.md) 참조. v53 빌드 당시 164개 결과와 구분한다.
+
+## 남은 확인
+
+실제 TTS는 speakStep이 비활성 구현이다. Play 구매·복원·갱신·취소·환불/RTDN, 실기기 FCM, 공개 정책 URL, 접근성·오프라인 복구는 출시 체크리스트로 검증한다. 전문 인분 배율·재료비/추가 비용·수율·레시피 버전 관리는 v55 1차 구현과 DB 적용을 완료했으며 실기기 확인이 남아 있다. [v53 완성도 점검](v53-completeness-review-2026-09-12.md)은 당시 평가 기록이다.
+
+작업 시작 시 AGENTS.md → 이 문서 → [출시 준비](google-play-release-readiness.md) → git status를 확인한다. 기존 변경을 초기화하지 않는다. 과거 실행 기록을 현재 배포 상태로 해석하지 않는다.
+
+검증: `powershell -ExecutionPolicy Bypass -File tools/dev/verify.ps1`. 고정 Flutter 3.44.8·JDK 17 사용. 운영 마이그레이션·함수 배포·서명 릴리스 빌드는 명시적 승인 후 실행한다.

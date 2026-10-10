@@ -26,13 +26,24 @@ class OAuthCallbackResult {
 class OAuthCallbackHandler {
   OAuthCallbackHandler({
     required OAuthUriSessionExchange exchangeSessionFromUri,
+    this.webCallbackUri,
   }) : _exchangeSessionFromUri = exchangeSessionFromUri;
 
   final OAuthUriSessionExchange _exchangeSessionFromUri;
+  final Uri? webCallbackUri;
   final Set<String> _handledCallbacks = <String>{};
 
   Future<OAuthCallbackResult> handle(Uri uri) async {
-    if (uri.scheme != 'io.supabase.kyoutube' || uri.host != 'login-callback') {
+    final expected = webCallbackUri;
+    final allowed = expected == null
+        ? uri.scheme == 'io.supabase.kyoutube' && uri.host == 'login-callback'
+        : (uri.scheme == 'https' ||
+                uri.scheme == 'http' &&
+                    const {'localhost', '127.0.0.1', '[::1]'}
+                        .contains(uri.host)) &&
+            uri.origin == expected.origin &&
+            uri.path == expected.path;
+    if (!allowed) {
       return const OAuthCallbackResult(OAuthCallbackOutcome.ignored);
     }
 

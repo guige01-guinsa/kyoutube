@@ -1,0 +1,56 @@
+// Isolated in-memory PostgreSQL: never connects to any production database.
+const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const {PGlite}=require('../../.artifacts/business-db-runtime/node_modules/@electric-sql/pglite');
+const root=path.resolve(__dirname,'../..');
+(async()=>{
+ const db=new PGlite();await db.waitReady;let checks=0;
+ const admin='11111111-1111-4111-8111-111111111111',member='22222222-2222-4222-8222-222222222222';
+ const query=async(sql,args=[]) => (await db.query(sql,args)).rows;
+ const ok=(condition)=>{assert.ok(condition);checks++;};
+ const deny=async(sql,args=[])=>{let denied=false;try{await query(sql,args);}catch(_){denied=true;}ok(denied);};
+ const login=async(id,aal='aal2',anon=false)=>{await db.exec('reset role');await query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:id,aal,is_anonymous:anon})]);await db.exec('set role authenticated');};
+ try {
+ await db.exec(`create role anon;create role authenticated;create schema auth;
+ create table auth.users(id uuid primary key);insert into auth.users values('${admin}'),('${member}');
+ create table public.profiles(id uuid,role text);insert into public.profiles values('${admin}','admin');
+ create function auth.jwt() returns jsonb language sql as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
+ create function auth.uid() returns uuid language sql as $$select (auth.jwt()->>'sub')::uuid$$;
+ grant usage on schema auth to authenticated;`);
+ const previous=fs.readFileSync(path.join(root,'supabase/migrations/0060_public_supplier_listings.sql'),'utf8');
+ await db.exec(previous.match(/create function public.assert_supplier_directory_admin\(\)[\s\S]*?\$\$;/)[0]);
+ await db.exec('revoke all on function public.assert_supplier_directory_admin() from public,anon,authenticated;');
+ await db.exec(fs.readFileSync(path.join(root,'supabase/migrations/0065_shopping_affiliate_offers.sql'),'utf8'));
+ const save='select public.admin_save_shopping_affiliate($1::jsonb,$2) id';
+ const find='select * from public.find_shopping_affiliates($1,$2)';
+ const data={program:'naver',title:'Test ingredient',specification:'500g',ingredients:['춘장','black bean paste'],link:'https://naver.me/Example1',published:false,mobile_allowed:false,web_allowed:false,review_note:'',expires_at:new Date(Date.now()+86400000).toISOString()};
+ await login(member);await deny(save,[JSON.stringify(data),0]);await deny('select * from public.admin_shopping_affiliates()');
+ await login(admin,'aal1');await deny(save,[JSON.stringify(data),0]);await deny('select * from public.admin_shopping_affiliates()');
+ await login(admin);const id=(await query(save,[JSON.stringify(data),0]))[0].id;ok(!!id);
+ await deny(save,[JSON.stringify({...data,id}),null]);
+ await deny('select * from public.shopping_affiliate_offers');await deny("update public.shopping_affiliate_offers set published=true");
+ ok((await query(find,['춘장','web'])).length===0);
+ await deny(save,[JSON.stringify({...data,id,published:true}),1]);
+ await deny(save,[JSON.stringify({...data,id,published:true,web_allowed:true}),1]);
+ const pub={...data,id,published:true,web_allowed:true,review_note:'Permission verified for website on test date'};
+ await query(save,[JSON.stringify(pub),1]);
+ await deny(save,[JSON.stringify(pub),1]);
+ await login(member);const rows=await query(find,[' 춘장 ','web']);ok(rows.length===1);ok(!('review_note' in rows[0]));ok(rows[0].link===data.link);
+ ok((await query(find,['BLACK BEAN PASTE','web'])).length===1);
+ ok((await query(find,['춘장','mobile'])).length===0);ok((await query(find,['쌀','web'])).length===0);
+ ok((await query(find,["' OR true --",'web'])).length===0);ok((await query(find,['춘장','invalid'])).length===0);
+ await login(member,'aal2',true);ok((await query(find,['춘장','web'])).length===0);
+ await db.exec('reset role;set role anon');await deny(find,['춘장','web']);
+ await login(admin);
+ for(const link of ['http://naver.me/a','https://naver.me.evil.example/a','https://naver.me@evil.example/a','https://127.0.0.1/a','https://search.shopping.naver.com/search/all?query=test','javascript:alert(1)']) await deny(save,[JSON.stringify({...pub,link}),2]);
+ await deny(save,[JSON.stringify({...pub,expires_at:new Date(Date.now()+100*86400000).toISOString()}),2]);
+ await deny(save,[JSON.stringify({...pub,expires_at:new Date(Date.now()-86400000).toISOString()}),2]);
+ const video={...data,program:'youtube',link:'https://www.youtube.com/watch?v=abcdefghijk',published:true,web_allowed:true,review_note:'Own channel, tagged products and permission verified'};
+ await query(save,[JSON.stringify(video),0]);ok((await query(find,['춘장','web'])).length===2);
+ await query(save,[JSON.stringify({...pub,published:false}),2]);ok((await query(find,['춘장','web'])).length===1);
+ await db.exec("reset role;update public.shopping_affiliate_offers set expires_at=now()-interval '1 hour'");
+ await login(member);ok((await query(find,['춘장','web'])).length===0);
+ await db.exec('reset role');await query('delete from auth.users where id=$1',[admin]);
+ ok((await query('select updated_by from public.shopping_affiliate_offers')).every(r=>r.updated_by===null));
+ console.log('PASS: '+checks+' affiliate database checks');
+ } finally {await db.close();}
+})().catch(e=>{console.error(e.message);process.exitCode=1;});

@@ -1,0 +1,108 @@
+// Only invoked in the isolated fixture database by business_workspaces_contract.cjs --samples.
+module.exports=async ({db,q,scalar,denied,ok,crypto,fs,root})=>{
+ const migration=fs.readFileSync(root+'/supabase/migrations/0063_business_test_campaigns.sql','utf8');
+ const catalog=JSON.parse(fs.readFileSync(root+'/tools/data/business_test_samples.json','utf8').replace(/^\uFEFF/,''));
+ const embedded=JSON.parse(migration.split('$samples$')[1]);
+ ok(JSON.stringify(catalog)===JSON.stringify(embedded),'documented bilingual catalog matches migration seed');
+ const [admin,tester,second,outsider,unverified,paid]=Array.from({length:6},()=>crypto.randomUUID());
+ for(const [i,id] of [admin,tester,second,outsider,unverified,paid].entries()) await q('insert into auth.users values($1,$2,$3)',[id,`sample${i}@example.test`,id===unverified?null:new Date().toISOString()]);
+ await q("insert into public.profiles values($1,'admin')",[admin]);
+ await q("insert into public.member_entitlements values($1,'business_monthly','active',now()+interval '1 month',now()-interval '1 day')",[paid]);
+ async function as(id,aal='aal1',anonymous=false){
+  await db.exec('reset role');await q("select set_config('request.jwt.claim.sub',$1,false),set_config('request.jwt.claims',$2,false)",[id,JSON.stringify({sub:id,role:'authenticated',aal,is_anonymous:anonymous,user_metadata:{role:'admin'}})]);await db.exec('set role authenticated');
+ }
+ const call=(name,args=[])=>scalar(`select public.${name}(${args.map((_,i)=>'$'+(i+1)).join(',')})`,args);
+ await as(tester,'aal2');await denied('select public.admin_business_test_create($1,14,$2)',['Test','selected'],'ADMIN_REQUIRED','metadata cannot impersonate campaign admin');
+ await as(admin);await denied('select public.admin_business_test_list()',[],'ADMIN_MFA_REQUIRED','campaign admin requires MFA');
+ for(const [fn,args] of [
+  ['admin_business_test_create',['Denied',14,'selected']],
+  ['admin_business_test_participant',[crypto.randomUUID(),'sample1@example.test',true]],
+  ['admin_business_test_end',[crypto.randomUUID()]],
+  ['admin_business_test_cleanup',[crypto.randomUUID()]]
+ ]) await denied(`select public.${fn}(${args.map((_,i)=>'$'+(i+1)).join(',')})`,args,'ADMIN_MFA_REQUIRED',fn+' enforces MFA');
+ await as(admin,'aal2');
+ const campaign=await call('admin_business_test_create',['20 sample test',14,'selected']);
+ await denied('select public.admin_business_test_create($1,14,$2)',['Duplicate','selected'],'BUSINESS_TEST_ACTIVE','only one active campaign allowed');
+ await denied('select public.admin_business_test_participant($1,$2,true)',[campaign,'sample4@example.test'],'BUSINESS_TEST_ACCOUNT','unverified testers cannot be registered');
+ for(const i of [1,2,5])await call('admin_business_test_participant',[campaign,`sample${i}@example.test`,true]);
+ await as(outsider);ok((await call('business_test_options')).length===0,'unselected user cannot see campaign');
+ await denied('select public.business_test_start($1,$2,$3)',[campaign,'ko','Outsider'],'BUSINESS_TEST_CLOSED','unselected user cannot create trial workspace');
+ await as(tester,'aal1',true);await denied('select public.business_test_start($1,$2,$3)',[campaign,'ko','Anon'],'BUSINESS_AUTH','anonymous identities cannot start practice');
+ await as(tester);const w=await call('business_test_start',[campaign,'ko','Tester']);
+ ok(await call('business_test_start',[campaign,'en','Retry'])===w,'retry starts only one workspace');
+ const context=await call('business_context',[w]);ok(context.is_test && context.paid && context.owner,'free tester receives paid tools only within practice workspace');
+ await denied('select public.business_create($1,$2)',['Real workspace','Tester'],'BUSINESS_PLAN','practice access cannot create real paid business');
+ await db.exec('reset role');ok(await scalar('select count(*)::int from public.member_entitlements where user_id=$1',[tester])===0,'practice does not change membership');
+ await as(tester);
+ const rows=await q('select * from public.business_records where workspace_id=$1',[w]);
+ ok(rows.length===20,'exactly 20 practice records seeded');
+ ok(['recipe','meal','purchase','cost','sale'].map(k=>rows.filter(r=>r.kind===k).length).join(',')==='5,3,5,3,4','20 records cover all five workflows');
+ ok(rows.every(r=>r.title.startsWith('[샘플]')),'all Korean samples clearly marked');
+ ok(await scalar('select count(*)::int from public.business_record_versions')===20,'initial sample versions recorded');
+ ok(rows.filter(r=>r.kind==='meal').every(r=>r.data.recipe_ids.every(id=>rows.some(x=>x.id===id&&x.kind==='recipe'))),'meal plans link the seeded recipes');
+ ok(rows.filter(r=>r.kind==='cost').every(r=>rows.some(x=>x.id===r.data.recipe_id&&x.kind==='recipe')),'cost sheets link the seeded recipes');
+ ok(rows.filter(r=>r.kind==='sale').every(r=>rows.some(x=>x.id===r.data.cost_id&&x.kind==='cost')),'sales link the seeded costs');
+ ok(new Set(rows.filter(r=>r.kind==='purchase').map(r=>r.status)).size===4,'purchases demonstrate draft review approved and received');
+ const receipt=rows.find(r=>r.kind==='purchase'&&r.status==='received');
+ let doc=await call('business_document',[w,receipt.id,receipt.revision]);
+ ok(doc.is_test && doc.data.notes.includes('PRACTICE ONLY'),'server marks practice documents');
+ let draft=rows.find(r=>r.kind==='purchase'&&r.status==='draft');
+ draft=await call('business_save_record',[w,draft.id,'purchase','User edited title',{...draft.data,notes:'Removed all training notes'},draft.revision]);
+ doc=await call('business_document',[w,draft.id,draft.revision]);
+ ok(doc.is_test && doc.data.notes.includes('PRACTICE ONLY'),'editing notes cannot remove server practice warning');
+ await denied('select public.business_test_seed($1,$2)',[w,'ko'],'42501','private seed helper is not client callable');
+ await denied('select * from public.business_test_campaigns',[],'42501','clients cannot directly read campaign table');
+ await denied('select public.admin_business_test_cleanup($1)',[campaign],'ADMIN_REQUIRED','tester cannot delete campaign workspaces');
+ await denied('select public.business_invite($1,$2,$3)',[w,'sample3@example.test',['recipes.read']],'BUSINESS_TEST_PARTICIPANT','ineligible accounts cannot join via staff invitation');
+ const invite=await call('business_invite',[w,'sample2@example.test',['recipes.read','recipes.write','purchasing.read']]);
+ await as(second);ok(await call('business_accept',[invite.token,'Cook'])===w,'eligible tester can accept a role-scoped staff invite');
+ ok(await scalar("select count(*)::int from public.business_records where workspace_id=$1 and kind='cost'",[w])===0,'invited cook cannot view financial samples');
+ await denied('select public.business_test_reset($1,1)',[w],'BUSINESS_TEST_CLOSED','staff cannot reset owner samples');
+ const w2=await call('business_test_start',[campaign,'en','English tester']);
+ const en=await q('select * from public.business_records where workspace_id=$1',[w2]);
+ ok(en.length===20 && en.every(r=>r.title.startsWith('[SAMPLE]')),'English tester receives 20 English samples');
+ ok(en.every(r=>!rows.some(x=>x.id===r.id)),'each tester owns independent records');
+ await as(tester);
+ const custom=await call('business_save_record',[w,crypto.randomUUID(),'recipe','Added practice recipe',{ingredients:'Rice 100g',steps:'Cook',notes:'',servings:1},0]);
+ ok(await call('business_test_reset',[w,1])===2,'owner can restore the original 20 samples');
+ await denied('select public.business_test_reset($1,1)',[w],'BUSINESS_STALE','stale reset cannot erase newer practice');
+ ok(await scalar('select count(*)::int from public.business_records where workspace_id=$1',[w])===20,'reset restores exactly 20 records');
+ ok(await scalar('select count(*)::int from public.business_records where id=$1',[custom.id])===0,'reset removes added practice records');
+ ok((await q('select user_id from public.business_members where workspace_id=$1',[w])).length===2,'reset preserves invited staff');
+ await as(second);ok(await scalar('select count(*)::int from public.business_records where workspace_id=$1',[w2])===20,'reset leaves other tester workspace unchanged');
+ await as(paid);const real=await call('business_create',['Real retained business','Owner']);
+ const realRecord=await call('business_save_record',[real,crypto.randomUUID(),'recipe','Real saved recipe',{ingredients:'Rice 100g',steps:'Cook',notes:'',servings:1},0]);
+ const wp=await call('business_test_start',[campaign,'ko','Paid tester']);
+ await as(admin,'aal2');await denied('select public.admin_business_test_cleanup($1)',[campaign],'BUSINESS_TEST_END_FIRST','active campaign cannot be deleted before ending');
+ await call('admin_business_test_participant',[campaign,'sample1@example.test',false]);
+ await as(tester);await denied('select public.business_context($1)',[w],'BUSINESS_TEST_CLOSED','participant removal blocks owner context');
+ await as(second);ok(await scalar('select count(*)::int from public.business_records where workspace_id=$1',[w])===0,'owner removal also blocks invited staff');
+ await as(admin,'aal2');await call('admin_business_test_participant',[campaign,'sample1@example.test',true]);
+ const listing=await call('admin_business_test_list');ok(listing[0].workspaces===3 && listing[0].records===60,'admin sees practice workspace and record counts');
+ await call('admin_business_test_end',[campaign]);
+ await as(paid);await denied('select public.business_context($1)',[wp],'BUSINESS_TEST_CLOSED','paid membership cannot bypass ended practice');
+ await as(tester);ok(await scalar('select count(*)::int from public.business_records where workspace_id=$1',[w])===0,'ending hides practice records through RLS');
+ const latest=(await call('business_test_options'))[0];ok(latest.ended && !latest.available,'tester sees ended state');
+ await denied('select public.business_document($1,$2,$3)',[w,draft.id,draft.revision],'BUSINESS_DENIED','ending blocks document export');
+ await denied('select public.business_save_record($1,$2,$3,$4,$5,0)',[w,crypto.randomUUID(),'recipe','After end',{ingredients:'Rice',steps:'Cook',notes:'',servings:1}],'BUSINESS_DENIED','ending blocks practice writes');
+ await as(admin,'aal2');let removed=await call('admin_business_test_cleanup',[campaign]);ok(removed.deleted===3 && removed.remaining===0,'cleanup deletes registered practice workspaces');
+ removed=await call('admin_business_test_cleanup',[campaign]);ok(removed.deleted===0 && removed.remaining===0,'cleanup retry is idempotent');
+ await db.exec('reset role');ok(await scalar('select count(*)::int from public.business_record_versions')===1,'practice versions cascade, real version remains');
+ ok(await scalar('select count(*)::int from public.business_test_events where campaign_id=$1',[campaign])>0,'campaign audit survives sample cleanup');
+ await as(paid);ok((await call('business_context',[real])).paid && await scalar('select count(*)::int from public.business_records where id=$1',[realRecord.id])===1,'cleanup preserves real workspace and its data');
+ await as(admin,'aal2');const all=await call('admin_business_test_create',['All verified members',14,'members']);
+ await as(outsider);ok((await call('business_test_options')).some(c=>c.id===all),'open test available to verified members');
+ const wo=await call('business_test_start',[all,'ko','Member']);
+ await as(unverified);await denied('select public.business_test_start($1,$2,$3)',[all,'ko','Unverified'],'BUSINESS_TEST_CLOSED','open test still requires verified email');
+ await as(admin,'aal2');await call('admin_business_test_participant',[all,'sample3@example.test',false]);
+ await as(outsider);await denied('select public.business_context($1)',[wo],'BUSINESS_TEST_CLOSED','explicit removal overrides all-members audience');
+ await as(admin,'aal2');await call('admin_business_test_participant',[all,'sample3@example.test',true]);
+ await db.exec('reset role');await q("update public.business_test_campaigns set created_at=now()-interval '15 days',ends_at=now()-interval '1 day' where id=$1",[all]);
+ await as(outsider);await denied('select public.business_context($1)',[wo],'BUSINESS_TEST_CLOSED','expiration automatically blocks practice');
+ await denied('select public.business_test_start($1,$2,$3)',[all,'en','Expired'],'BUSINESS_TEST_CLOSED','expired test cannot create samples');
+ await as(admin,'aal2');await call('admin_business_test_end',[all]);await call('admin_business_test_cleanup',[all]);
+ await db.exec('reset role');await q('delete from public.business_workspaces where id=$1',[real]);
+ await db.exec('set role anon');await denied('select public.business_test_options()',[],'42501','anonymous role cannot access test RPC');
+ await db.exec('reset role');
+ fs.writeFileSync(root+'/.artifacts/business-samples-source.json',JSON.stringify({sha256:crypto.createHash('sha256').update(migration).digest('hex'),samplesPerLanguage:Object.fromEntries(Object.entries(catalog).map(([k,v])=>[k,v.length])),productionWrites:0},null,2));
+};

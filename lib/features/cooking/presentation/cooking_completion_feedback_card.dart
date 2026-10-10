@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../kitchen/application/kitchen_providers.dart';
@@ -63,7 +64,7 @@ class _CookingCompletionFeedbackCardState
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('조리 완료 기록을 저장했습니다.'),
+          content: LocalizedText('조리 완료 기록을 저장했습니다.'),
           duration: Duration(seconds: 3),
         ),
       );
@@ -80,7 +81,7 @@ class _CookingCompletionFeedbackCardState
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('조리 완료 기록을 저장하지 못했습니다. 다시 시도해 주세요.'),
+          content: LocalizedText('조리 완료 기록을 저장하지 못했습니다. 다시 시도해 주세요.'),
         ),
       );
     } finally {
@@ -102,19 +103,21 @@ class _CookingCompletionFeedbackCardState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
+            LocalizedText(
               '조리 완료 피드백',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
             ),
             const SizedBox(height: 12),
+            const LocalizedText('조리 완료를 기록해도 재고는 자동 차감되지 않습니다.'),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: <Widget>[
                 ChoiceChip(
-                  label: const Text('좋아요'),
+                  label: const LocalizedText('좋아요'),
                   selected: _liked == true,
                   onSelected: _isSubmitting
                       ? null
@@ -125,7 +128,7 @@ class _CookingCompletionFeedbackCardState
                         },
                 ),
                 ChoiceChip(
-                  label: const Text('아쉬워요'),
+                  label: const LocalizedText('아쉬워요'),
                   selected: _liked == false,
                   onSelected: _isSubmitting
                       ? null
@@ -139,18 +142,21 @@ class _CookingCompletionFeedbackCardState
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
+              isExpanded: true,
+              itemHeight: null,
               initialValue: _rating,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: '평점 (선택)',
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: context.tr('평점 (선택)'),
               ),
-              hint: const Text('평점을 선택하세요'),
+              hint: const LocalizedText('평점을 선택하세요',
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
               items: const <DropdownMenuItem<int>>[
-                DropdownMenuItem(value: 1, child: Text('1점')),
-                DropdownMenuItem(value: 2, child: Text('2점')),
-                DropdownMenuItem(value: 3, child: Text('3점')),
-                DropdownMenuItem(value: 4, child: Text('4점')),
-                DropdownMenuItem(value: 5, child: Text('5점')),
+                DropdownMenuItem(value: 1, child: LocalizedText('1점')),
+                DropdownMenuItem(value: 2, child: LocalizedText('2점')),
+                DropdownMenuItem(value: 3, child: LocalizedText('3점')),
+                DropdownMenuItem(value: 4, child: LocalizedText('4점')),
+                DropdownMenuItem(value: 5, child: LocalizedText('5점')),
               ],
               onChanged: _isSubmitting
                   ? null
@@ -166,10 +172,10 @@ class _CookingCompletionFeedbackCardState
               enabled: !_isSubmitting,
               minLines: 1,
               maxLines: 3,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: '한 줄 메모 (선택)',
-                hintText: '다음 요리를 위한 메모를 남겨 보세요.',
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                labelText: context.tr('한 줄 메모 (선택)'),
+                hintText: context.tr('다음 요리를 위한 메모를 남겨 보세요.'),
               ),
             ),
             const SizedBox(height: 12),
@@ -184,7 +190,7 @@ class _CookingCompletionFeedbackCardState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.task_alt),
-                label: Text(_isSubmitting ? '기록 중...' : '조리 완료 기록'),
+                label: LocalizedText(_isSubmitting ? '기록 중...' : '조리 완료 기록'),
               ),
             ),
           ],

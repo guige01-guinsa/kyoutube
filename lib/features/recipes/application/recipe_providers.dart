@@ -1,10 +1,11 @@
+import '../../auth/application/auth_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'recipe_image_service.dart';
 import '../data/recipe_repository.dart';
 import '../data/supabase_recipe_repository.dart';
-import '../domain/bookmarked_recipe.dart';
 import '../domain/recipe.dart';
+import '../domain/recipe_search_exclusion.dart';
 
 class PublicRecipeQuery {
   const PublicRecipeQuery({
@@ -31,7 +32,11 @@ class PublicRecipeQuery {
 }
 
 final recipeRepositoryProvider = Provider<RecipeRepository>(
-  (ref) => SupabaseRecipeRepository(),
+  (ref) {
+    final repository = SupabaseRecipeRepository();
+    ref.onDispose(repository.close);
+    return repository;
+  },
 );
 
 final recipeImageServiceProvider = Provider<RecipeImageService>(
@@ -39,7 +44,7 @@ final recipeImageServiceProvider = Provider<RecipeImageService>(
 );
 
 final publicRecipesProvider =
-    FutureProvider.family<List<Recipe>, PublicRecipeQuery>(
+    FutureProvider.autoDispose.family<List<Recipe>, PublicRecipeQuery>(
   (ref, PublicRecipeQuery query) async {
     final repository = ref.watch(recipeRepositoryProvider);
     final recipes = await repository.listPublicRecipes(
@@ -51,8 +56,10 @@ final publicRecipesProvider =
   },
 );
 
-final creatorRecipesProvider = FutureProvider.family<List<Recipe>, String>(
+final creatorRecipesProvider =
+    FutureProvider.autoDispose.family<List<Recipe>, String>(
   (ref, String search) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(recipeRepositoryProvider);
     return repository.listCreatorRecipes(
       search: search.trim().isEmpty ? null : search.trim(),
@@ -62,6 +69,7 @@ final creatorRecipesProvider = FutureProvider.family<List<Recipe>, String>(
 
 final creatorRecipeByIdProvider = FutureProvider.family<Recipe?, String>(
   (ref, String id) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(recipeRepositoryProvider);
     return repository.getCreatorRecipeById(id);
   },
@@ -69,6 +77,7 @@ final creatorRecipeByIdProvider = FutureProvider.family<Recipe?, String>(
 
 final subscriberRecipesProvider = FutureProvider<List<Recipe>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(recipeRepositoryProvider);
     return repository.listSubscriberRecipes();
   },
@@ -76,6 +85,7 @@ final subscriberRecipesProvider = FutureProvider<List<Recipe>>(
 
 final subscriberRecipeByIdProvider = FutureProvider.family<Recipe?, String>(
   (ref, String id) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(recipeRepositoryProvider);
     return repository.getSubscriberRecipeById(id);
   },
@@ -88,15 +98,18 @@ final recipeByIdProvider = FutureProvider.family<Recipe?, String>(
   },
 );
 
-final bookmarkedRecipesProvider = FutureProvider<List<BookmarkedRecipe>>(
+final recipeSearchExclusionsProvider =
+    FutureProvider<List<RecipeSearchExclusion>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(recipeRepositoryProvider);
-    return repository.listBookmarkedRecipes();
+    return repository.listRecipeSearchExclusions();
   },
 );
 
 final kitchenSummaryProvider = FutureProvider<Map<String, int>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final repository = ref.watch(recipeRepositoryProvider);
     return repository.getKitchenSummary();
   },

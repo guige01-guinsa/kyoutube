@@ -1,0 +1,626 @@
+{
+  "ko": [
+    {
+      "key": "recipe1",
+      "kind": "recipe",
+      "title": "[샘플] 닭고기 채소 덮밥",
+      "data": {
+        "ingredients": "닭다리살 800 g\n밥 1000 g\n양파 200 g\n당근 150 g\n간장 60 mL",
+        "steps": "재료를 손질합니다.\n닭고기를 충분히 익힌 뒤 채소와 양념을 넣습니다.\n밥 위에 나누어 담고 맛과 배합을 기록합니다.",
+        "notes": "교육용 가상 배합입니다. 실제 조리 시 업소 기준으로 검토하세요.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe2",
+      "kind": "recipe",
+      "title": "[샘플] 두부 버섯 조림",
+      "data": {
+        "ingredients": "두부 1000 g\n버섯 300 g\n대파 80 g\n간장 50 mL\n물 400 mL",
+        "steps": "두부와 버섯을 썹니다.\n양념과 물을 넣고 끓입니다.\n간과 수분량을 확인하고 개선점을 기록합니다.",
+        "notes": "교육용 가상 배합입니다. 실제 조리 시 업소 기준으로 검토하세요.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe3",
+      "kind": "recipe",
+      "title": "[샘플] 소고기 불고기",
+      "data": {
+        "ingredients": "소고기 800 g\n양파 250 g\n배즙 100 mL\n간장 60 mL\n대파 80 g",
+        "steps": "고기와 채소를 준비합니다.\n양념한 고기를 충분히 익힙니다.\n채소를 넣고 조리한 뒤 5인분으로 나눕니다.",
+        "notes": "교육용 가상 배합입니다. 실제 조리 시 업소 기준으로 검토하세요.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe4",
+      "kind": "recipe",
+      "title": "[샘플] 버섯 비빔밥",
+      "data": {
+        "ingredients": "밥 1000 g\n버섯 400 g\n당근 200 g\n시금치 250 g\n참기름 25 mL",
+        "steps": "채소를 종류별로 손질하고 익힙니다.\n밥 위에 재료를 배치합니다.\n양념은 별도로 제공하고 인분별 배합을 기록합니다.",
+        "notes": "교육용 가상 배합입니다. 실제 조리 시 업소 기준으로 검토하세요.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe5",
+      "kind": "recipe",
+      "title": "[샘플] 감자 된장국",
+      "data": {
+        "ingredients": "감자 500 g\n두부 300 g\n양파 150 g\n된장 80 g\n물 1500 mL",
+        "steps": "감자와 채소를 썹니다.\n물에 된장을 풀고 감자를 익힙니다.\n두부와 채소를 넣어 끓인 뒤 간을 확인합니다.",
+        "notes": "교육용 가상 배합입니다. 실제 조리 시 업소 기준으로 검토하세요.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "meal1",
+      "kind": "meal",
+      "title": "[샘플] 1일차 점심 식단",
+      "data": {
+        "date": "@day+0",
+        "servings": 20,
+        "recipe_ids": [
+          "@recipe1",
+          "@recipe5"
+        ],
+        "notes": "인분과 메뉴 조합을 바꿔 저장해 보세요. 구매량은 별도로 확정합니다."
+      }
+    },
+    {
+      "key": "meal2",
+      "kind": "meal",
+      "title": "[샘플] 2일차 점심 식단",
+      "data": {
+        "date": "@day+1",
+        "servings": 30,
+        "recipe_ids": [
+          "@recipe2",
+          "@recipe4"
+        ],
+        "notes": "인분과 메뉴 조합을 바꿔 저장해 보세요. 구매량은 별도로 확정합니다."
+      }
+    },
+    {
+      "key": "meal3",
+      "kind": "meal",
+      "title": "[샘플] 3일차 점심 식단",
+      "data": {
+        "date": "@day+2",
+        "servings": 15,
+        "recipe_ids": [
+          "@recipe3",
+          "@recipe5"
+        ],
+        "notes": "인분과 메뉴 조합을 바꿔 저장해 보세요. 구매량은 별도로 확정합니다."
+      }
+    },
+    {
+      "key": "purchase1",
+      "kind": "purchase",
+      "status": "draft",
+      "title": "[샘플] 닭다리살 구매요청",
+      "data": {
+        "supplier": "[연습] 한곳 식자재",
+        "buyer": "[연습] 한끼 업소",
+        "phone": "",
+        "address": "연습용 납품 장소 — 실제 주소 아님",
+        "delivery_date": "@day+0",
+        "currency": "KRW",
+        "notes": "연습용 요청서입니다. 실제 구매나 납품 요청에 사용하지 마세요.",
+        "lines": [
+          {
+            "id": "@line0",
+            "name": "닭다리살",
+            "quantity": 2,
+            "unit": "kg",
+            "spec": "구매 규격 확인 연습",
+            "price": 9000
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase2",
+      "kind": "purchase",
+      "status": "draft",
+      "title": "[샘플] 두부 구매요청",
+      "data": {
+        "supplier": "[연습] 한곳 식자재",
+        "buyer": "[연습] 한끼 업소",
+        "phone": "",
+        "address": "연습용 납품 장소 — 실제 주소 아님",
+        "delivery_date": "@day+1",
+        "currency": "KRW",
+        "notes": "연습용 요청서입니다. 실제 구매나 납품 요청에 사용하지 마세요.",
+        "lines": [
+          {
+            "id": "@line1",
+            "name": "두부",
+            "quantity": 4,
+            "unit": "pack",
+            "spec": "구매 규격 확인 연습",
+            "price": null
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase3",
+      "kind": "purchase",
+      "status": "review",
+      "title": "[샘플] 소고기 구매요청",
+      "data": {
+        "supplier": "[연습] 한곳 식자재",
+        "buyer": "[연습] 한끼 업소",
+        "phone": "",
+        "address": "연습용 납품 장소 — 실제 주소 아님",
+        "delivery_date": "@day+2",
+        "currency": "KRW",
+        "notes": "연습용 요청서입니다. 실제 구매나 납품 요청에 사용하지 마세요.",
+        "lines": [
+          {
+            "id": "@line2",
+            "name": "소고기",
+            "quantity": 1.5,
+            "unit": "kg",
+            "spec": "구매 규격 확인 연습",
+            "price": 24000
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase4",
+      "kind": "purchase",
+      "status": "approved",
+      "title": "[샘플] 버섯 구매요청",
+      "data": {
+        "supplier": "[연습] 한곳 식자재",
+        "buyer": "[연습] 한끼 업소",
+        "phone": "",
+        "address": "연습용 납품 장소 — 실제 주소 아님",
+        "delivery_date": "@day+0",
+        "currency": "KRW",
+        "notes": "연습용 요청서입니다. 실제 구매나 납품 요청에 사용하지 마세요.",
+        "lines": [
+          {
+            "id": "@line3",
+            "name": "버섯",
+            "quantity": 3,
+            "unit": "kg",
+            "spec": "구매 규격 확인 연습",
+            "price": 7000
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase5",
+      "kind": "purchase",
+      "status": "received",
+      "title": "[샘플] 감자 구매요청",
+      "data": {
+        "supplier": "[연습] 한곳 식자재",
+        "buyer": "[연습] 한끼 업소",
+        "phone": "",
+        "address": "연습용 납품 장소 — 실제 주소 아님",
+        "delivery_date": "@day+1",
+        "currency": "KRW",
+        "notes": "연습용 요청서입니다. 실제 구매나 납품 요청에 사용하지 마세요.",
+        "lines": [
+          {
+            "id": "@line4",
+            "name": "감자",
+            "quantity": 5,
+            "unit": "kg",
+            "spec": "구매 규격 확인 연습",
+            "price": 3500
+          }
+        ]
+      }
+    },
+    {
+      "key": "cost1",
+      "kind": "cost",
+      "title": "[샘플] 닭고기 채소 덮밥 원가·판매가",
+      "data": {
+        "recipe_id": "@recipe1",
+        "unit_cost": 3500,
+        "unit_price": 7000,
+        "currency": "KRW",
+        "notes": "예시 금액이며 실제 시세가 아닙니다. 1인분 원가·판매가를 바꾸고 이후 판매 기록과 비교해 보세요."
+      }
+    },
+    {
+      "key": "cost2",
+      "kind": "cost",
+      "title": "[샘플] 두부 버섯 조림 원가·판매가",
+      "data": {
+        "recipe_id": "@recipe2",
+        "unit_cost": 2500,
+        "unit_price": 5000,
+        "currency": "KRW",
+        "notes": "예시 금액이며 실제 시세가 아닙니다. 1인분 원가·판매가를 바꾸고 이후 판매 기록과 비교해 보세요."
+      }
+    },
+    {
+      "key": "cost3",
+      "kind": "cost",
+      "title": "[샘플] 소고기 불고기 원가·판매가",
+      "data": {
+        "recipe_id": "@recipe3",
+        "unit_cost": 6000,
+        "unit_price": 11000,
+        "currency": "KRW",
+        "notes": "예시 금액이며 실제 시세가 아닙니다. 1인분 원가·판매가를 바꾸고 이후 판매 기록과 비교해 보세요."
+      }
+    },
+    {
+      "key": "sale1",
+      "kind": "sale",
+      "title": "[샘플] 판매 기록 1",
+      "data": {
+        "cost_id": "@cost1",
+        "date": "@day+0",
+        "quantity": 12,
+        "unit_cost": 3500,
+        "unit_price": 7000,
+        "currency": "KRW"
+      }
+    },
+    {
+      "key": "sale2",
+      "kind": "sale",
+      "title": "[샘플] 판매 기록 2",
+      "data": {
+        "cost_id": "@cost2",
+        "date": "@day-1",
+        "quantity": 18,
+        "unit_cost": 2500,
+        "unit_price": 5000,
+        "currency": "KRW"
+      }
+    },
+    {
+      "key": "sale3",
+      "kind": "sale",
+      "title": "[샘플] 판매 기록 3",
+      "data": {
+        "cost_id": "@cost3",
+        "date": "@day-7",
+        "quantity": 25,
+        "unit_cost": 6000,
+        "unit_price": 11000,
+        "currency": "KRW"
+      }
+    },
+    {
+      "key": "sale4",
+      "kind": "sale",
+      "title": "[샘플] 판매 기록 4",
+      "data": {
+        "cost_id": "@cost1",
+        "date": "@day-32",
+        "quantity": 10,
+        "unit_cost": 3500,
+        "unit_price": 7000,
+        "currency": "KRW"
+      }
+    }
+  ],
+  "en": [
+    {
+      "key": "recipe1",
+      "kind": "recipe",
+      "title": "[SAMPLE] Chicken vegetable rice bowl",
+      "data": {
+        "ingredients": "Chicken thigh 800 g\nCooked rice 1000 g\nOnion 200 g\nCarrot 150 g\nSoy sauce 60 mL",
+        "steps": "Prepare the ingredients.\nCook the chicken thoroughly, then add vegetables and seasoning.\nServe over rice and record seasoning adjustments.",
+        "notes": "Fictional training recipe. Review against your kitchen standards before real use.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe2",
+      "kind": "recipe",
+      "title": "[SAMPLE] Braised tofu and mushrooms",
+      "data": {
+        "ingredients": "Tofu 1000 g\nMushrooms 300 g\nSpring onion 80 g\nSoy sauce 50 mL\nWater 400 mL",
+        "steps": "Slice tofu and mushrooms.\nSimmer with seasoning and water.\nCheck seasoning and sauce volume; record improvements.",
+        "notes": "Fictional training recipe. Review against your kitchen standards before real use.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe3",
+      "kind": "recipe",
+      "title": "[SAMPLE] Beef bulgogi",
+      "data": {
+        "ingredients": "Beef 800 g\nOnion 250 g\nPear juice 100 mL\nSoy sauce 60 mL\nSpring onion 80 g",
+        "steps": "Prepare the beef and vegetables.\nSeason and cook the beef thoroughly.\nAdd vegetables and divide into five portions.",
+        "notes": "Fictional training recipe. Review against your kitchen standards before real use.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe4",
+      "kind": "recipe",
+      "title": "[SAMPLE] Mushroom bibimbap",
+      "data": {
+        "ingredients": "Cooked rice 1000 g\nMushrooms 400 g\nCarrot 200 g\nSpinach 250 g\nSesame oil 25 mL",
+        "steps": "Prepare and cook each vegetable separately.\nArrange over rice.\nServe seasoning separately and record per-portion ratios.",
+        "notes": "Fictional training recipe. Review against your kitchen standards before real use.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "recipe5",
+      "kind": "recipe",
+      "title": "[SAMPLE] Potato soybean-paste soup",
+      "data": {
+        "ingredients": "Potatoes 500 g\nTofu 300 g\nOnion 150 g\nSoybean paste 80 g\nWater 1500 mL",
+        "steps": "Cut potatoes and vegetables.\nDissolve soybean paste in water and cook the potatoes.\nAdd tofu and vegetables, simmer and check seasoning.",
+        "notes": "Fictional training recipe. Review against your kitchen standards before real use.",
+        "servings": 5
+      }
+    },
+    {
+      "key": "meal1",
+      "kind": "meal",
+      "title": "[SAMPLE] Lunch plan 1",
+      "data": {
+        "date": "@day+0",
+        "servings": 20,
+        "recipe_ids": [
+          "@recipe1",
+          "@recipe5"
+        ],
+        "notes": "Edit the servings and menu combination. Confirm purchase quantities separately."
+      }
+    },
+    {
+      "key": "meal2",
+      "kind": "meal",
+      "title": "[SAMPLE] Lunch plan 2",
+      "data": {
+        "date": "@day+1",
+        "servings": 30,
+        "recipe_ids": [
+          "@recipe2",
+          "@recipe4"
+        ],
+        "notes": "Edit the servings and menu combination. Confirm purchase quantities separately."
+      }
+    },
+    {
+      "key": "meal3",
+      "kind": "meal",
+      "title": "[SAMPLE] Lunch plan 3",
+      "data": {
+        "date": "@day+2",
+        "servings": 15,
+        "recipe_ids": [
+          "@recipe3",
+          "@recipe5"
+        ],
+        "notes": "Edit the servings and menu combination. Confirm purchase quantities separately."
+      }
+    },
+    {
+      "key": "purchase1",
+      "kind": "purchase",
+      "status": "draft",
+      "title": "[SAMPLE] Chicken thigh request",
+      "data": {
+        "supplier": "[PRACTICE] One-stop Foods",
+        "buyer": "[PRACTICE] One Meal Kitchen",
+        "phone": "",
+        "address": "Practice delivery location — not a real address",
+        "delivery_date": "@day+0",
+        "currency": "KRW",
+        "notes": "Practice request only. Do not use for a real purchase or delivery.",
+        "lines": [
+          {
+            "id": "@line0",
+            "name": "Chicken thigh",
+            "quantity": 2,
+            "unit": "kg",
+            "spec": "Practice reviewing purchase specifications",
+            "price": 9000
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase2",
+      "kind": "purchase",
+      "status": "draft",
+      "title": "[SAMPLE] Tofu request",
+      "data": {
+        "supplier": "[PRACTICE] One-stop Foods",
+        "buyer": "[PRACTICE] One Meal Kitchen",
+        "phone": "",
+        "address": "Practice delivery location — not a real address",
+        "delivery_date": "@day+1",
+        "currency": "KRW",
+        "notes": "Practice request only. Do not use for a real purchase or delivery.",
+        "lines": [
+          {
+            "id": "@line1",
+            "name": "Tofu",
+            "quantity": 4,
+            "unit": "pack",
+            "spec": "Practice reviewing purchase specifications",
+            "price": null
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase3",
+      "kind": "purchase",
+      "status": "review",
+      "title": "[SAMPLE] Beef request",
+      "data": {
+        "supplier": "[PRACTICE] One-stop Foods",
+        "buyer": "[PRACTICE] One Meal Kitchen",
+        "phone": "",
+        "address": "Practice delivery location — not a real address",
+        "delivery_date": "@day+2",
+        "currency": "KRW",
+        "notes": "Practice request only. Do not use for a real purchase or delivery.",
+        "lines": [
+          {
+            "id": "@line2",
+            "name": "Beef",
+            "quantity": 1.5,
+            "unit": "kg",
+            "spec": "Practice reviewing purchase specifications",
+            "price": 24000
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase4",
+      "kind": "purchase",
+      "status": "approved",
+      "title": "[SAMPLE] Mushrooms request",
+      "data": {
+        "supplier": "[PRACTICE] One-stop Foods",
+        "buyer": "[PRACTICE] One Meal Kitchen",
+        "phone": "",
+        "address": "Practice delivery location — not a real address",
+        "delivery_date": "@day+0",
+        "currency": "KRW",
+        "notes": "Practice request only. Do not use for a real purchase or delivery.",
+        "lines": [
+          {
+            "id": "@line3",
+            "name": "Mushrooms",
+            "quantity": 3,
+            "unit": "kg",
+            "spec": "Practice reviewing purchase specifications",
+            "price": 7000
+          }
+        ]
+      }
+    },
+    {
+      "key": "purchase5",
+      "kind": "purchase",
+      "status": "received",
+      "title": "[SAMPLE] Potatoes request",
+      "data": {
+        "supplier": "[PRACTICE] One-stop Foods",
+        "buyer": "[PRACTICE] One Meal Kitchen",
+        "phone": "",
+        "address": "Practice delivery location — not a real address",
+        "delivery_date": "@day+1",
+        "currency": "KRW",
+        "notes": "Practice request only. Do not use for a real purchase or delivery.",
+        "lines": [
+          {
+            "id": "@line4",
+            "name": "Potatoes",
+            "quantity": 5,
+            "unit": "kg",
+            "spec": "Practice reviewing purchase specifications",
+            "price": 3500
+          }
+        ]
+      }
+    },
+    {
+      "key": "cost1",
+      "kind": "cost",
+      "title": "[SAMPLE] Chicken vegetable rice bowl cost & price",
+      "data": {
+        "recipe_id": "@recipe1",
+        "unit_cost": 3500,
+        "unit_price": 7000,
+        "currency": "KRW",
+        "notes": "Illustrative amounts, not market prices. Edit per-portion cost and price, then compare future sales records."
+      }
+    },
+    {
+      "key": "cost2",
+      "kind": "cost",
+      "title": "[SAMPLE] Braised tofu and mushrooms cost & price",
+      "data": {
+        "recipe_id": "@recipe2",
+        "unit_cost": 2500,
+        "unit_price": 5000,
+        "currency": "KRW",
+        "notes": "Illustrative amounts, not market prices. Edit per-portion cost and price, then compare future sales records."
+      }
+    },
+    {
+      "key": "cost3",
+      "kind": "cost",
+      "title": "[SAMPLE] Beef bulgogi cost & price",
+      "data": {
+        "recipe_id": "@recipe3",
+        "unit_cost": 6000,
+        "unit_price": 11000,
+        "currency": "KRW",
+        "notes": "Illustrative amounts, not market prices. Edit per-portion cost and price, then compare future sales records."
+      }
+    },
+    {
+      "key": "sale1",
+      "kind": "sale",
+      "title": "[SAMPLE] Sale 1",
+      "data": {
+        "cost_id": "@cost1",
+        "date": "@day+0",
+        "quantity": 12,
+        "unit_cost": 3500,
+        "unit_price": 7000,
+        "currency": "KRW"
+      }
+    },
+    {
+      "key": "sale2",
+      "kind": "sale",
+      "title": "[SAMPLE] Sale 2",
+      "data": {
+        "cost_id": "@cost2",
+        "date": "@day-1",
+        "quantity": 18,
+        "unit_cost": 2500,
+        "unit_price": 5000,
+        "currency": "KRW"
+      }
+    },
+    {
+      "key": "sale3",
+      "kind": "sale",
+      "title": "[SAMPLE] Sale 3",
+      "data": {
+        "cost_id": "@cost3",
+        "date": "@day-7",
+        "quantity": 25,
+        "unit_cost": 6000,
+        "unit_price": 11000,
+        "currency": "KRW"
+      }
+    },
+    {
+      "key": "sale4",
+      "kind": "sale",
+      "title": "[SAMPLE] Sale 4",
+      "data": {
+        "cost_id": "@cost1",
+        "date": "@day-32",
+        "quantity": 10,
+        "unit_cost": 3500,
+        "unit_price": 7000,
+        "currency": "KRW"
+      }
+    }
+  ]
+}

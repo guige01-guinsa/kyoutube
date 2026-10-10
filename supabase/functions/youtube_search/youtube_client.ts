@@ -19,9 +19,9 @@ export type Sleep = (milliseconds: number) => Promise<void>;
 export type TimeoutSignalFactory = (milliseconds: number) => AbortSignal;
 
 const timeoutMs = 12000;
-const maxCookingDurationSec = 180;
-const searchCandidateMinimum = 12;
-const searchCandidateMaximum = 25;
+const maxCookingDurationSec = 60 * 60;
+const searchCandidateMinimum = 20;
+const searchCandidateMaximum = 50;
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -127,8 +127,10 @@ type SearchCandidate = {
   videoId: string;
   title: string;
   channelTitle: string;
+  description: string;
   publishedAt: string;
   thumbnailUrl: string;
+  sourceIndex: number;
 };
 
 function candidateLimit(limit: number): number {
@@ -143,6 +145,67 @@ function cookingRecipeQuery(
   locale: YoutubeSearchLocale,
 ): string {
   return `${query} ${locale.cookingQuerySuffix}`;
+}
+
+const cookingSignals = [
+  "레시피",
+  "요리",
+  "만드는 법",
+  "만들기",
+  "조리",
+  "재료",
+  "recipe",
+  "cooking",
+  "how to make",
+];
+
+const nonRecipeSignals = [
+  "먹방",
+  "리뷰",
+  "광고",
+  "협찬",
+  "브이로그",
+  "reaction",
+  "review",
+  "commercial",
+];
+
+function relevanceScore(candidate: SearchCandidate, query: string): number {
+  const normalizedQuery = query.trim().toLowerCase();
+  const title = candidate.title.toLowerCase();
+  const searchable = `${title} ${candidate.description.toLowerCase()}`;
+  let score = 0;
+
+  if (title.includes(normalizedQuery)) score += 12;
+  else if (searchable.includes(normalizedQuery)) score += 6;
+
+  for (const signal of cookingSignals) {
+    if (searchable.includes(signal)) score += 2;
+  }
+  for (const signal of nonRecipeSignals) {
+    if (searchable.includes(signal)) score -= 4;
+  }
+
+  return score;
+}
+
+function isLikelyCookingRecipe(
+  candidate: SearchCandidate,
+  query: string,
+): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  const title = candidate.title.toLowerCase();
+  const searchable = `${title} ${candidate.description.toLowerCase()}`;
+  const hasCookingSignal = cookingSignals.some((signal) =>
+    searchable.includes(signal)
+  );
+  const hasNonRecipeSignal = nonRecipeSignals.some((signal) =>
+    searchable.includes(signal)
+  );
+  const directlyMatchesQuery = title.includes(normalizedQuery);
+
+  return (hasCookingSignal || directlyMatchesQuery) &&
+    !(hasNonRecipeSignal && !hasCookingSignal);
 }
 
 export async function searchYoutube({
@@ -173,8 +236,8 @@ export async function searchYoutube({
       type: "video",
       q: cookingRecipeQuery(query, locale),
       maxResults: String(candidateLimit(limit)),
-      videoCategoryId: "26",
-      videoDuration: "short",
+      videoEmbeddable: "true",
+      safeSearch: "moderate",
       relevanceLanguage: locale.languageCode,
       regionCode: locale.regionCode,
       key: apiKey,
@@ -191,34 +254,43 @@ export async function searchYoutube({
     throw new YoutubeUpstreamError("response");
   }
 
-  const candidates = searchPayload.items.map((raw): SearchCandidate => {
-    const item = asRecord(raw);
-    const id = asRecord(item?.id);
-    const snippet = asRecord(item?.snippet);
-    const thumbnails = asRecord(snippet?.thumbnails);
+  const candidates = searchPayload.items.map(
+    (raw, sourceIndex): SearchCandidate => {
+      const item = asRecord(raw);
+      const id = asRecord(item?.id);
+      const snippet = asRecord(item?.snippet);
+      const thumbnails = asRecord(snippet?.thumbnails);
 
-    const thumbnail = asRecord(thumbnails?.high) ??
-      asRecord(thumbnails?.medium) ??
-      asRecord(thumbnails?.default);
+      const thumbnail = asRecord(thumbnails?.high) ??
+        asRecord(thumbnails?.medium) ??
+        asRecord(thumbnails?.default);
 
-    const videoId = text(id?.videoId);
-    const title = text(snippet?.title);
-    const channelTitle = text(snippet?.channelTitle);
-    const publishedAt = text(snippet?.publishedAt);
-    const thumbnailUrl = text(thumbnail?.url);
+      const videoId = text(id?.videoId);
+      const title = text(snippet?.title);
+      const channelTitle = text(snippet?.channelTitle);
+      const description = typeof snippet?.description === "string"
+        ? snippet.description.trim()
+        : "";
+      const publishedAt = text(snippet?.publishedAt);
+      const thumbnailUrl = text(thumbnail?.url);
 
-    if (!videoId || !title || !channelTitle || !publishedAt || !thumbnailUrl) {
-      throw new YoutubeUpstreamError("response");
-    }
+      if (
+        !videoId || !title || !channelTitle || !publishedAt || !thumbnailUrl
+      ) {
+        throw new YoutubeUpstreamError("response");
+      }
 
-    return {
-      videoId,
-      title,
-      channelTitle,
-      publishedAt,
-      thumbnailUrl,
-    };
-  });
+      return {
+        videoId,
+        title,
+        channelTitle,
+        description,
+        publishedAt,
+        thumbnailUrl,
+        sourceIndex,
+      };
+    },
+  );
 
   if (candidates.length === 0) {
     return [];
@@ -265,7 +337,17 @@ export async function searchYoutube({
   }
 
   return candidates
-    .filter((candidate) => durationByVideoId.has(candidate.videoId))
+    .filter((candidate) =>
+      durationByVideoId.has(candidate.videoId) &&
+      isLikelyCookingRecipe(candidate, query)
+    )
+    .sort((left, right) => {
+      const scoreDifference = relevanceScore(right, query) -
+        relevanceScore(left, query);
+      return scoreDifference !== 0
+        ? scoreDifference
+        : left.sourceIndex - right.sourceIndex;
+    })
     .slice(0, limit)
     .map((candidate): YoutubeSearchItem => ({
       videoId: candidate.videoId,

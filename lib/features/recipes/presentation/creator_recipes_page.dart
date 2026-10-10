@@ -1,4 +1,6 @@
+import '../../../core/auth/auth_return.dart';
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -33,29 +35,30 @@ class _CreatorRecipesPageState extends ConsumerState<CreatorRecipesPage> {
 
     if (currentUser == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('내 레시피 관리')),
+        appBar: AppBar(title: const LocalizedText('내 레시피 관리')),
         body: CenteredStateView(
           icon: Icons.lock_outline,
           title: '로그인이 필요합니다',
           message: '로그인 후 크리에이터 레시피를 관리할 수 있습니다.',
-          actionLabel: '로그인하기',
-          onAction: () => context.push('/login'),
+          actionLabel: context.tr('로그인하기'),
+          onAction: () => context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true)),
         ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('내 레시피 관리')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final created = await context.push<bool>('/creator/new');
-          if (created == true) {
-            ref.invalidate(creatorRecipesProvider);
-          }
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('새 레시피'),
-      ),
+      appBar: AppBar(title: const LocalizedText('내 레시피 관리'), actions: [
+        IconButton(
+            key: const Key('create-recipe-action'),
+            tooltip: context.tr('새 레시피'),
+            onPressed: () async {
+              final created = await context.push<bool>('/creator/new');
+              if (created == true) {
+                ref.invalidate(creatorRecipesProvider);
+              }
+            },
+            icon: const Icon(Icons.add_circle_outline)),
+      ]),
       body: recipesAsync.when(
         data: (List<Recipe> recipes) {
           if (recipes.isEmpty) {
@@ -68,8 +71,8 @@ class _CreatorRecipesPageState extends ConsumerState<CreatorRecipesPage> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      labelText: '내 레시피 검색',
-                      hintText: '제목으로 검색',
+                      labelText: context.tr('내 레시피 검색'),
+                      hintText: context.tr('제목으로 검색'),
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: _searchQuery.isEmpty
                           ? null
@@ -102,8 +105,8 @@ class _CreatorRecipesPageState extends ConsumerState<CreatorRecipesPage> {
                   message: _searchQuery.isNotEmpty
                       ? '검색어를 바꾸거나 검색을 지워 보세요.'
                       : '첫 크리에이터 레시피를 만들어 시작해 보세요.',
-                  actionLabel:
-                      _searchQuery.isNotEmpty ? '검색 지우기' : '새 레시피 만들기',
+                  actionLabel: context
+                      .tr(_searchQuery.isNotEmpty ? '검색 지우기' : '새 레시피 만들기'),
                   onAction: () {
                     if (_searchQuery.isNotEmpty) {
                       _searchController.clear();
@@ -136,8 +139,8 @@ class _CreatorRecipesPageState extends ConsumerState<CreatorRecipesPage> {
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        labelText: '내 레시피 검색',
-                        hintText: '제목으로 검색',
+                        labelText: context.tr('내 레시피 검색'),
+                        hintText: context.tr('제목으로 검색'),
                         prefixIcon: const Icon(Icons.search),
                         suffixIcon: _searchQuery.isEmpty
                             ? null
@@ -168,9 +171,9 @@ class _CreatorRecipesPageState extends ConsumerState<CreatorRecipesPage> {
                     vertical: 8,
                   ),
                   leading: RecipeThumbnail(imageUrl: recipe.imageUrl),
-                  title: Text(recipe.title),
-                  subtitle: Text(recipe.summary ?? '요약 없음'),
-                  trailing: Text('${recipe.steps.length}단계'),
+                  title: LocalizedText(recipe.title),
+                  subtitle: LocalizedText(recipe.summary ?? '요약 없음'),
+                  trailing: LocalizedText('${recipe.steps.length}단계'),
                   onTap: () => context.push('/creator/${recipe.id}'),
                 );
               },
@@ -181,7 +184,7 @@ class _CreatorRecipesPageState extends ConsumerState<CreatorRecipesPage> {
           icon: Icons.cloud_off_outlined,
           title: '내 레시피를 불러오지 못했습니다',
           message: '잠시 후 다시 시도해 주세요.',
-          actionLabel: '다시 시도',
+          actionLabel: context.tr('다시 시도'),
           onAction: () => ref.invalidate(creatorRecipesProvider(_searchQuery)),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),

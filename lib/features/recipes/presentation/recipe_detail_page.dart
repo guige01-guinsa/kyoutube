@@ -1,10 +1,14 @@
+import '../../../core/auth/auth_return.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/theme/app_theme.dart';
+import 'widgets/recipe_reading_sections.dart';
 import '../../auth/application/auth_providers.dart';
 import '../../cooking/application/voice_guide_providers.dart';
 import '../../cooking/application/voice_guide_service.dart';
@@ -36,8 +40,6 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   bool _autoTickInProgress = false;
   bool _autoAdvanceRestorePending = false;
   bool _lastStepRestorePending = false;
-  bool _isBookmarked = false;
-  bool _isBookmarkLoading = true;
   int _autoAdvanceSeconds = 5;
   int _savedStepIndex = 0;
   int? _cookRating;
@@ -72,12 +74,6 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
     return fallback;
   }
 
-  void _redirectToLoginIfNeeded(Object error) {
-    if (_isSessionProblem(error) && mounted) {
-      context.push('/login');
-    }
-  }
-
   String get _lastStepIndexPrefKey =>
       '$_lastStepIndexPrefKeyPrefix.${widget.recipeId}';
 
@@ -86,7 +82,6 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
     super.initState();
     _voiceGuideService = ref.read(voiceGuideServiceProvider);
     _restoreAutoAdvancePreferences();
-    _loadBookmarkState();
   }
 
   @override
@@ -197,7 +192,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       if (!mounted) {
         return;
       }
-      context.push('/login');
+      context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true));
       return;
     }
 
@@ -214,7 +209,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('내 레시피에 저장했습니다.'),
+          content: const LocalizedText('내 레시피에 저장했습니다.'),
           action: SnackBarAction(
             label: '내 레시피 관리',
             onPressed: () {
@@ -229,119 +224,17 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       }
 
       if (_isSessionProblem(err)) {
-        context.push('/login');
+        context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true));
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: LocalizedText(
             _friendlyActionError(err, '복사에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
           ),
         ),
       );
-    }
-  }
-
-  Future<void> _loadBookmarkState() async {
-    final currentUser = ref.read(authUserProvider).valueOrNull;
-    if (currentUser == null) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isBookmarkLoading = false;
-        _isBookmarked = false;
-      });
-      return;
-    }
-
-    try {
-      final repository = ref.read(recipeRepositoryProvider);
-      final bookmarked = await repository.isBookmarked(
-        recipeType: 'public',
-        recipeId: widget.recipeId,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isBookmarked = bookmarked;
-        _isBookmarkLoading = false;
-      });
-    } catch (err) {
-      if (!mounted) {
-        return;
-      }
-
-      _redirectToLoginIfNeeded(err);
-
-      setState(() {
-        _isBookmarkLoading = false;
-      });
-    }
-  }
-
-  Future<void> _toggleBookmark(Recipe recipe) async {
-    final currentUser = ref.read(authUserProvider).valueOrNull;
-    if (currentUser == null) {
-      if (!mounted) {
-        return;
-      }
-      context.push('/login');
-      return;
-    }
-
-    setState(() {
-      _isBookmarkLoading = true;
-    });
-
-    try {
-      final repository = ref.read(recipeRepositoryProvider);
-      if (_isBookmarked) {
-        await repository.removeBookmark(
-            recipeType: 'public', recipeId: recipe.id);
-      } else {
-        await repository.addBookmark(recipeType: 'public', recipeId: recipe.id);
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isBookmarked = !_isBookmarked;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(_isBookmarked ? '북마크에 저장했습니다.' : '북마크를 해제했습니다.')),
-      );
-    } catch (err) {
-      if (!mounted) {
-        return;
-      }
-
-      if (_isSessionProblem(err)) {
-        context.push('/login');
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _friendlyActionError(err, '북마크 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBookmarkLoading = false;
-        });
-      }
     }
   }
 
@@ -351,7 +244,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       if (!mounted) {
         return;
       }
-      context.push('/login');
+      context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true));
       return;
     }
 
@@ -360,7 +253,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('재료 정보가 없어 장보기 목록을 만들 수 없습니다.')),
+        const SnackBar(content: LocalizedText('재료 정보가 없어 장보기 목록을 만들 수 없습니다.')),
       );
       return;
     }
@@ -376,7 +269,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       if (!mounted) {
         return;
       }
-      context.push('/login');
+      context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true));
       return;
     }
 
@@ -398,7 +291,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('조리 완료 기록을 저장했습니다.'),
+          content: const LocalizedText('조리 완료 기록을 저장했습니다.'),
           action: SnackBarAction(
             label: '히스토리 보기',
             onPressed: () {
@@ -413,13 +306,13 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
       }
 
       if (_isSessionProblem(err)) {
-        context.push('/login');
+        context.push(loginFor(GoRouterState.of(context).uri.toString(), resume: true));
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
+          content: LocalizedText(
             _friendlyActionError(err, '조리 완료 기록 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
           ),
         ),
@@ -518,31 +411,9 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
   @override
   Widget build(BuildContext context) {
     final recipeAsync = ref.watch(recipeByIdProvider(widget.recipeId));
-    final currentUser = ref.watch(authUserProvider).valueOrNull;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('레시피 상세'),
-        actions: <Widget>[
-          IconButton(
-            onPressed: _isBookmarkLoading
-                ? null
-                : () {
-                    recipeAsync.whenData((Recipe? recipe) {
-                      if (recipe != null) {
-                        _toggleBookmark(recipe);
-                      }
-                    });
-                  },
-            icon: Icon(
-              _isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-            ),
-            tooltip: currentUser == null
-                ? '로그인 후 북마크 가능'
-                : (_isBookmarked ? '북마크 해제' : '북마크'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const LocalizedText('레시피 상세')),
       body: recipeAsync.when(
         data: (Recipe? recipe) {
           if (recipe == null) {
@@ -550,7 +421,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
               icon: Icons.search_off,
               title: '레시피를 찾을 수 없습니다',
               message: '삭제되었거나 접근할 수 없는 레시피입니다.',
-              actionLabel: '홈으로 이동',
+              actionLabel: context.tr('홈으로 이동'),
               onAction: () => context.go('/'),
             );
           }
@@ -577,340 +448,311 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
             });
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: <Widget>[
-              if ((recipe.imageUrl ?? '').isNotEmpty) ...<Widget>[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      recipe.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) {
-                        return const ColoredBox(
-                          color: Color(0x11000000),
-                          child: Center(child: Text('이미지를 불러오지 못했습니다.')),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Text(
-                recipe.title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-              const SizedBox(height: 8),
-              Text(recipe.summary ?? '요약 정보가 없습니다.'),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    OutlinedButton.icon(
-                      onPressed: () => _copyToMyRecipes(recipe),
-                      icon: const Icon(Icons.bookmark_add_outlined),
-                      label: const Text('내 레시피로 복사'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _addMissingIngredientsToShopping(recipe),
-                      icon: const Icon(Icons.shopping_cart_checkout_outlined),
-                      label: const Text('\uC7A5\uBCF4\uAE30\uC900\uBE44'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text('재료', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (recipe.ingredients.isEmpty)
-                const Text('등록된 재료 정보가 없습니다.')
-              else
-                ...recipe.ingredients.map(
-                  (String item) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text('• $item'),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              Text('조리 순서', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (recipe.steps.isEmpty)
-                const Text('등록된 조리 순서가 없습니다.')
-              else
-                ...recipe.steps.asMap().entries.map(
-                      (entry) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text('${entry.key + 1}. ${entry.value}'),
-                      ),
-                    ),
-              const SizedBox(height: 20),
-              Text('조리 완료 피드백', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          return Center(
+              child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: ScoutStyle.contentWidth),
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
                     children: <Widget>[
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: <Widget>[
-                          ChoiceChip(
-                            label: const Text('좋아요'),
-                            selected: _cookLiked == true,
-                            onSelected: (bool selected) {
-                              setState(() {
-                                _cookLiked = selected ? true : null;
-                              });
-                            },
-                          ),
-                          ChoiceChip(
-                            label: const Text('아쉬워요'),
-                            selected: _cookLiked == false,
-                            onSelected: (bool selected) {
-                              setState(() {
-                                _cookLiked = selected ? false : null;
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      InputDecorator(
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          labelText: '평점 (선택)',
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<int>(
-                            value: _cookRating,
-                            isExpanded: true,
-                            hint: const Text('평점을 선택하세요'),
-                            items: const <DropdownMenuItem<int>>[
-                              DropdownMenuItem<int>(
-                                  value: 1, child: Text('1점')),
-                              DropdownMenuItem<int>(
-                                  value: 2, child: Text('2점')),
-                              DropdownMenuItem<int>(
-                                  value: 3, child: Text('3점')),
-                              DropdownMenuItem<int>(
-                                  value: 4, child: Text('4점')),
-                              DropdownMenuItem<int>(
-                                  value: 5, child: Text('5점')),
-                            ],
-                            onChanged: (int? value) {
-                              setState(() {
-                                _cookRating = value;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _cookNoteController,
-                        minLines: 1,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          labelText: '한 줄 메모 (선택)',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
+                      RecipeOverview(recipe: recipe),
+                      const SizedBox(height: 16),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: FilledButton.icon(
-                          onPressed: () => _completeCookSession(recipe),
-                          icon: const Icon(Icons.task_alt),
-                          label: const Text('조리 완료 기록'),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: <Widget>[
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToMyRecipes(recipe),
+                              icon: const Icon(Icons.library_add_outlined),
+                              label: const LocalizedText('내 레시피로 복사'),
+                            ),
+                            FilledButton.icon(
+                              onPressed: () =>
+                                  _addMissingIngredientsToShopping(recipe),
+                              icon: const Icon(
+                                  Icons.shopping_cart_checkout_outlined),
+                              label: const LocalizedText(
+                                  '\uC7A5\uBCF4\uAE30\uC900\uBE44'),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text('음성 가이드', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        guideSnapshot.hasSteps
-                            ? '현재 단계 ${guideSnapshot.currentStepIndex + 1}/${guideSnapshot.totalSteps}'
-                            : '안내할 조리 단계가 없습니다.',
-                      ),
-                      if (guideSnapshot.hasSteps) ...<Widget>[
-                        const SizedBox(height: 8),
-                        Text(
-                          guideSnapshot.currentStepText,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: <Widget>[
-                          OutlinedButton.icon(
-                            onPressed: !guideSnapshot.hasSteps ||
-                                    guideSnapshot.isFirstStep
-                                ? null
-                                : () async {
-                                    if (_autoAdvanceEnabled) {
-                                      await _stopAutoAdvance(
-                                        steps: recipe.steps,
-                                        stopGuidance: false,
-                                      );
-                                    }
-                                    await _previousStep(recipe.steps);
-                                  },
-                            icon: const Icon(Icons.skip_previous),
-                            label: const Text('이전'),
-                          ),
-                          FilledButton.icon(
-                            onPressed: !guideSnapshot.hasSteps
-                                ? null
-                                : () async {
-                                    if (_autoAdvanceEnabled) {
-                                      await _stopAutoAdvance(
-                                        steps: recipe.steps,
-                                        stopGuidance: false,
-                                      );
-                                    }
-                                    await _startGuide(
-                                      recipe.steps,
-                                      fromIndex: guideSnapshot.currentStepIndex,
-                                    );
-                                  },
-                            icon: Icon(
-                              guideSnapshot.isPlaying
-                                  ? Icons.replay
-                                  : Icons.play_arrow,
-                            ),
-                            label: Text(
-                              guideSnapshot.isPlaying ? '다시 듣기' : '시작',
-                            ),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: !guideSnapshot.hasSteps ||
-                                    guideSnapshot.isLastStep
-                                ? null
-                                : () async {
-                                    if (_autoAdvanceEnabled) {
-                                      await _stopAutoAdvance(
-                                        steps: recipe.steps,
-                                        stopGuidance: false,
-                                      );
-                                    }
-                                    await _nextStep(recipe.steps);
-                                  },
-                            icon: const Icon(Icons.skip_next),
-                            label: const Text('다음'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: !guideSnapshot.isPlaying
-                                ? null
-                                : () async {
-                                    await _stopAutoAdvance(
-                                      steps: recipe.steps,
-                                      stopGuidance: true,
-                                    );
-                                  },
-                            icon: const Icon(Icons.stop),
-                            label: const Text('정지'),
-                          ),
-                        ],
-                      ),
+                      const SizedBox(height: 28),
+                      RecipeIngredientsSection(ingredients: recipe.ingredients),
+                      const SizedBox(height: 28),
+                      RecipeStepsSection(steps: recipe.steps),
+                      const SizedBox(height: 24),
+                      LocalizedText('단계 안내',
+                          style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 8),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              '자동 재생 (단계당 $_autoAdvanceSeconds초)',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                          ),
-                          Switch.adaptive(
-                            value: _autoAdvanceEnabled ||
-                                _autoAdvanceRestorePending,
-                            onChanged: guideSnapshot.hasSteps
-                                ? (bool enabled) async {
-                                    await _setAutoAdvance(
-                                        enabled, recipe.steps);
-                                  }
-                                : null,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: _autoAdvanceSecondOptions
-                            .map(
-                              (int seconds) => ChoiceChip(
-                                label: Text('$seconds초'),
-                                selected: _autoAdvanceSeconds == seconds,
-                                onSelected: (bool selected) async {
-                                  if (!selected) {
-                                    return;
-                                  }
-
-                                  if (_autoAdvanceSeconds == seconds) {
-                                    return;
-                                  }
-
-                                  setState(() {
-                                    _autoAdvanceSeconds = seconds;
-                                  });
-
-                                  await _persistAutoAdvanceSeconds(seconds);
-
-                                  if (_autoAdvanceEnabled) {
-                                    await _stopAutoAdvance(
-                                      steps: recipe.steps,
-                                      stopGuidance: false,
-                                    );
-                                    await _startAutoAdvance(recipe.steps);
-                                  }
-                                },
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              LocalizedText(
+                                guideSnapshot.hasSteps
+                                    ? '현재 단계 ${guideSnapshot.currentStepIndex + 1}/${guideSnapshot.totalSteps}'
+                                    : '안내할 조리 단계가 없습니다.',
                               ),
-                            )
-                            .toList(),
+                              if (guideSnapshot.hasSteps) ...<Widget>[
+                                const SizedBox(height: 8),
+                                LocalizedText(
+                                  guideSnapshot.currentStepText,
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: <Widget>[
+                                  OutlinedButton.icon(
+                                    onPressed: !guideSnapshot.hasSteps ||
+                                            guideSnapshot.isFirstStep
+                                        ? null
+                                        : () async {
+                                            if (_autoAdvanceEnabled) {
+                                              await _stopAutoAdvance(
+                                                steps: recipe.steps,
+                                                stopGuidance: false,
+                                              );
+                                            }
+                                            await _previousStep(recipe.steps);
+                                          },
+                                    icon: const Icon(Icons.skip_previous),
+                                    label: const LocalizedText('이전'),
+                                  ),
+                                  FilledButton.icon(
+                                    onPressed: !guideSnapshot.hasSteps
+                                        ? null
+                                        : () async {
+                                            if (_autoAdvanceEnabled) {
+                                              await _stopAutoAdvance(
+                                                steps: recipe.steps,
+                                                stopGuidance: false,
+                                              );
+                                            }
+                                            await _startGuide(
+                                              recipe.steps,
+                                              fromIndex: guideSnapshot
+                                                  .currentStepIndex,
+                                            );
+                                          },
+                                    icon: Icon(
+                                      guideSnapshot.isPlaying
+                                          ? Icons.replay
+                                          : Icons.play_arrow,
+                                    ),
+                                    label: LocalizedText(
+                                      guideSnapshot.isPlaying
+                                          ? '단계 다시 보기'
+                                          : '안내 시작',
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: !guideSnapshot.hasSteps ||
+                                            guideSnapshot.isLastStep
+                                        ? null
+                                        : () async {
+                                            if (_autoAdvanceEnabled) {
+                                              await _stopAutoAdvance(
+                                                steps: recipe.steps,
+                                                stopGuidance: false,
+                                              );
+                                            }
+                                            await _nextStep(recipe.steps);
+                                          },
+                                    icon: const Icon(Icons.skip_next),
+                                    label: const LocalizedText('다음'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: !guideSnapshot.isPlaying
+                                        ? null
+                                        : () async {
+                                            await _stopAutoAdvance(
+                                              steps: recipe.steps,
+                                              stopGuidance: true,
+                                            );
+                                          },
+                                    icon: const Icon(Icons.stop),
+                                    label: const LocalizedText('정지'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: LocalizedText(
+                                      '자동 재생 (단계당 $_autoAdvanceSeconds초)',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium,
+                                    ),
+                                  ),
+                                  Switch.adaptive(
+                                    value: _autoAdvanceEnabled ||
+                                        _autoAdvanceRestorePending,
+                                    onChanged: guideSnapshot.hasSteps
+                                        ? (bool enabled) async {
+                                            await _setAutoAdvance(
+                                                enabled, recipe.steps);
+                                          }
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _autoAdvanceSecondOptions
+                                    .map(
+                                      (int seconds) => ChoiceChip(
+                                        label: LocalizedText('$seconds초'),
+                                        selected:
+                                            _autoAdvanceSeconds == seconds,
+                                        onSelected: (bool selected) async {
+                                          if (!selected) {
+                                            return;
+                                          }
+
+                                          if (_autoAdvanceSeconds == seconds) {
+                                            return;
+                                          }
+
+                                          setState(() {
+                                            _autoAdvanceSeconds = seconds;
+                                          });
+
+                                          await _persistAutoAdvanceSeconds(
+                                              seconds);
+
+                                          if (_autoAdvanceEnabled) {
+                                            await _stopAutoAdvance(
+                                              steps: recipe.steps,
+                                              stopGuidance: false,
+                                            );
+                                            await _startAutoAdvance(
+                                                recipe.steps);
+                                          }
+                                        },
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                              const SizedBox(height: 8),
+                              LocalizedText(
+                                '소리 없이 조리 단계를 안내해요. 자동 진행을 켜면 선택한 간격으로 다음 단계로 이동합니다.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+                      const SizedBox(height: 24),
+                      LocalizedText('조리 완료 피드백',
+                          style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 8),
-                      Text(
-                        '현재 빌드에서는 TTS 출력이 비활성화되어 단계 상태만 갱신됩니다. 자동 재생은 단계 인덱스만 순차적으로 이동합니다.',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: <Widget>[
+                                  ChoiceChip(
+                                    label: const LocalizedText('좋아요'),
+                                    selected: _cookLiked == true,
+                                    onSelected: (bool selected) {
+                                      setState(() {
+                                        _cookLiked = selected ? true : null;
+                                      });
+                                    },
+                                  ),
+                                  ChoiceChip(
+                                    label: const LocalizedText('아쉬워요'),
+                                    selected: _cookLiked == false,
+                                    onSelected: (bool selected) {
+                                      setState(() {
+                                        _cookLiked = selected ? false : null;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              InputDecorator(
+                                decoration: InputDecoration(
+                                  border: const OutlineInputBorder(),
+                                  labelText: context.tr('평점 (선택)'),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<int>(
+                                    value: _cookRating,
+                                    isExpanded: true,
+                                    hint: const LocalizedText('평점을 선택하세요'),
+                                    items: const <DropdownMenuItem<int>>[
+                                      DropdownMenuItem<int>(
+                                          value: 1, child: LocalizedText('1점')),
+                                      DropdownMenuItem<int>(
+                                          value: 2, child: LocalizedText('2점')),
+                                      DropdownMenuItem<int>(
+                                          value: 3, child: LocalizedText('3점')),
+                                      DropdownMenuItem<int>(
+                                          value: 4, child: LocalizedText('4점')),
+                                      DropdownMenuItem<int>(
+                                          value: 5, child: LocalizedText('5점')),
+                                    ],
+                                    onChanged: (int? value) {
+                                      setState(() {
+                                        _cookRating = value;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _cookNoteController,
+                                minLines: 1,
+                                maxLines: 3,
+                                decoration: InputDecoration(
+                                  border: const OutlineInputBorder(),
+                                  labelText: context.tr('한 줄 메모 (선택)'),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: FilledButton.icon(
+                                  onPressed: () => _completeCookSession(recipe),
+                                  icon: const Icon(Icons.task_alt),
+                                  label: const LocalizedText('조리 완료 기록'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
+                      const SizedBox(height: 20),
                     ],
-                  ),
-                ),
-              ),
-            ],
-          );
+                  )));
         },
         error: (Object err, StackTrace stack) => CenteredStateView(
           icon: Icons.cloud_off_outlined,
           title: '상세를 불러오지 못했습니다',
           message: _friendlyActionError(err, '잠시 후 다시 시도해 주세요.'),
-          actionLabel: '다시 시도',
+          actionLabel: context.tr('다시 시도'),
           onAction: () {
             ref.invalidate(recipeByIdProvider(widget.recipeId));
-            _loadBookmarkState();
           },
           secondaryActionLabel: '홈으로 이동',
           onSecondaryAction: () => context.go('/'),
@@ -923,7 +765,7 @@ class _RecipeDetailPageState extends ConsumerState<RecipeDetailPage> {
               children: <Widget>[
                 CircularProgressIndicator(),
                 SizedBox(height: 16),
-                Text('레시피 상세를 불러오는 중입니다...'),
+                LocalizedText('레시피 상세를 불러오는 중입니다...'),
               ],
             ),
           ),

@@ -1,3 +1,5 @@
+import 'shopping_units.dart';
+
 class KitchenIngredient {
   const KitchenIngredient({
     required this.id,
@@ -90,6 +92,7 @@ class KitchenShoppingItem {
     required this.listId,
     required this.name,
     required this.ingredientText,
+    this.purchaseSpecification = '',
     required this.status,
     required this.reviewStatus,
     required this.needsReview,
@@ -104,6 +107,7 @@ class KitchenShoppingItem {
   final String listId;
   final String name;
   final String ingredientText;
+  final String purchaseSpecification;
   final KitchenShoppingItemStatus status;
   final KitchenShoppingItemReviewStatus reviewStatus;
   final bool needsReview;
@@ -117,8 +121,7 @@ class KitchenShoppingItem {
   bool get isPurchased => status == KitchenShoppingItemStatus.purchased;
 
   /// 장보기에서 사용자가 수량과 단위를 보완해야 하는지 여부입니다.
-  bool get needsIngredientInfo =>
-      quantity == null || (unit ?? '').trim().isEmpty;
+  bool get needsIngredientInfo => quantity == null || !isPurchaseUnit(unit);
 
   factory KitchenShoppingItem.fromJson(Map<String, dynamic> json) {
     if (json['id'] is! String ||
@@ -146,9 +149,7 @@ class KitchenShoppingItem {
     final reviewStatus =
         KitchenShoppingItemReviewStatusJson.parse(json['review_status']);
     final unit = json['unit'];
-    if (unit != null &&
-        (unit is! String ||
-            !<String>{'g', 'kg', 'ml', 'l', 'ea'}.contains(unit))) {
+    if (unit != null && (unit is! String || !isSupportedShoppingUnit(unit))) {
       throw const FormatException('Invalid shopping item unit');
     }
     final needsReview = json['needs_review'];
@@ -181,6 +182,7 @@ class KitchenShoppingItem {
       listId: (json['list_id'] as String).trim(),
       name: (json['name'] as String).trim(),
       ingredientText: json['ingredient_text'] as String,
+      purchaseSpecification: json['purchase_specification'] as String? ?? '',
       status: status,
       reviewStatus: reviewStatus,
       needsReview: needsReview,

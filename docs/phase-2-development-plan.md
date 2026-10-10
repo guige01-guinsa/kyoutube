@@ -2,6 +2,10 @@
 
 Last update: 2026-07-19
 
+Historical plan. As of 2026-09-12, signed v53 builds successfully; old AOT
+blockers below are historical. Use CURRENT_STATUS.md and the current release
+checklists for readiness and remaining work.
+
 ## Goal
 - Raise release readiness from current mid-stage to production launch.
 - Close largest functional gap from original MVP: subscriber personal recipe flow.

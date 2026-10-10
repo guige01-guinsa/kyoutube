@@ -13,6 +13,7 @@ class YoutubeRecipeContext {
     required this.description,
     required this.youtubeUrl,
     this.durationSec,
+    this.captionAvailable = false,
   });
 
   final String videoId;
@@ -21,6 +22,7 @@ class YoutubeRecipeContext {
   final String description;
   final String youtubeUrl;
   final int? durationSec;
+  final bool captionAvailable;
 
   factory YoutubeRecipeContext.fromJson(Map<String, dynamic> json) {
     return YoutubeRecipeContext(
@@ -30,6 +32,7 @@ class YoutubeRecipeContext {
       description: (json['description'] as String? ?? '').trim(),
       youtubeUrl: (json['youtubeUrl'] as String? ?? '').trim(),
       durationSec: json['durationSec'] as int?,
+      captionAvailable: json['captionAvailable'] == true,
     );
   }
 
@@ -46,6 +49,8 @@ class YoutubeRecipeContextException implements Exception {
 }
 
 class YoutubeRecipeContextService {
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   YoutubeRecipeContextService({
     http.Client? httpClient,
     SupabaseClient? supabaseClient,
@@ -62,17 +67,19 @@ class YoutubeRecipeContextService {
       throw const YoutubeRecipeContextException('로그인이 필요합니다.');
     }
 
-    final response = await _httpClient.post(
-      Uri.parse('${Env.supabaseUrl}/functions/v1/youtube_recipe_context'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        'apikey': Env.supabaseAnonKey,
-        'Authorization': 'Bearer ${session.accessToken}',
-      },
-      body: jsonEncode(<String, String>{
-        'youtubeUrl': youtubeUrl.trim(),
-      }),
-    );
+    final response = await _httpClient
+        .post(
+          Uri.parse('${Env.supabaseUrl}/functions/v1/youtube_recipe_context'),
+          headers: <String, String>{
+            'Content-Type': 'application/json',
+            'apikey': Env.supabaseAnonKey,
+            'Authorization': 'Bearer ${session.accessToken}',
+          },
+          body: jsonEncode(<String, String>{
+            'youtubeUrl': youtubeUrl.trim(),
+          }),
+        )
+        .timeout(_requestTimeout);
 
     Object? decoded;
 

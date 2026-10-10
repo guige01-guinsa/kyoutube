@@ -72,6 +72,9 @@ app.*.map.json
 
 # Android release signing
 /android/key.properties
+**/key.properties*
+**/*service-account*.json
+**/*service_account*.json
 *.jks
 *.keystore
 
@@ -90,3 +93,14 @@ backups/
 /recovery_backup/
 # Release artifacts downloaded from CI
 /artifacts/
+# Firebase CLI diagnostics
+/firebase-debug*.log
+
+# Local hosting caches and release bundles
+/.firebase/
+/release/
+/output/
+/outputs/
+/store-assets/
+/analyze*.txt
+/dart-analyze.*

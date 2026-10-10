@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'shopping_units.dart';
+
 const int shoppingReviewDraftSchemaVersion = 1;
 const int shoppingReviewDraftMaxItems = 100;
 const int shoppingReviewDraftMaxSerializedBytes = 65536;
@@ -13,6 +15,8 @@ class ShoppingReviewDraftItem {
     required this.quantity,
     required this.unit,
     this.selected = true,
+    this.needsReview = false,
+    this.purchaseConfirmed = false,
   });
 
   final String localId;
@@ -22,6 +26,32 @@ class ShoppingReviewDraftItem {
   final double? quantity;
   final String? unit;
   final bool selected;
+  final bool needsReview;
+
+  /// True only after the user enters a purchase quantity, never from parsing
+  /// the recipe's cooking amount. Missing on older automatically filled drafts.
+  final bool purchaseConfirmed;
+
+  ShoppingReviewDraftItem copyWith({
+    String? name,
+    String? quantityInput,
+    double? quantity,
+    String? unit,
+    bool? selected,
+    bool? needsReview,
+    bool? purchaseConfirmed,
+  }) =>
+      ShoppingReviewDraftItem(
+        localId: localId,
+        ingredientText: ingredientText,
+        name: name ?? this.name,
+        quantityInput: quantityInput ?? this.quantityInput,
+        quantity: quantity ?? this.quantity,
+        unit: unit ?? this.unit,
+        selected: selected ?? this.selected,
+        needsReview: needsReview ?? this.needsReview,
+        purchaseConfirmed: purchaseConfirmed ?? this.purchaseConfirmed,
+      );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'local_id': localId,
@@ -31,6 +61,8 @@ class ShoppingReviewDraftItem {
         'quantity': quantity,
         'unit': unit,
         'selected': selected,
+        'needs_review': needsReview,
+        'purchase_confirmed': purchaseConfirmed,
       };
 
   factory ShoppingReviewDraftItem.fromJson(Map<String, dynamic> json) {
@@ -41,13 +73,17 @@ class ShoppingReviewDraftItem {
     final quantity = json['quantity'];
     final unit = json['unit'];
     final selected = json['selected'];
+    final needsReview = json['needs_review'];
+    final purchaseConfirmed = json['purchase_confirmed'];
     if (localId is! String ||
         ingredientText is! String ||
         name is! String ||
         quantityInput is! String ||
         (quantity != null && quantity is! num) ||
         (unit != null && unit is! String) ||
-        (selected != null && selected is! bool)) {
+        (selected != null && selected is! bool) ||
+        (needsReview != null && needsReview is! bool) ||
+        (purchaseConfirmed != null && purchaseConfirmed is! bool)) {
       throw const FormatException('Invalid shopping review draft item');
     }
     return ShoppingReviewDraftItem(
@@ -58,9 +94,82 @@ class ShoppingReviewDraftItem {
       quantity: quantity?.toDouble(),
       unit: unit as String?,
       selected: selected is bool ? selected : true,
+      needsReview: needsReview is bool ? needsReview : false,
+      purchaseConfirmed: purchaseConfirmed is bool ? purchaseConfirmed : false,
     );
   }
 }
+
+List<ShoppingReviewDraftItem> mergeShoppingReviewItems(
+  Iterable<ShoppingReviewDraftItem> source,
+) {
+  final merged = <String, ShoppingReviewDraftItem>{};
+
+  for (final item in source) {
+    final key = item.name.trim().toLowerCase();
+    final existing = merged[key];
+    if (existing == null) {
+      merged[key] = item;
+      continue;
+    }
+
+    final amount = _mergeShoppingAmounts(existing, item);
+    final rawTexts = <String>{
+      ...existing.ingredientText.split(' / '),
+      ...item.ingredientText.split(' / '),
+    }.where((value) => value.trim().isNotEmpty).join(' / ');
+
+    merged[key] = ShoppingReviewDraftItem(
+      localId: existing.localId,
+      ingredientText: rawTexts,
+      name: existing.name.trim(),
+      quantityInput: amount == null ? '' : _formatQuantity(amount.$1),
+      quantity: amount?.$1,
+      unit: amount?.$2,
+      selected: existing.selected || item.selected,
+      needsReview: existing.needsReview || item.needsReview || amount == null,
+      purchaseConfirmed: existing.purchaseConfirmed && item.purchaseConfirmed,
+    );
+  }
+
+  return List<ShoppingReviewDraftItem>.unmodifiable(merged.values);
+}
+
+(double, String)? _mergeShoppingAmounts(
+  ShoppingReviewDraftItem left,
+  ShoppingReviewDraftItem right,
+) {
+  if (left.quantity == null ||
+      left.unit == null ||
+      right.quantity == null ||
+      right.unit == null) {
+    return null;
+  }
+  if (left.unit == right.unit) {
+    return (left.quantity! + right.quantity!, left.unit!);
+  }
+  if (<String>{left.unit!, right.unit!}.every(<String>{'g', 'kg'}.contains)) {
+    final leftGrams =
+        left.unit == 'kg' ? left.quantity! * 1000 : left.quantity!;
+    final rightGrams =
+        right.unit == 'kg' ? right.quantity! * 1000 : right.quantity!;
+    return (leftGrams + rightGrams, 'g');
+  }
+  if (<String>{left.unit!, right.unit!}.every(<String>{'ml', 'l'}.contains)) {
+    final leftMl = left.unit == 'l' ? left.quantity! * 1000 : left.quantity!;
+    final rightMl =
+        right.unit == 'l' ? right.quantity! * 1000 : right.quantity!;
+    return (leftMl + rightMl, 'ml');
+  }
+  return null;
+}
+
+String _formatQuantity(double value) => value == value.roundToDouble()
+    ? value.toInt().toString()
+    : value
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
 
 class ShoppingReviewDraft {
   const ShoppingReviewDraft({
@@ -71,6 +180,8 @@ class ShoppingReviewDraft {
     required this.createdAt,
     required this.updatedAt,
     required this.items,
+    this.recipeServings = 1,
+    this.targetServings = 1,
   });
 
   final int schemaVersion;
@@ -81,6 +192,10 @@ class ShoppingReviewDraft {
   final DateTime updatedAt;
   final List<ShoppingReviewDraftItem> items;
 
+  /// The recipe's original servings and the amount the shopper plans to cook.
+  /// Both default to one so saved drafts from earlier versions remain valid.
+  final double recipeServings, targetServings;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'schema_version': schemaVersion,
         'draft_id': draftId,
@@ -89,6 +204,8 @@ class ShoppingReviewDraft {
         'created_at': createdAt.toUtc().toIso8601String(),
         'updated_at': updatedAt.toUtc().toIso8601String(),
         'items': items.map((item) => item.toJson()).toList(),
+        'recipe_servings': recipeServings,
+        'target_servings': targetServings,
       };
 
   String serialize() => jsonEncode(toJson());
@@ -102,7 +219,10 @@ class ShoppingReviewDraft {
         items.length > shoppingReviewDraftMaxItems) {
       throw const FormatException('Invalid shopping review draft');
     }
-    final names = <String>{};
+    if (!isValidShoppingServings(recipeServings) ||
+        !isValidShoppingServings(targetServings)) {
+      throw const FormatException('Invalid shopping review servings');
+    }
     for (final item in items) {
       if (item.localId.isEmpty ||
           item.ingredientText.isEmpty ||
@@ -122,14 +242,8 @@ class ShoppingReviewDraft {
       if (item.quantity != null &&
           (item.quantity! <= 0 ||
               !item.quantity!.isFinite ||
-              !_units.contains(item.unit))) {
+              !isSupportedShoppingUnit(item.unit))) {
         throw const FormatException('Invalid shopping review quantity or unit');
-      }
-      if (forSubmission && item.selected) {
-        final normalized = item.name.trim().toLowerCase();
-        if (!names.add(normalized)) {
-          throw const FormatException('Duplicate shopping review name');
-        }
       }
     }
     if (forSubmission && !items.any((item) => item.selected)) {
@@ -152,6 +266,8 @@ class ShoppingReviewDraft {
     final createdAt = json['created_at'];
     final updatedAt = json['updated_at'];
     final rawItems = json['items'];
+    final recipeServings = json['recipe_servings'];
+    final targetServings = json['target_servings'];
     if (draftId is! String ||
         sourceRecipeId is! String ||
         key is! String ||
@@ -178,10 +294,52 @@ class ShoppingReviewDraft {
         }
         return ShoppingReviewDraftItem.fromJson(item);
       }).toList(),
+      recipeServings: recipeServings is num ? recipeServings.toDouble() : 1,
+      targetServings: targetServings is num ? targetServings.toDouble() : 1,
     );
     draft.validate();
     return draft;
   }
+}
 
-  static const _units = <String>{'g', 'kg', 'ml', 'l', 'ea'};
+bool isValidShoppingServings(double value) =>
+    value.isFinite && value >= 0.1 && value <= 1000;
+
+/// Rescale only amounts inferred from the recipe. Values the shopper entered in
+/// the purchase editor stay fixed because they describe a chosen package or
+/// purchase quantity, not the cooking recipe.
+ShoppingReviewDraft rescaleShoppingReviewDraftServings(
+  ShoppingReviewDraft draft, {
+  required double recipeServings,
+  required double targetServings,
+}) {
+  if (!isValidShoppingServings(recipeServings) ||
+      !isValidShoppingServings(targetServings)) {
+    throw const FormatException('Invalid shopping review servings');
+  }
+  final oldFactor = draft.targetServings / draft.recipeServings;
+  final nextFactor = targetServings / recipeServings;
+  final adjustment = nextFactor / oldFactor;
+  if (!adjustment.isFinite || adjustment <= 0 || adjustment > 10000) {
+    throw const FormatException('Invalid shopping review servings');
+  }
+  return ShoppingReviewDraft(
+    schemaVersion: draft.schemaVersion,
+    draftId: draft.draftId,
+    sourceRecipeId: draft.sourceRecipeId,
+    createIdempotencyKey: draft.createIdempotencyKey,
+    createdAt: draft.createdAt,
+    updatedAt: DateTime.now().toUtc(),
+    recipeServings: recipeServings,
+    targetServings: targetServings,
+    items: List<ShoppingReviewDraftItem>.unmodifiable(draft.items.map((item) {
+      final quantity = item.quantity;
+      if (item.purchaseConfirmed || quantity == null) return item;
+      final scaled = quantity * adjustment;
+      if (!scaled.isFinite || scaled <= 0 || scaled > 1e9) {
+        throw const FormatException('Invalid scaled shopping quantity');
+      }
+      return item.copyWith(quantity: scaled);
+    })),
+  );
 }

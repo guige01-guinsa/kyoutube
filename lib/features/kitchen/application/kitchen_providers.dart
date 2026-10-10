@@ -9,7 +9,11 @@ import 'shopping_persistence_controllers.dart';
 import 'shopping_item_mutation_controller.dart';
 
 final kitchenApiProvider = Provider<KitchenApi>(
-  (ref) => KitchenApi(),
+  (ref) {
+    final api = KitchenApi();
+    ref.onDispose(api.close);
+    return api;
+  },
 );
 
 final kitchenStorageProvider = FutureProvider<SharedPreferencesKeyValueStore>(
@@ -56,6 +60,7 @@ final kitchenIngredientSearchProvider = StateProvider<String>(
 
 final kitchenIngredientsProvider = FutureProvider<List<KitchenIngredient>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final api = ref.watch(kitchenApiProvider);
     final query = ref.watch(kitchenIngredientSearchProvider);
     return api.listIngredients(query: query);
@@ -64,6 +69,7 @@ final kitchenIngredientsProvider = FutureProvider<List<KitchenIngredient>>(
 
 final kitchenShoppingListsProvider = FutureProvider<List<KitchenShoppingList>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final api = ref.watch(kitchenApiProvider);
     return api.listShoppingLists(status: 'active');
   },
@@ -73,6 +79,7 @@ final kitchenShoppingListsProvider = FutureProvider<List<KitchenShoppingList>>(
 final kitchenCompletedShoppingListsProvider =
     FutureProvider<List<KitchenShoppingList>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final api = ref.watch(kitchenApiProvider);
     return api.listShoppingLists(status: 'completed');
   },
@@ -80,6 +87,7 @@ final kitchenCompletedShoppingListsProvider =
 
 final kitchenCookSessionsProvider = FutureProvider<List<KitchenCookSession>>(
   (ref) async {
+    ref.watch(activeAccountIdProvider);
     final api = ref.watch(kitchenApiProvider);
     return api.listCookSessions();
   },

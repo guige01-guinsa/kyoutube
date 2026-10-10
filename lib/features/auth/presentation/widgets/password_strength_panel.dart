@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:k_youtube/core/localization/localized_text.dart';
 
 import '../../application/password_policy.dart';
 
@@ -33,12 +34,12 @@ class PasswordStrengthPanel extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              const Text(
+              const LocalizedText(
                 '비밀번호 강도',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
-              Text(
+              LocalizedText(
                 strength.label,
                 style: TextStyle(
                   color: strengthColor,
@@ -113,7 +114,7 @@ class _RuleLine extends StatelessWidget {
             color: color,
           ),
           const SizedBox(width: 8),
-          Text(
+          LocalizedText(
             label,
             style: TextStyle(
               color: color,

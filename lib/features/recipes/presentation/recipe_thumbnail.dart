@@ -1,4 +1,6 @@
+import 'private_recipe_image.dart';
 import 'package:flutter/material.dart';
+import '../../../core/theme/app_theme.dart';
 
 class RecipeThumbnail extends StatelessWidget {
   const RecipeThumbnail({
@@ -15,6 +17,13 @@ class RecipeThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = (imageUrl ?? '').isNotEmpty;
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+    final cacheWidth = width.isFinite && width > 0
+        ? (width * pixelRatio).ceil().clamp(1, 4096).toInt()
+        : null;
+    final cacheHeight = height.isFinite && height > 0
+        ? (height * pixelRatio).ceil().clamp(1, 4096).toInt()
+        : null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -22,9 +31,11 @@ class RecipeThumbnail extends StatelessWidget {
         width: width,
         height: height,
         child: hasImage
-            ? Image.network(
+            ? PrivateRecipeImage(
                 imageUrl!,
                 fit: BoxFit.cover,
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
                 errorBuilder: (_, __, ___) => _ThumbnailPlaceholder(
                   width: width,
                   height: height,
@@ -53,11 +64,17 @@ class _ThumbnailPlaceholder extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      decoration: const BoxDecoration(
+          gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: <Color>[ScoutStyle.mint, Color(0xFFF4E8D6)],
+      )),
       alignment: Alignment.center,
       child: Icon(
-        Icons.restaurant_menu,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+        Icons.ramen_dining_rounded,
+        size: height > 100 ? 56 : 28,
+        color: ScoutStyle.forest,
       ),
     );
   }

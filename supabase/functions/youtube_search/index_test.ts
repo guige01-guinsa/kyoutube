@@ -11,6 +11,18 @@ const req = (q = "pasta", limit?: string) =>
   new Request(
     `http://local/youtube_search?q=${q}${limit ? `&limit=${limit}` : ""}`,
   );
+
+Deno.test("Spanish searches retain language and permitted Latin American regions", async () => {
+  for (const [region, expected] of [["MX", "MX"], ["CO", "CO"], ["KR", "MX"]]) {
+    let locale: unknown;
+    const run = createYoutubeSearchHandler({getEnv: () => "test", searchYoutube: async (input) => {
+      locale = input.locale; return [];
+    }});
+    const res = await run(new Request(`http://local/youtube_search?q=arroz&lang=es-419&region=${region}`));
+    assertEquals(res.status, 200);
+    assertEquals(locale, {languageCode: "es", regionCode: expected, cookingQuerySuffix: "receta de cocina"});
+  }
+});
 const result = {
   videoId: "abc",
   title: "T",
@@ -27,7 +39,16 @@ const handler = (searchYoutube: YoutubeSearchClient, key = "test-key") =>
   });
 Deno.test("missing key and invalid input are safe", async () => {
   assertEquals((await handler(async () => [], "")(req())).status, 500);
-  assertEquals((await handler(async () => [])(req("x"))).status, 400);
+  assertEquals((await handler(async () => [])(req(""))).status, 400);
+});
+Deno.test("accepts a one-character Korean cooking query", async () => {
+  let receivedQuery = "";
+  const response = await handler(async ({ query }) => {
+    receivedQuery = query;
+    return [];
+  })(req(encodeURIComponent("닭")));
+  assertEquals(response.status, 200);
+  assertEquals(receivedQuery, "닭");
 });
 Deno.test("maps canonical response and clamps limit", async () => {
   let receivedLimit = 0;
@@ -36,7 +57,7 @@ Deno.test("maps canonical response and clamps limit", async () => {
     return [result];
   })(req("pasta", "99"));
   assertEquals(response.status, 200);
-  assertEquals(receivedLimit, 10);
+  assertEquals(receivedLimit, 20);
   assertEquals((await response.json()).status, "ok");
 });
 Deno.test("JSON responses declare UTF-8 and preserve Korean strings", async () => {

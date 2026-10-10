@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart' show WidgetsBinding;
+
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:youtube_recipe_search/youtube_recipe_search.dart';
@@ -15,6 +17,13 @@ class YoutubeSearchLocaleProfile {
   final String languageCode;
   final String regionCode;
 
+  static YoutubeSearchLocaleProfile forLanguageCode(String languageCode) =>
+      switch (languageCode) {
+        'en' => englishUnitedStates,
+        'es' => spanishLatinAmerica,
+        _ => korean,
+      };
+
   static const korean = YoutubeSearchLocaleProfile(
     languageCode: 'ko',
     regionCode: 'KR',
@@ -24,9 +33,16 @@ class YoutubeSearchLocaleProfile {
     languageCode: 'en',
     regionCode: 'US',
   );
+
+  static const spanishLatinAmerica = YoutubeSearchLocaleProfile(
+    languageCode: 'es',
+    regionCode: 'MX',
+  );
 }
 
 class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
+  static const Duration _requestTimeout = Duration(seconds: 20);
+
   SupabaseYoutubeSearchTransport({
     http.Client? httpClient,
     String? supabaseUrl,
@@ -34,6 +50,7 @@ class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
     String? Function()? accessTokenProvider,
     YoutubeSearchLocaleProfile Function()? localeProfileProvider,
   })  : _httpClient = httpClient ?? http.Client(),
+        _ownsHttpClient = httpClient == null,
         _supabaseUrl = supabaseUrl ?? Env.supabaseUrl,
         _supabaseAnonKey = supabaseAnonKey ?? Env.supabaseAnonKey,
         _accessTokenProvider = accessTokenProvider ??
@@ -45,14 +62,22 @@ class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
                 return null;
               }
             }),
-        _localeProfileProvider =
-            localeProfileProvider ?? (() => YoutubeSearchLocaleProfile.korean);
+        _localeProfileProvider = localeProfileProvider ??
+            (() => YoutubeSearchLocaleProfile.forLanguageCode(WidgetsBinding
+                .instance.platformDispatcher.locale.languageCode));
 
   final http.Client _httpClient;
+  final bool _ownsHttpClient;
   final String _supabaseUrl;
   final String _supabaseAnonKey;
   final String? Function() _accessTokenProvider;
   final YoutubeSearchLocaleProfile Function() _localeProfileProvider;
+
+  void close() {
+    if (_ownsHttpClient) {
+      _httpClient.close();
+    }
+  }
 
   @override
   Future<YoutubeTransportResponse> get(
@@ -78,7 +103,7 @@ class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
     ).replace(
       queryParameters: <String, String>{
         'q': request.query.trim(),
-        'limit': request.limit.clamp(1, 10).toString(),
+        'limit': request.limit.clamp(1, 20).toString(),
         'lang': locale.languageCode,
         'region': locale.regionCode,
       },
@@ -91,7 +116,7 @@ class SupabaseYoutubeSearchTransport implements YoutubeSearchTransport {
           'apikey': _supabaseAnonKey,
           'Authorization': 'Bearer $accessToken',
         },
-      );
+      ).timeout(_requestTimeout);
 
       Object? body;
 

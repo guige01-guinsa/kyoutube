@@ -29,6 +29,8 @@ class YoutubeRecipeCreationResult {
 }
 
 class YoutubeRecipeCreationService {
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   YoutubeRecipeCreationService({
     http.Client? httpClient,
     SupabaseClient? supabaseClient,
@@ -74,29 +76,31 @@ class YoutubeRecipeCreationService {
       },
     );
 
-    final response = await _httpClient.post(
-      uri,
-      headers: <String, String>{
-        'apikey': _supabaseAnonKey,
-        'Authorization': 'Bearer $accessToken',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(<String, Object?>{
-        'title': title,
-        'summary': channelTitle.isEmpty
-            ? 'YouTube 영상 기반으로 만든 임시 레시피입니다.'
-            : 'YouTube 영상 기반으로 만든 임시 레시피입니다.\n채널: $channelTitle',
-        'ingredients': <String>[],
-        'steps': <String>[
-          'YouTube 영상을 참고해 재료와 조리 순서를 정리해 주세요.',
-        ],
-        'tips': '원본 YouTube 영상을 확인한 뒤 레시피 내용을 보완해 주세요.',
-        'youtube_url': youtubeUrl,
-        'source_type': 'youtube_import',
-        'image_path': youtubeThumbnailUrlFromUrl(youtubeUrl),
-        'is_published': false,
-      }),
-    );
+    final response = await _httpClient
+        .post(
+          uri,
+          headers: <String, String>{
+            'apikey': _supabaseAnonKey,
+            'Authorization': 'Bearer $accessToken',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(<String, Object?>{
+            'title': title,
+            'summary': channelTitle.isEmpty
+                ? 'YouTube 영상 기반으로 만든 임시 레시피입니다.'
+                : 'YouTube 영상 기반으로 만든 임시 레시피입니다.\n채널: $channelTitle',
+            'ingredients': <String>[],
+            'steps': <String>[
+              'YouTube 영상을 참고해 재료와 조리 순서를 정리해 주세요.',
+            ],
+            'tips': '원본 YouTube 영상을 확인한 뒤 레시피 내용을 보완해 주세요.',
+            'youtube_url': youtubeUrl,
+            'source_type': 'youtube_import',
+            'image_path': youtubeThumbnailUrlFromUrl(youtubeUrl),
+            'is_published': false,
+          }),
+        )
+        .timeout(_requestTimeout);
 
     Object? decoded;
     try {

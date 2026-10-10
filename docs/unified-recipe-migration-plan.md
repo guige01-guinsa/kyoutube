@@ -149,7 +149,7 @@ Each phase must verify:
 - Public recipe search/detail
 - Creator recipe detail
 - My recipe detail
-- Bookmark/save behavior
+- Search-exclusion/edit behavior
 - Shopping preparation
 - Shopping completion
 - Kitchen cleanup and undo

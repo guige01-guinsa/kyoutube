@@ -48,6 +48,26 @@ http.Response _ok(Object data) => http.Response(
     );
 
 void main() {
+  test(
+      'cooking completion writes a diary entry only, without stock or purchase requests',
+      () async {
+    final calls = <http.BaseRequest>[];
+    final api = KitchenApi(
+        accessTokenProvider: () async => 'jwt',
+        httpClient: _FakeClient((request) async {
+          calls.add(request);
+          return _ok(<String, dynamic>{});
+        }));
+    await api.completeCook(
+        recipeType: 'creator', recipeId: 'bibimbap', recipeTitle: 'Bibimbap');
+    expect(calls, hasLength(1));
+    expect(calls.single.method, 'POST');
+    expect(calls.single.url.queryParameters['action'], 'complete-cook');
+    final body =
+        jsonDecode((calls.single as http.Request).body) as Map<String, dynamic>;
+    expect(body.keys, isNot(contains('inventory_changes')));
+    expect(body.keys, isNot(contains('consumed_ingredients')));
+  });
   test('review and status send only client-owned fields plus revision',
       () async {
     final client = _FakeClient((request) async => _ok(_item()));
@@ -103,6 +123,36 @@ void main() {
         '550e8400-e29b-41d4-a716-446655440000');
   });
 
+  test('cleanup sends the cooking-history option and parses its count',
+      () async {
+    final client = _FakeClient((request) async => _ok(<String, dynamic>{
+          'snapshot_id': '550e8400-e29b-41d4-a716-446655440000',
+          'ingredient_count': 0,
+          'active_list_count': 0,
+          'completed_list_count': 0,
+          'cook_session_count': 2,
+          'open_item_count': 0,
+          'expires_at': '2026-01-01T00:30:00Z',
+          'replayed': false,
+        }));
+    final api =
+        KitchenApi(httpClient: client, accessTokenProvider: () async => 'jwt');
+
+    final result = await api.cleanupWorkspace(
+      clearIngredients: false,
+      clearActiveShopping: false,
+      clearCompletedHistory: false,
+      clearCookHistory: true,
+      idempotencyKey: '550e8400-e29b-41d4-a716-446655440000',
+    );
+
+    final body = jsonDecode((client.lastRequest! as http.Request).body)
+        as Map<String, dynamic>;
+    expect(body['clear_cook_history'], isTrue);
+    expect(result.cookSessionCount, 2);
+    expect(result.hasChanges, isTrue);
+  });
+
   test('maps conflict without exposing response body', () async {
     final client = _FakeClient((request) async => http.Response(
           jsonEncode(<String, dynamic>{
@@ -124,6 +174,34 @@ void main() {
       throwsA(isA<KitchenApiException>()
           .having((error) => error.kind, 'kind', KitchenApiErrorKind.conflict)),
     );
+  });
+
+  test(
+      'reads the deployed recipe_api details code without exposing server text',
+      () async {
+    final api = KitchenApi(
+        accessTokenProvider: () async => 'jwt',
+        httpClient: _FakeClient((_) async => http.Response(
+            jsonEncode({
+              'status': 'error',
+              'message': 'private database detail',
+              'details': {
+                'code': 'shopping_request_rejected',
+                'trace': 'private SQL'
+              },
+            }),
+            422)));
+    await expectLater(
+        api.setShoppingItemStatus(
+            itemId: 'item-1',
+            status: KitchenShoppingItemStatus.pending,
+            expectedRevision: 0),
+        throwsA(isA<KitchenApiException>()
+            .having((error) => error.code, 'code', 'shopping_request_rejected')
+            .having((error) => error.message, 'safe message',
+                isNot(contains('private')))
+            .having((error) => error.toString(), 'safe diagnostic',
+                isNot(contains('private')))));
   });
 
   test('maps not found and validation responses to typed safe errors',

@@ -32,6 +32,11 @@ Map<String, Object?> item() => {
       'durationSec': 10
     };
 void main() {
+  test('defaults to ten search results', () {
+    const request = YoutubeSearchRequest(query: 'pasta');
+    expect(request.limit, 10);
+  });
+
   test('parses canonical result and optional duration', () {
     final result = YoutubeSearchPage.fromResponse(canonical()).items.single;
     expect(result.videoId, 'abc');
@@ -89,6 +94,9 @@ void main() {
                 controller: YoutubeSearchController(YoutubeSearchClient(good)),
                 onOpenUrl: (url) async => opened = url,
                 debounce: const Duration(days: 1)))));
+    expect(find.text('Search YouTube recipes'), findsOneWidget);
+    expect(find.text('Search results only show videos up to 60 minutes long.'),
+        findsOneWidget);
     await tester.enterText(
         find.byKey(const Key('youtube-search-input')), 'pasta');
     await tester.tap(find.byKey(const Key('youtube-search-submit')));
@@ -96,7 +104,11 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 30));
     expect(find.text('Pasta'), findsOneWidget);
+    expect(find.byKey(const Key('youtube-thumbnail-abc')), findsOneWidget);
     await tester.tap(find.text('Pasta'));
+    expect(opened, 'https://youtube.test');
+    opened = '';
+    await tester.tap(find.byKey(const Key('youtube-thumbnail-abc')));
     expect(opened, 'https://youtube.test');
     final empty = FakeTransport(
         YoutubeTransportResponse(statusCode: 200, body: canonical(items: [])));
