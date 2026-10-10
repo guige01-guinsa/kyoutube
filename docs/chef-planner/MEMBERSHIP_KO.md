@@ -44,14 +44,14 @@ flowchart LR
 
 서비스별 회원권은 독립적이다. 일정관리 유료 회원이라도 레시피 스카우트 고급 기능이 자동으로 유료 권한이 되는 것은 아니다. 향후 공동 상품을 만들면 가격·권한·구매 복원·탈퇴 규칙을 별도로 설계한다.
 
-## 원본 인증 방식에 따른 기술 선택
+## 확인된 원본 인증과 공동 로그인 선택
 
-원본 일정관리의 로그인 구성은 아직 확인되지 않았다. 선택은 아래 순서로 진행하고 결정 결과를 신규 저장소의 ADR에 남긴다.
+원본 `ai-schedule`은 Supabase Auth의 이메일·Google·카카오 로그인과 사용자별 profile을 사용한다. 기준 커밋과 파일은 [소스 검토](SOURCE_REVIEW_KO.md)에 있다. 현재 로그인 버튼은 외부 제공자로 로그인하는 기능이며 다른 앱에 로그인을 제공하는 OIDC 서버 활성화가 확인된 것은 아니다.
 
 | 원본 인증 상태 | 선택 방향 | 원본 영향 |
 |---|---|---|
 | 이미 검증된 OIDC 제공 기능 있음 | 원본의 로그인 주체를 두 앱에서 공식 provider로 이용 | 상대 앱 등록과 회원 연결 진입점 |
-| Supabase Auth 사용 | OAuth 서버와 Custom OIDC의 실제 프로젝트·SDK 지원을 검증 후 사용 | 인증 제공 기능과 동의 UI, 업무 로직 유지 |
+| Supabase Auth 사용 확인 | 원본 Auth를 후보 provider로 삼아 OAuth 서버·Custom OIDC·고정 SDK를 시험 | 인증 제공 기능과 동의 UI, 업무 로직 유지 |
 | 로그인 제공 기능 없음 | 별도 공동 로그인 provider 도입과 기존 회원의 인증된 계정 연결 | 기존 비밀번호·회원 DB 이전 없이 단계적 연결 |
 
 레시피 스카우트는 기존 Supabase Auth의 사용자와 권한을 유지하고, 검증한 공동 로그인 제공자를 추가하는 방향을 우선한다. 외부 로그인으로 얻은 원본 세션을 상대 서비스 API access token처럼 사용하지 않는다. 각 서비스가 자신의 정상 세션을 발급한다.
@@ -59,6 +59,10 @@ flowchart LR
 Supabase는 OAuth 2.1과 OIDC 서버 및 Custom OAuth/OIDC provider를 공식적으로 문서화하고 있다. OAuth 서버는 문서상 beta이므로 현재 프로젝트 지원, SDK 호환성, issuer와 discovery 경로, 기존 로그인·MFA·복구·identity 연결을 POC에서 확인한다. 확인 전 운영 provider를 활성화하지 않는다. [OAuth 서버 시작](https://supabase.com/docs/guides/auth/oauth-server/getting-started), [Custom provider](https://supabase.com/docs/guides/auth/custom-oauth-providers).
 
 POC가 통과하지 않으면 외부 공동 로그인 provider를 비교해 선택하고 추가 비용·운영 의존성과 구현 기간을 다시 산정한다. 운영 일정을 맞추기 위해 비밀번호·기존 로그인 토큰·DB 키를 공유하는 우회 방식을 만들지 않는다.
+
+시험은 원본 프로젝트의 OAuth 서버 제공 여부, OIDC용 비대칭 서명과 JWKS, 서비스별 custom provider, 기존 회원 수동 identity linking을 포함한다. provider 변경이나 SDK 업그레이드를 검수 없이 진행하지 않는다. 원본 Auth → 상대 서비스 Auth → 모바일 callback의 두 단계 PKCE와 계정 선택을 실제 기기에서 확인한다. 고정 SDK가 custom provider를 지원하지 않으면 그 결과를 근거로 호환 경로·변경 범위·기간을 다시 결정한다.
+
+원본 profile 조회의 표시용 fallback은 회원 연결 승인 근거로 사용하지 않는다. 서버에서 원본 계정 상태를 확인하고 active일 때만 새 연결을 허용한다. 조회 실패는 보류, suspended·withdrawn은 거절한다. 계정 정지·삭제를 확인할 수 있는 서버 계약과 갱신 시점을 POC의 필수 결과로 남긴다.
 
 ## 표준 인증 흐름
 
@@ -122,6 +126,6 @@ OAuth authorization code와 PKCE, 정확한 redirect allowlist, state와 OIDC no
 
 ## 개발 순서
 
-소스 점검 첫 단계에 원본 인증 구성을 확인한다. 시험 환경에서 기존 회원·신규 회원·유료 회원의 공동 로그인 POC를 먼저 완료하고 실제 회원 등록 방법을 고정한다. 그 뒤 동의 UI와 서버 무료 등록 및 두 일정 서비스 진입점을 구현한다. 운영 적용은 기존 로그인 회귀 검사와 DB·provider 변경 검토를 끝낸 뒤 별도 승인을 받아 진행한다.
+원본 인증 구성의 소스 확인은 완료됐으며 개발 첫 1~2주에 시험 환경의 공동 로그인 POC를 진행한다. 기존 회원·신규 회원·유료 회원·정지 계정에서 검증한 뒤 실제 회원 등록 방법을 고정한다. 그 뒤 동의 UI와 서버 무료 등록 및 두 일정 서비스 진입점을 구현한다. 운영 적용은 기존 로그인 회귀 검사와 DB·provider 변경 검토를 끝낸 뒤 별도 승인을 받아 진행한다.
 
 최초 제품 계획의 시간 범위에는 정상적으로 지원되는 인증 provider를 이용하는 회원 연결이 포함된다. 원본에 새로운 인증 기반이나 기존 회원의 대규모 이전이 필요하면 2~4주의 추가 작업을 우선 가정하고 조사 후 재산정한다. 기존 회원 전체를 무동의로 배치 등록하거나 원본 회원 DB를 새 앱에 복제하는 작업은 수행하지 않는다.

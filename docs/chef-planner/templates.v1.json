@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "design_not_deployed",
   "date": "2026-10-10",
   "description": "시간은 사용자 확인을 위한 초기 일정값이며 식품 안전 기준이 아니다. 원본 구매와 조리량은 확인 후 사용한다.",
@@ -31,7 +31,36 @@
           "dependsOn": [],
           "reminderMinutesBefore": 10,
           "connectionAction": "ingredient_review",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "주요 재료의 사용 가능 수량 확인",
+            "기한과 보관상태는 담당자가 확인",
+            "부족 재료를 구매 준비에 반영"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_inventory_daily",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_safety_expiry",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_safety_temp",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "prep-list",
@@ -43,7 +72,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "오늘 메뉴와 목표 인분 확인",
+            "준비 순서와 담당자 확인"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "ingredient-prep",
@@ -55,7 +90,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "원본 레시피와 목표 인분 확인",
+            "사용할 재료와 작업 공간 준비"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "cooking-prep",
@@ -67,7 +108,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "준비한 재료와 장비 확인",
+            "사용자가 확인한 조리 절차 검토"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "opening-check",
@@ -79,9 +126,16 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "누락된 준비 업무 확인",
+            "미완료 사유와 다음 행동 기록"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         }
-      ]
+      ],
+      "guideId": "guide-opening-preparation"
     },
     {
       "id": "closing-checklist",
@@ -100,7 +154,13 @@
           "dependsOn": [],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "남은 업무와 지연 사유 확인",
+            "미룰 업무를 직접 선택"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "ingredient-record",
@@ -112,7 +172,28 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "ingredient_review",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "남은 재료와 부족 품목 확인",
+            "원본 재고 기록에서 수량 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_inventory_daily",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_inventory_weekly",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "cleanup",
@@ -124,7 +205,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "업소의 정리 순서 확인",
+            "담당자가 확인한 위생 절차 수행"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "tomorrow-prep",
@@ -136,7 +223,21 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "meal_plan",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "다음 영업일 메뉴와 예약 확인",
+            "구매가 필요한 항목 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_planning_daily",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "closing-check",
@@ -148,9 +249,16 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "미완료와 다음날 인계 내용 확인",
+            "알림과 다음 일정 확인"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         }
-      ]
+      ],
+      "guideId": "guide-closing-checklist"
     },
     {
       "id": "weekly-menu-planning",
@@ -169,7 +277,21 @@
           "dependsOn": [],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "전주 준비 시간과 미완료 기록 확인",
+            "판매·재고 자료는 권한이 있는 원본에서 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_planning_daily",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "menu-research",
@@ -181,7 +303,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_search",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "후보 레시피와 저장 버전 확인",
+            "업소에 맞는 메뉴를 직접 선택"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "menu-servings",
@@ -193,7 +321,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "meal_plan",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "메뉴와 목표 인분 직접 확인",
+            "예약과 제공 시각 확인"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "purchase-prep",
@@ -205,7 +339,28 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "purchase_prepare",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "현재 재료와 구매 필요량 확인",
+            "단위와 납품 가능일 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_order_daily",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_inventory_weekly",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "work-review",
@@ -217,9 +372,16 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "영업 요일과 제공 시각 확인",
+            "업무 겹침과 순서를 검토 후 확정"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         }
-      ]
+      ],
+      "guideId": "guide-weekly-menu-planning"
     },
     {
       "id": "new-menu-launch",
@@ -238,7 +400,13 @@
           "dependsOn": [],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_search",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "사용할 레시피의 출처와 버전 확인",
+            "메뉴 후보 직접 선택"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "test-cooking",
@@ -250,7 +418,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "시험 조리 조건과 인분 기록",
+            "원본 조리 절차는 담당자가 확인"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "recipe-review",
@@ -262,7 +436,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "시험 결과와 수정 이유 기록",
+            "수정된 레시피 버전 직접 확인"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "cost-review",
@@ -274,7 +454,21 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "cost_review",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "원본에서 단가와 목표 인분 확인",
+            "회원권과 원가 접근 권한 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_cost_weekly",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "launch-prep",
@@ -286,9 +480,16 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "meal_plan",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "첫 제공일과 제공 시각 확인",
+            "필요한 준비 업무 미리보기"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         }
-      ]
+      ],
+      "guideId": "guide-new-menu-launch"
     },
     {
       "id": "purchase-receipt",
@@ -307,7 +508,28 @@
           "dependsOn": [],
           "reminderMinutesBefore": 10,
           "connectionAction": "meal_plan",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "메뉴·예약·판매예상 확인",
+            "필요 재료와 가용 재고 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_inventory_daily",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_planning_daily",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "purchase-quantity",
@@ -319,7 +541,21 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "purchase_prepare",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "구매량과 구매 단위 확인",
+            "대체품과 부족 위험 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_order_daily",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "purchase-request",
@@ -331,7 +567,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "purchase_request",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "구매 후보와 납품일 확인",
+            "원본 구매요청과 승인 권한 확인"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "delivery-check",
@@ -343,7 +585,28 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "purchase_request",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "실제 납품 수량과 품질 확인",
+            "보관상태·기한·누락·반품 필요 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_receiving_daily",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_supplier_issue",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "receipt-record",
@@ -355,9 +618,24 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "purchase_receipt",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "납품과 거래명세 대조",
+            "원본 입고 기록의 저장 결과 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_receiving_docs",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         }
-      ]
+      ],
+      "guideId": "guide-purchase-receipt"
     },
     {
       "id": "reservation-event",
@@ -376,7 +654,21 @@
           "dependsOn": [],
           "reminderMinutesBefore": 10,
           "connectionAction": "meal_plan",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "메뉴와 목표 인분 직접 확인",
+            "예약과 제공 시각 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_planning_seasonal",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "purchase-prep",
@@ -388,7 +680,28 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "purchase_prepare",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "현재 재료와 구매 필요량 확인",
+            "단위와 납품 가능일 확인"
+          ],
+          "sourceRefs": [
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_planning_seasonal",
+              "usage": "adapted_checklist"
+            },
+            {
+              "repository": "guige01-guinsa/ai-schedule",
+              "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+              "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+              "templateId": "rest_order_daily",
+              "usage": "adapted_checklist"
+            }
+          ],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "ingredient-prep",
@@ -400,7 +713,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "원본 레시피와 목표 인분 확인",
+            "사용할 재료와 작업 공간 준비"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "cooking-prep",
@@ -412,7 +731,13 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": "recipe_open",
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "준비한 재료와 장비 확인",
+            "사용자가 확인한 조리 절차 검토"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         },
         {
           "key": "service-check",
@@ -424,9 +749,24 @@
           ],
           "reminderMinutesBefore": 10,
           "connectionAction": null,
-          "parallelAllowed": false
+          "parallelAllowed": false,
+          "checklist": [
+            "제공 준비와 남은 업무 확인",
+            "실제 제공 결과는 담당자가 기록"
+          ],
+          "sourceRefs": [],
+          "completionEvidence": "user_confirmation"
         }
-      ]
+      ],
+      "guideId": "guide-reservation-event"
     }
-  ]
+  ],
+  "designVersion": "1.1",
+  "sourceBaseline": {
+    "repository": "guige01-guinsa/ai-schedule",
+    "commit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+    "packId": "restaurant_buyer",
+    "usage": "adapted_checklists_not_original_user_data"
+  },
+  "defaultAutoScheduleEnabled": false
 }

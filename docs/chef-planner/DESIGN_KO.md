@@ -1,6 +1,6 @@
 # 요리사 일정관리 데이터와 연동 설계
 
-개발 설계 1.0의 기술 기준이다. 구현 파일이나 실행 가능한 DB 마이그레이션이 아니다. 최초 공개 기능과 후속 연동 기능은 아래에서 버전을 구분한다.
+개발 설계 1.1의 기술 기준이다. 원본 `ai-schedule`의 기준 커밋과 재사용 결정은 [소스 검토](SOURCE_REVIEW_KO.md)에 있다. 앱 최초 공개는 1.0이며 구현 파일이나 실행 가능한 DB migration은 아니다. 업무 가이드와 영상 연계는 [별도 설계](GUIDE_AND_VIDEO_KO.md)를 따른다.
 
 ## 시스템 구조
 
@@ -15,7 +15,7 @@ flowchart LR
 
 원본 일정관리에서 새 앱으로 향하는 화살표는 개발 시 코드 재사용이다. 런타임 DB 연결이나 운영 동기화가 아니다. 새 앱에서 레시피 스카우트 DB를 직접 조회하거나 수정하지 않는다.
 
-기본 구성은 Flutter 클라이언트, Riverpod 상태, go_router 라우트, 기기 SQLite 저장, 독립 Supabase Auth·PostgreSQL·RLS와 API다. Firebase와 로컬 알림은 새 앱의 별도 설정을 사용한다. Flutter SDK와 라이브러리 버전은 신규 저장소의 도구 점검 후 고정하고, 레시피 스카우트의 고정 Flutter 3.44.8과 package 버전을 이 설계 작업에서 바꾸지 않는다.
+기본 구성은 Flutter 클라이언트, Riverpod 상태, go_router 라우트, 기기 SQLite 저장, 독립 Supabase Auth·PostgreSQL·RLS·Edge Functions와 원자 처리 RPC다. 원본 Next.js 화면과 관리자 client는 이식하지 않는다. 날짜·회차·추천의 순수 부분은 Dart와 TypeScript로 구현하고 공통 fixture로 비교한다. Firebase와 로컬 알림은 새 앱의 별도 설정을 사용한다. Flutter SDK와 라이브러리 버전은 신규 저장소의 도구 점검 후 고정하고 레시피 스카우트의 고정 Flutter 3.44.8과 package 버전은 유지한다.
 
 ## 저장소와 환경 분리
 
@@ -42,6 +42,7 @@ flowchart LR
 | `/plans/:id` | 한 번 생성한 업무 묶음 |
 | `/tasks/:id` | 업무 상세와 기록 및 연결 |
 | `/improvements` | 개선 제안 |
+| `/guides/:id` | 업무별 사용법·확인 항목·다음 행동 |
 | `/settings/connections` | 연결 앱과 해제 |
 | `/settings/notifications` | 업무 알림과 상태 |
 | `/settings/account` | 동기화와 계정 삭제 |
@@ -54,6 +55,8 @@ flowchart LR
 
 템플릿 버전은 게시 후 변경하지 않는다. 개인 수정은 새 버전으로 저장한다. 생성한 계획에는 템플릿 버전과 업무 스냅샷을 저장하므로 기본 템플릿 업데이트가 이미 확정된 업무를 바꾸지 않는다.
 
+첨부 catalog의 schemaVersion=2는 checklist·sourceRefs·guideId를 포함하는 자료 형식이다. 각 template의 version=1은 해당 업무 구성을 처음 게시하는 버전이며 문서 개정 1.1과 별개다. 클라이언트는 지원하지 않는 schemaVersion을 적용하지 않고 업데이트 안내를 표시한다.
+
 ## 데이터 구조
 
 표의 필드는 핵심 필드다. 모든 사용자 자료는 `id uuid`, `created_at timestamptz`, `updated_at timestamptz`와 필요한 `revision bigint`를 갖는다. 입력 UUID는 형식을 확인하고, 소유권은 인증 세션에서 판정한다.
@@ -64,11 +67,12 @@ flowchart LR
 | workspace_members | workspace_id, user_id, role, status | 최초 owner만 생성, 후속 owner·manager·cook·buyer·viewer |
 | templates | owner_workspace_id nullable, slug, name, category, published | 기본 공개 템플릿과 개인 템플릿 구분 |
 | template_versions | template_id, version, schema_version, anchor_kind, task_spec jsonb | unique(template_id, version), 게시 버전 불변 |
+| template_provenance | template_version_id, task_key nullable, source_repo, source_commit, source_path, source_template_id nullable, adaptation_note | 코드·업무 정의의 출처; 사용자 자료 복제와 구분 |
 | template_preferences | workspace_id, template_id, selected_version, override_revision | 사용자 선택 버전과 알림 선호 |
-| recurrence_rules | workspace_id, template_version_id, weekdays, timezone, local_anchor_time, start_date, end_date, revision | DAILY 또는 WEEKLY, 종료일과 적용 기간 제한 |
+| recurrence_rules | workspace_id, template_version_id, weekdays, timezone, local_anchor_time, anchor_day_offset, start_date, end_date, revision | DAILY 또는 WEEKLY; 기준 영업일 대비 시각의 날짜 offset 0 또는 1 |
 | recurrence_exceptions | rule_id, occurrence_date, action, override_spec | unique(rule_id, occurrence_date), skip 또는 override |
 | plans | workspace_id, template_version_id, rule_id nullable, occurrence_date, anchor_at, status, idempotency_key | 생성한 업무 묶음, unique(workspace_id, idempotency_key) |
-| tasks | workspace_id, plan_id, template_task_key, title, planned_start_at, planned_end_at, status, revision, manual_lock | 사용자 일정의 기준 자료 |
+| tasks | workspace_id, plan_id, template_task_key, title, planned_start_at, planned_end_at, status, postponed_until nullable, postponed_count, work_context, revision, manual_lock | 업무 분류와 소유권 분리; postponed_until은 다시 검토할 시각 |
 | task_dependencies | predecessor_id, successor_id, kind | 같은 계획 안의 finish_to_start, 순환 금지 |
 | task_runs | task_id, user_id, started_at, finished_at, active_seconds, duration_method, interruption_reason | 자동 측정·수동 기록 구분, 기록 삭제·수정 이력 |
 | task_history | workspace_id, task_id, revision, action, actor_id, change_summary | 다른 사용자에게 개인 메모를 노출하지 않음 |
@@ -82,8 +86,13 @@ flowchart LR
 | integration_receipts | connection_id, operation_id, result_id, expires_at | 후속 재시도 중복 방지 |
 | event_outbox | aggregate_id, revision, event_type, payload, available_at, attempts, state | 후속 자료 변경 통지의 전송 대기열 |
 | attribution_events | consent_session_id, event_id, source_app, placement, campaign, event_type, occurred_at | 동의한 최소 이벤트, 업무 내용과 개인 메모 제외 |
+| guide_catalog | guide_id, version, template_id, task_key, lesson_id nullable, destination_key, required_capability, public_steps, feature_facts | 게시 버전 불변, 기존 가이드 내용과 공개 문구의 기준 |
+| guide_progress | workspace_id, user_id, guide_id, guide_version, step_key, state, evidence_kind, verified_at nullable | 사용자 체크와 서버 확인 구분; 원본 거래 변경 없음 |
+| guide_video_links | guide_id, guide_version, campaign_id, content_hash, media_hash, supported_app_versions, state | 후속 관리자 자료, 회원 일정·원가와 분리 |
 
 후속 원본 서비스에는 `partner_grants`와 `partner_event_outbox`를 새 migration으로 추가한다. 기존 migration 파일과 기존 테이블 권한은 변경 목적과 영향 검토 없이 수정하지 않는다.
+
+원본의 `scope=public`은 ‘공적 업무’ 분류다. 새 앱에서는 `work_context=professional/personal`로 표시하고 접근은 workspace_members와 RLS로 판정한다. 최초 개인 workspace의 자료는 해당 소유자에게만 허용한다. 업무 이름·분류·가이드 진행 상태는 공개 권한을 부여하지 않는다.
 
 ### 주요 인덱스와 입력 제한
 
@@ -115,15 +124,23 @@ flowchart LR
 
 업소 시간대 기본값은 Asia/Seoul이다. UTC 시각과 IANA 시간대, 사용자가 선택한 영업일을 함께 저장한다. 사용자가 자정 뒤까지 영업하면 영업일 경계 기본값 04:00을 수정할 수 있다. 화면의 영업일은 날짜별 계획 기준이며 시스템 오늘 날짜와 혼동하지 않도록 표시한다.
 
+처음에는 반복과 자동 생성이 꺼져 있다. 사용자가 영업 요일·제공/개점 시각·마감 시각과 첫 회차를 확인한 뒤 켠다. 월~금 근무나 06:00 이후 시작을 가정하지 않는다. 05:00 준비, 자정 이후 마감, 주말 영업도 지정한 날짜·영업 구간 안에서 계산한다. 첫 출시의 주간 반복은 선택한 요일을 따르며 원본의 ‘첫 근무일’ 규칙과 구분한다. 월간 정산은 후속 monthlyRule에서 월초·월말·휴무 이동을 구조화한다.
+
+반복의 local_anchor_time은 anchor_day_offset과 함께 저장한다. 10월 10일 영업의 다음날 01:00 마감은 occurrence_date=10월 10일, offset=1, 실제 시각=10월 11일 01:00이다. ‘오전 1시’만 받아 전날·다음날을 추측하지 않고 생성 미리보기에서 달력 날짜를 표시한다.
+
 반복은 기기와 서버 모두 최대 14일 앞의 회차를 생성하고, 예약 알림은 7일 범위로 관리한다. 신규 기기 로그인과 앱 재개 때 범위를 보충한다. 종료일은 포함하며 휴무 예외가 일반 반복보다 우선한다. 매주 요일 선택은 해당 시간대의 달력 날짜로 계산한다. DST가 있는 시간대의 존재하지 않는 시각은 다음 유효 시각을 미리보기로 안내하고, 중복되는 시각은 앞선 오프셋을 기본으로 표시해 사용자가 확인한다.
 
 반복 변경 메뉴는 ‘이번만’과 ‘이 날짜부터 이후’를 제공한다. 이후 변경은 새 규칙으로 나누고 이전 회차·완료 이력은 보존한다. 기존 미래 회차의 중복을 취소 표시한 후 새 회차를 생성하며 전체 변경은 재시도 식별자를 가진 원자 작업으로 처리한다. 이미 시작한 업무가 있으면 자동 대체하지 않고 검토를 요청한다.
+
+계획·업무·회차·멱등 결과는 같은 트랜잭션으로 저장하고 취소·skip 회차는 tombstone으로 남겨 재생성을 막는다. 서버 배치는 cursor로 대상 전체를 순회하고 실패 회차만 다시 처리한다. 업무 저장과 회차 기록을 별도 upsert로 나누거나 첫 100개 대상만 반복 처리하는 원본 구현을 그대로 이식하지 않는다.
 
 ## 상태와 완료 처리
 
 계획 상태는 draft, confirmed, cancelled, closed다. draft만 미리보기로 전체 시간을 수정할 수 있다. confirmed의 미시작 업무를 수정하면 revision을 올리고 알림을 다시 예약한다. 모든 업무가 completed, skipped, cancelled 중 하나가 되면 closed로 전환한다.
 
-업무 상태는 pending, in_progress, completed, skipped, cancelled다. blocked와 overdue는 선행 조건과 현재 시각에서 계산하는 화면 표시이며 별도로 저장하지 않는다. pending에서 시작·건너뛰기·취소할 수 있고 in_progress에서 완료할 수 있다. 시작 없이 완료할 때는 실제 시간이 미기록 상태가 되며 예상값을 실제값으로 쓰지 않는다.
+업무 상태는 pending, in_progress, completed, postponed, skipped, cancelled다. blocked와 overdue는 선행 조건과 현재 시각에서 계산하는 화면 표시이며 별도로 저장하지 않는다. pending에서 시작·미루기·건너뛰기·취소할 수 있고 in_progress에서 완료·취소할 수 있다. postponed에서 시작·다시 대기·취소·건너뛰기를 선택한다. 시작 없이 완료할 때는 실제 시간이 미기록 상태가 되며 예상값을 실제값으로 쓰지 않는다.
+
+미루기는 postponed_count를 올리고 예정 알림을 해제한다. postponed_until이 도착하면 앱에서 재검토를 안내하며 자동 시작·자동 완료하지 않는다. 새 날짜·시간 적용은 충돌 미리보기 후 별도 revision으로 반영하고 pending으로 돌아간다. 미룬 업무가 남아 있으면 계획은 자동으로 closed가 되지 않는다.
 
 선행 업무가 미완료면 ‘선행 확인 필요’를 표시한다. 사용자가 사유를 기록하고 진행할 수 있다. 필수 확인 단계의 강제 여부는 향후 업소 관리 기능에서 별도로 결정한다. 업무 건너뛰기는 기본적으로 후속 업무를 자동 완료하지 않는다.
 
@@ -153,9 +170,11 @@ Android 13 이상은 알림 권한을 사용자 행동 문맥에서 요청한다
 
 동일 사용자·템플릿 task key·작업 유형의 최근 20개 유효 기록에서 최소 5개가 있어야 시간 개선을 제안한다. 시작·종료가 있고 1~480분 범위이며 사용자가 장시간 중단·오입력으로 표시하지 않은 기록만 사용한다. 수동 기록과 자동 측정은 혼합 여부를 표시하고, 인분·작업 유형이 달라진 기록은 같은 집단으로 묶지 않는다.
 
-초기 알고리즘은 중앙값을 5분 단위로 올림하고 1회 제안의 변화량을 기존 값의 20퍼센트 이내로 제한한다. 5분 미만 차이에는 제안하지 않는다. 사용자별 7일 이내 같은 제안을 다시 띄우지 않으며 거절 이유를 기록할 수 있다. 최소값과 최대값 경계도 서버에서 검사한다.
+초기 알고리즘은 중앙값을 5분 단위로 올림한 뒤 기존 값의 80~120퍼센트이면서 1~480분인 구간 안의 5분 배수 중 가장 가까운 값을 고른다. 같은 거리이면 변화량이 작은 값을 쓴다. 기존 값과 5분 이상 차이 나는 후보가 없으면 제안하지 않는다. 예를 들어 25분·중앙값 35분은 30분, 10분·중앙값 20분은 제안 없음이다. 사용자별 7일 이내 같은 제안을 다시 띄우지 않으며 경계와 입력 검사는 서버에서도 수행한다.
 
 제안에는 sample_count, sample_window, old_value, proposed_value, method_version을 포함한다. 사용자는 다음 생성부터 적용하거나 특정 미래 계획 변경을 별도로 미리보기·확정한다. 제안 적용은 새 개인 템플릿 버전을 만들며 이전 버전 복원이 가능하다. 실제 시간이 미기록인 완료나 미루기 횟수만으로 조리법·인분·재료량을 바꾸지 않는다.
+
+업무 매칭은 template_task_key와 버전 계보 및 작업량 구간으로 수행한다. 원본의 제목 단어 매칭을 그대로 쓰지 않고 최근 기록은 완료 시각을 기준으로 고른다. 이름이 비슷한 손질·청소나 10인분·100인분을 같은 표본으로 섞지 않는다. 최초 추천은 규칙 기반이며 자연어 해석은 후보 확인을 거친다.
 
 ## 최초 양방향 링크
 
@@ -172,6 +191,14 @@ Android 13 이상은 알림 권한을 사용자 행동 문맥에서 요청한다
 기존 업무별 일정관리와 새 요리사 앱 회원 모두에 적용한다. 서비스별 Auth 사용자·자료는 유지하고 검증한 공통 issuer·subject를 통해 연결한다. 이용 동의 후 최초 레시피 스카우트 이동 때 정상 인증 경로를 거쳐 서버가 기존 Free 정책의 회원 이용 등록을 한 번만 수행한다. 기존 유료 이용권은 그대로 보존한다. 자세한 원본 인증 방식별 선택과 동의·탈퇴는 [회원 설계](MEMBERSHIP_KO.md)를 따른다.
 
 회원 연결에 필요한 service_identity_links, service_consents, service_enrollments, enrollment_receipts는 각 서비스별로 접근을 제한한다. 공동 로그인 provider의 beta 여부와 현재 pinned SDK 호환성은 시험 POC로 확인한다. 운영 provider 활성화는 이 설계 작업에 포함되지 않는다.
+
+원본의 이메일·Google·카카오 로그인과 profile은 확인됐다. 공동 로그인 서버 제공 설정은 별도 POC 대상이다. 서버가 계정 active 상태를 확인하지 못하면 연결·무료 등록을 보류하고 표시용 fallback 값으로 승인하지 않는다. 원본 계정 정지·삭제는 새 로그인과 연결 갱신을 차단하며 기존 서비스별 이용권은 해당 서비스 정책으로 별도 처리한다.
+
+## 업무 가이드와 영상 제작 연결
+
+업무의 template/task key로 guide_catalog를 찾고 기존 레시피 스카우트 lesson·destination에 연결한다. 최초에는 사용자 확인만 저장하고 URL 열기를 실제 업무 완료로 기록하지 않는다. 후속 원본 확인은 동의한 자료의 read-only API로 수행하며 회원권·업소 역할·grant를 함께 검사한다.
+
+홍보 제작 자료는 승인된 공개 guide 버전과 합성 예제에서 만든다. guide_video_links는 게시 범위와 지원 버전을 표시하고 관리자가 승인한 영상만 업무 가이드에서 연다. 일정 DB와 marketing 관리자 권한은 분리한다. 영상 초안·편집·렌더링·예약은 후속 관리자 API와 기존 홍보 파이프라인의 어댑터로 구현하며 회원용 연동 API와 구분한다. 자료 계약·상태·출시 순서는 [가이드와 영상 설계](GUIDE_AND_VIDEO_KO.md)를 따른다.
 
 ## 후속 비공개 자료 연동
 

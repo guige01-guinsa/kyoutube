@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "status": "design_sample_adapter_not_implemented",
+  "guideId": "guide-opening-preparation",
+  "guideVersion": 1,
+  "sourceCommit": null,
+  "format": "portrait_cards_24s",
+  "locale": "ko-KR",
+  "targetApps": [
+    "recipe_scout"
+  ],
+  "publicFeatureFacts": [
+    {
+      "id": "recipe-search-by-ingredients",
+      "source": "supabase/functions/marketing_generate/content.ts",
+      "approvedClaim": "가지고 있는 재료로 레시피 검색",
+      "sourceRepository": "guige01-guinsa/kyoutube",
+      "sourceCommit": "ca33c0afb77930a994bce13544a243c1cec7b1bd"
+    }
+  ],
+  "publicSteps": [
+    "영업 준비에서 사용할 재료를 확인한다.",
+    "레시피 스카우트에서 보유 재료로 레시피를 찾아본다."
+  ],
+  "approvedAssetIds": [],
+  "sampleDraft": {
+    "title": "영업 준비, 재료 확인부터 레시피 찾기까지",
+    "description": "영업 전에 보유 재료를 확인하고 레시피 스카우트에서 사용할 레시피를 찾아보세요. 일정 업무에서 필요한 사용법으로 이어지는 가이드 영상의 제작 예시입니다.",
+    "scenes": [
+      "영업 준비의 첫 단계, 사용할 재료를 확인하세요.",
+      "레시피 스카우트에서 보유 재료로 레시피를 찾아보세요.",
+      "채널 프로필의 링크에서 Recipe Scout 확인"
+    ]
+  },
+  "publishAuthorization": {
+    "contentReviewRequired": true,
+    "privateTestRequired": true,
+    "publicApprovalRequired": true
+  },
+  "excludedInputs": [
+    "member_schedule",
+    "recipe_private_content",
+    "customer_identity",
+    "business_cost",
+    "access_token"
+  ],
+  "notes": "기존 renderer의 3개 문자열 장면 규격에 맞춘 예시. 현재 marketing_generate는 guideId 입력을 지원하지 않으므로 어댑터 개발이 필요하다. 새 요리사 앱 안내는 출시 후 검증된 링크로 별도 제작한다.",
+  "sourceBaselines": {
+    "general_scheduler": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+    "recipe_scout": "ca33c0afb77930a994bce13544a243c1cec7b1bd"
+  },
+  "sourceCommitAssignment": "공개 guide catalog를 게시할 때 그 콘텐츠의 실제 Git commit을 서버에서 기록한다."
+}

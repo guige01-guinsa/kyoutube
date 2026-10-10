@@ -1,0 +1,470 @@
+{
+  "schemaVersion": 1,
+  "status": "design_cases_not_new_app_test_results",
+  "sourceCommit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+  "description": "sourceFixtures는 기준 커밋의 순수 정책 함수 결과를 대조한다. policyChanges는 새 앱 구현에서 검수할 의도된 차이와 보안·가이드·영상 조건이며 아직 제품 구현 테스트가 아니다.",
+  "sourceFixtures": [
+    {
+      "id": "weekday-friday",
+      "function": "isoWeekday",
+      "args": [
+        "2026-10-02"
+      ],
+      "expected": 5
+    },
+    {
+      "id": "calendar-add",
+      "function": "addCalendarDays",
+      "args": [
+        "2026-10-02",
+        3
+      ],
+      "expected": "2026-10-05"
+    },
+    {
+      "id": "seoul-date",
+      "function": "localDateInTimeZone",
+      "args": [
+        "2026-10-01T16:00:00Z",
+        "Asia/Seoul"
+      ],
+      "expected": "2026-10-02"
+    },
+    {
+      "id": "three-dates",
+      "function": "scheduleDates",
+      "args": [
+        "2026-10-02",
+        3
+      ],
+      "expected": [
+        "2026-10-02",
+        "2026-10-03",
+        "2026-10-04"
+      ]
+    },
+    {
+      "id": "daily-open",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "daily",
+          "cadence_type": "daily"
+        },
+        "2026-10-02",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": true
+    },
+    {
+      "id": "daily-closed",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "daily",
+          "cadence_type": "daily"
+        },
+        "2026-10-03",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": false
+    },
+    {
+      "id": "weekly-first",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "weekly",
+          "cadence_type": "weekly"
+        },
+        "2026-10-05",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": true
+    },
+    {
+      "id": "weekly-other",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "weekly",
+          "cadence_type": "weekly"
+        },
+        "2026-10-06",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": false
+    },
+    {
+      "id": "weekly-tuesday-first",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "weekly",
+          "cadence_type": "weekly"
+        },
+        "2026-10-06",
+        [
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      ],
+      "expected": true
+    },
+    {
+      "id": "monthly-start",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "monthly",
+          "cadence_type": "monthly",
+          "cadence_detail": "월 1회"
+        },
+        "2026-10-01",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": true
+    },
+    {
+      "id": "monthly-end",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "monthly",
+          "cadence_type": "monthly",
+          "cadence_detail": "월말"
+        },
+        "2026-10-30",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": true
+    },
+    {
+      "id": "monthly-closed",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "monthly",
+          "cadence_type": "monthly",
+          "cadence_detail": "월말"
+        },
+        "2026-10-31",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": false
+    },
+    {
+      "id": "manual-event",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "event",
+          "cadence_type": "event"
+        },
+        "2026-10-02",
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      "expected": false
+    },
+    {
+      "id": "no-workdays",
+      "function": "templateDueOnDate",
+      "args": [
+        {
+          "id": "daily",
+          "cadence_type": "daily"
+        },
+        "2026-10-02",
+        []
+      ],
+      "expected": false
+    },
+    {
+      "id": "leap-date",
+      "function": "addCalendarDays",
+      "args": [
+        "2028-02-28",
+        1
+      ],
+      "expected": "2028-02-29"
+    }
+  ],
+  "policyChanges": [
+    {
+      "id": "weekly-selected-day",
+      "policy": "selected_weekday",
+      "input": {
+        "businessDate": "2026-10-06",
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "selectedWeekday": 2
+      },
+      "expected": {
+        "newAppDue": true,
+        "sourceWeeklyDue": false
+      }
+    },
+    {
+      "id": "early-preparation",
+      "policy": "offset_with_timezone",
+      "input": {
+        "anchorAt": "2026-10-10T06:30:00+09:00",
+        "startOffsetMinutes": -90,
+        "durationMinutes": 15
+      },
+      "expected": {
+        "startAtUtc": "2026-10-09T20:00:00Z",
+        "endAtUtc": "2026-10-09T20:15:00Z",
+        "businessDate": "2026-10-10"
+      }
+    },
+    {
+      "id": "night-business-date",
+      "policy": "business_day_boundary",
+      "input": {
+        "localDateTime": "2026-10-11T01:00:00+09:00",
+        "timezone": "Asia/Seoul",
+        "boundary": "04:00"
+      },
+      "expected": {
+        "calendarDate": "2026-10-11",
+        "businessDate": "2026-10-10"
+      }
+    },
+    {
+      "id": "automatic-generation-default",
+      "policy": "explicit_opt_in",
+      "input": {
+        "firstUse": true
+      },
+      "expected": {
+        "autoScheduleEnabled": false
+      }
+    },
+    {
+      "id": "invalid-calendar-date",
+      "policy": "strict_input",
+      "input": {
+        "date": "2026-02-30"
+      },
+      "expected": {
+        "code": "INVALID_INPUT"
+      }
+    },
+    {
+      "id": "insufficient-history",
+      "policy": "improvement",
+      "input": {
+        "oldMinutes": 25,
+        "validMinutes": [
+          35,
+          35,
+          35,
+          35
+        ]
+      },
+      "expected": {
+        "proposedMinutes": null
+      }
+    },
+    {
+      "id": "bounded-improvement",
+      "policy": "improvement",
+      "input": {
+        "oldMinutes": 25,
+        "validMinutes": [
+          35,
+          35,
+          35,
+          35,
+          35
+        ]
+      },
+      "expected": {
+        "proposedMinutes": 30
+      }
+    },
+    {
+      "id": "no-grid-change",
+      "policy": "improvement",
+      "input": {
+        "oldMinutes": 10,
+        "validMinutes": [
+          20,
+          20,
+          20,
+          20,
+          20
+        ]
+      },
+      "expected": {
+        "proposedMinutes": null
+      }
+    },
+    {
+      "id": "zero-minutes-excluded",
+      "policy": "improvement",
+      "input": {
+        "oldMinutes": 25,
+        "validMinutes": [
+          0,
+          35,
+          35,
+          35,
+          35
+        ]
+      },
+      "expected": {
+        "proposedMinutes": null
+      }
+    },
+    {
+      "id": "missing-profile",
+      "policy": "membership_authorization",
+      "input": {
+        "authenticated": true,
+        "profileRead": "failed"
+      },
+      "expected": {
+        "enrollment": "pending",
+        "grantCreated": false
+      }
+    },
+    {
+      "id": "professional-classification",
+      "policy": "classification_and_access",
+      "input": {
+        "sourceScope": "public"
+      },
+      "expected": {
+        "workContext": "professional",
+        "visibility": "owner_private"
+      }
+    },
+    {
+      "id": "cancelled-occurrence",
+      "policy": "recurrence_idempotency",
+      "input": {
+        "occurrenceState": "cancelled",
+        "retry": true
+      },
+      "expected": {
+        "createdPlans": 0
+      }
+    },
+    {
+      "id": "postponed-not-terminal",
+      "policy": "task_state",
+      "input": {
+        "states": [
+          "completed",
+          "postponed"
+        ]
+      },
+      "expected": {
+        "planClosed": false
+      }
+    },
+    {
+      "id": "guide-link-is-not-completion",
+      "policy": "guide_progress",
+      "input": {
+        "action": "open_destination"
+      },
+      "expected": {
+        "stepState": "viewed",
+        "taskCompleted": false,
+        "sourceTransactionChanged": false
+      }
+    },
+    {
+      "id": "video-from-public-guide",
+      "policy": "video_source",
+      "input": {
+        "sourceKind": "member_private_schedule"
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "video-edited-after-approval",
+      "policy": "video_approval",
+      "input": {
+        "approvedContentHash": "before",
+        "currentContentHash": "after"
+      },
+      "expected": {
+        "approvalValid": false,
+        "uploadAllowed": false
+      }
+    },
+    {
+      "id": "upload-uncertain",
+      "policy": "video_retry",
+      "input": {
+        "transport": "response_lost_after_upload"
+      },
+      "expected": {
+        "state": "needs_review",
+        "automaticRetry": false
+      }
+    }
+  ]
+}

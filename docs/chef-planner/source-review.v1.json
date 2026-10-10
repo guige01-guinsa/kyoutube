@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "status": "source_review_design_not_deployed",
+  "reviewDate": "2026-10-10",
+  "repository": "guige01-guinsa/ai-schedule",
+  "branch": "main",
+  "sourceCommit": "19879b6aeffe7c10f4e636f26bf7075fbcbd96f3",
+  "latestDevelopmentAt": "2026-10-09T15:36:34+09:00",
+  "files": [
+    {
+      "path": "utils/work-schedule-engine.ts",
+      "gitBlobSha": "a257a3def357e5e561f62293609f970a69b7caa2",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/work-schedule-engine.ts",
+      "lineCount": 187
+    },
+    {
+      "path": "utils/work-schedule-policy.ts",
+      "gitBlobSha": "5541949415cd401d87235711e346ceda5d9f79e3",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/work-schedule-policy.ts",
+      "lineCount": 85
+    },
+    {
+      "path": "utils/work-templates.ts",
+      "gitBlobSha": "2fd74bb541b3e5d7146d1e0b74e8dde915ac415b",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/work-templates.ts",
+      "lineCount": 45
+    },
+    {
+      "path": "utils/recommendation.ts",
+      "gitBlobSha": "42e8664b09d47b8cbcf0412bf30f331a79379e82",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/recommendation.ts",
+      "lineCount": 150
+    },
+    {
+      "path": "utils/recommendation-store.ts",
+      "gitBlobSha": "a7eff811fcea6b0b711c49976af42ba70f2473f1",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/recommendation-store.ts",
+      "lineCount": 111
+    },
+    {
+      "path": "utils/tasks.ts",
+      "gitBlobSha": "d07062ccbd938cc8775ebdd1970f5da428ab9b2b",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/tasks.ts",
+      "lineCount": 341
+    },
+    {
+      "path": "utils/date.ts",
+      "gitBlobSha": "b87f81eb245bbd6ea8d09e1e2fa78c0a02dd4c4d",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/date.ts",
+      "lineCount": 112
+    },
+    {
+      "path": "utils/korean-work-datetime.ts",
+      "gitBlobSha": "a57e54b1a29b62368ae2a8bc53f2450d2dcc39ed",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/korean-work-datetime.ts",
+      "lineCount": 196
+    },
+    {
+      "path": "utils/work-assistant-engine.ts",
+      "gitBlobSha": "70fb791823d2ebe4041e953d42361664abb18443",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/work-assistant-engine.ts",
+      "lineCount": 218
+    },
+    {
+      "path": "utils/work-assistant.ts",
+      "gitBlobSha": "12b924c1ae52fe1e61a337d998933f96b77760cb",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/work-assistant.ts",
+      "lineCount": 169
+    },
+    {
+      "path": "utils/auth/oauth.ts",
+      "gitBlobSha": "e7737bbb08b0d4a77bbcd5688e3b010500af76cd",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/auth/oauth.ts",
+      "lineCount": 46
+    },
+    {
+      "path": "utils/auth/email.ts",
+      "gitBlobSha": "5a16a49d2720dd9c0454d1339d3861d5835657a9",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/auth/email.ts",
+      "lineCount": 20
+    },
+    {
+      "path": "utils/profile.ts",
+      "gitBlobSha": "2e8bfd9bb5645499d14ab3724e139395476d18de",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/profile.ts",
+      "lineCount": 109
+    },
+    {
+      "path": "utils/calendar/sync-policy.ts",
+      "gitBlobSha": "65b695b07d93c9e981838e9eedcf72d576abf97d",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/calendar/sync-policy.ts",
+      "lineCount": 43
+    },
+    {
+      "path": "supabase/migrations/20261002_work_profiles_and_templates.sql",
+      "gitBlobSha": "0cc7ffb1b264b71c893a1315c17d09f92c884570",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/supabase/migrations/20261002_work_profiles_and_templates.sql",
+      "lineCount": 306
+    },
+    {
+      "path": "supabase/migrations/20261002_work_schedule_engine.sql",
+      "gitBlobSha": "e8593346e3c4572b6670ea5c177956811c43c147",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/supabase/migrations/20261002_work_schedule_engine.sql",
+      "lineCount": 55
+    },
+    {
+      "path": "supabase/migrations/20260929_recommendations.sql",
+      "gitBlobSha": "61883d1bac5876ebe1358384a0c18556859170d7",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/supabase/migrations/20260929_recommendations.sql",
+      "lineCount": 209
+    },
+    {
+      "path": "supabase/migrations/20260929_user_profiles.sql",
+      "gitBlobSha": "9af915e9efdfa9374a8810f162d54d93884cddfe",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/supabase/migrations/20260929_user_profiles.sql",
+      "lineCount": 97
+    },
+    {
+      "path": "proxy.ts",
+      "gitBlobSha": "8890af7c710de50190eb88f42004521456b32b96",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/proxy.ts",
+      "lineCount": 35
+    },
+    {
+      "path": "app/auth-gate.tsx",
+      "gitBlobSha": "4b5afc739f748eaec124acd7072d22a66d6f3ef3",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/app/auth-gate.tsx",
+      "lineCount": 217
+    },
+    {
+      "path": "utils/calendar/database-error.ts",
+      "gitBlobSha": "0744e446eb2e39194f9059f26e1420baa0f66561",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/calendar/database-error.ts",
+      "lineCount": 36
+    },
+    {
+      "path": "app/api/work-schedule/generate/route.ts",
+      "gitBlobSha": "fa4e72a247f19c0ebce405ef2a6bbb02cfa4932f",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/app/api/work-schedule/generate/route.ts",
+      "lineCount": 20
+    },
+    {
+      "path": "app/api/cron/work-schedule-generate/route.ts",
+      "gitBlobSha": "6a8ae90d0c7cea0f14b224688056c0769d81746a",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/app/api/cron/work-schedule-generate/route.ts",
+      "lineCount": 25
+    },
+    {
+      "path": "utils/task-classification.ts",
+      "gitBlobSha": "7c8af771a16c8c1d1378776178eada7a4bd03479",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/utils/task-classification.ts",
+      "lineCount": 62
+    },
+    {
+      "path": "tests/work-schedule.test.mjs",
+      "gitBlobSha": "cbe3a8e8c596ce47dd3827d8fb44ec881f258680",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/tests/work-schedule.test.mjs",
+      "lineCount": 63
+    },
+    {
+      "path": "tests/recommendation.test.mjs",
+      "gitBlobSha": "dd0a7a24c2aa7c3508f9844198ca877913decb87",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/tests/recommendation.test.mjs",
+      "lineCount": 233
+    },
+    {
+      "path": "tests/calendar-sync-errors.test.mjs",
+      "gitBlobSha": "b15859ba8d92fbefc787685fac75d837562edaa8",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/tests/calendar-sync-errors.test.mjs",
+      "lineCount": 108
+    },
+    {
+      "path": "package.json",
+      "gitBlobSha": "33ee0cf234cf2aa91ab2059c1a077fa5627703cd",
+      "url": "https://github.com/guige01-guinsa/ai-schedule/blob/19879b6aeffe7c10f4e636f26bf7075fbcbd96f3/package.json",
+      "lineCount": 30
+    }
+  ],
+  "originalRestaurantPack": {
+    "id": "restaurant_buyer",
+    "moduleCount": 8,
+    "templateCount": 16
+  },
+  "runtimeVerification": "pending_test_account_and_db_deployment_check"
+}
