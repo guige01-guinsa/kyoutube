@@ -44,3 +44,10 @@ K-youtube is an Android-first AI cooking platform. The Flutter app uses Riverpod
 - Never run `supabase db reset`, `supabase db push`, a production migration, a release build, or a deployment without explicit user approval.
 - Do not change Android signing keys, Firebase/Supabase project configuration, package versions, or product behaviour unless the task requires it.
 - After changes, run `flutter analyze` and `flutter test`; report failures rather than making unrelated product-code fixes.
+
+## Production web release safety
+
+- Read `docs/WEB_RELEASE_SAFETY_KO.md` before production web builds or deployment.
+- Require explicit user approval and the full approved Git commit. Use the build-production-web.ps1 and deploy-production-web.ps1 wrappers with -ExpectedCommit.
+- Never bypass failed quality checks or reuse unsealed builds. Version labels alone do not prove source equivalence.
+- Preserve v99 artifacts and recovery evidence during cleanup. Do not delete credentials or product assets as incidental cleanup.

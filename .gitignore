@@ -104,3 +104,7 @@ backups/
 /store-assets/
 /analyze*.txt
 /dart-analyze.*
+
+# Python release verification cache
+__pycache__/
+*.pyc
