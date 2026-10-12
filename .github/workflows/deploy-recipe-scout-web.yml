@@ -2,6 +2,11 @@ name: Deploy Recipe Scout Web
 
 on:
   workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Full 40-character approved Git commit to deploy
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -9,36 +14,67 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_COMMIT: ${{ inputs.expected_commit }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Checkout approved source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_commit }}
+          fetch-depth: 0
+      - name: Confirm approved source
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+          test "$(printf '%s' "$EXPECTED_COMMIT" | wc -c)" -eq 40
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.44.8'
           cache: true
-      - name: Enable Flutter web platform
+      - name: Enable Flutter web and fetch packages
         run: |
           flutter config --enable-web
-          if [ ! -d web ]; then
-            flutter create . --platforms web
-          fi
-      - name: Fetch packages
-        run: flutter pub get
-      - name: Build production web app
+          flutter pub get
+      - name: Write verified production defines
         env:
           SUPABASE_URL_PRODUCTION: ${{ secrets.SUPABASE_URL_PRODUCTION }}
           SUPABASE_ANON_KEY_PRODUCTION: ${{ secrets.SUPABASE_ANON_KEY_PRODUCTION }}
         run: |
           test -n "$SUPABASE_URL_PRODUCTION"
           test -n "$SUPABASE_ANON_KEY_PRODUCTION"
-          flutter build web --release \
-            --dart-define=APP_ENV=production \
-            --dart-define=SUPABASE_URL_PRODUCTION="$SUPABASE_URL_PRODUCTION" \
-            --dart-define=SUPABASE_ANON_KEY_PRODUCTION="$SUPABASE_ANON_KEY_PRODUCTION" \
-            --dart-define=YOUTUBE_SEARCH_ENABLED=true
-      - name: Deploy Firebase Hosting live site
+          umask 077
+          {
+            printf '%s\n' 'APP_ENV=production'
+            printf 'SUPABASE_URL_PRODUCTION=%s\n' "$SUPABASE_URL_PRODUCTION"
+            printf 'SUPABASE_ANON_KEY_PRODUCTION=%s\n' "$SUPABASE_ANON_KEY_PRODUCTION"
+          } > .env.production
+      - name: Verify production source and inputs
+        run: |
+          python3 tools/release/web_release_guard.py source --expected-commit "$EXPECTED_COMMIT"
+          python3 tools/release/verify_web_release.py --defines .env.production --preflight
+      - name: Analyze and test
+        run: |
+          flutter analyze
+          flutter test
+          python3 tools/release/web_release_guard.py record-quality --expected-commit "$EXPECTED_COMMIT"
+      - name: Build and seal production web app
+        run: |
+          version="$(awk '/^version:/{print $2; exit}' pubspec.yaml)"
+          test -n "$version"
+          flutter build web --release --csp --no-source-maps --no-wasm-dry-run --no-web-resources-cdn --output=build/web-production --dart-define-from-file=.env.production --dart-define=APP_ENV=production --dart-define=APP_BUILD="${version}-web-$(date -u +%Y%m%d)"
+          python3 tools/release/verify_web_release.py --defines .env.production
+          python3 tools/release/web_release_guard.py seal --expected-commit "$EXPECTED_COMMIT"
+      - name: Deploy sealed Firebase Hosting release
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_RECIPE_SCOUT_WORKSPACE }}
           channelId: live
           projectId: korea-01
+      - name: Verify published release
+        run: python3 tools/release/web_release_guard.py remote --expected-commit "$EXPECTED_COMMIT"
