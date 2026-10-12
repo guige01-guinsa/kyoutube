@@ -406,7 +406,7 @@ void main() {
     );
     expect(find.text('무엇을 만들어 볼까요?'), findsOneWidget);
     expect(find.byKey(const Key('classic-card-bibimbap')), findsOneWidget);
-    expect(find.text('한국어 영상 · 하루한끼'), findsWidgets);
+    expect(find.text('추천 영상 · 하루한끼'), findsWidgets);
     expect(find.byTooltip('북마크'), findsNothing);
     expect(find.byTooltip('더보기'), findsOneWidget);
   });
