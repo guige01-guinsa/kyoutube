@@ -2,6 +2,11 @@ name: Recipe Scout Marketing
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Render and validate only; do not upload or access credentials'
+        type: boolean
+        default: true
   schedule:
     - cron: '17 * * * *'
 
@@ -25,16 +30,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/marketing/requirements.txt
       - name: Install renderer
         timeout-minutes: 5
         run: |
-          python -m pip install --only-binary=:all: Pillow==11.3.0 imageio-ffmpeg==0.6.0
+          python -m pip install --only-binary=:all: -r tools/marketing/requirements.txt
           mkdir -p "$RUNNER_TEMP/marketing-bin"
           ln -s "$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" "$RUNNER_TEMP/marketing-bin/ffmpeg"
           echo "$RUNNER_TEMP/marketing-bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/marketing-bin/ffmpeg" -version
           python -c "from PIL import ImageFont; ImageFont.truetype('assets/fonts/NanumGothic-Regular.ttf', 52)"
+      - name: Validate 24-second video without upload credentials
+        timeout-minutes: 3
+        env:
+          MARKETING_FONT: ${{ github.workspace }}/assets/fonts/NanumGothic-Regular.ttf
+        run: python tools/marketing/render_test.py
       - name: Publish approved due campaign and collect video metrics
+        if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
         env:
           MARKETING_ENABLED: 'true'
           MARKETING_PRIVACY: ${{ vars.MARKETING_PRIVACY || 'private' }}

@@ -34,15 +34,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/marketing/requirements.txt
       - name: Install renderer and database test tools
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-noto-cjk
-          python -m pip install Pillow==11.3.0
+          python -m pip install --only-binary=:all: -r tools/marketing/requirements.txt
+          mkdir -p "$RUNNER_TEMP/marketing-bin"
+          ln -s "$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" "$RUNNER_TEMP/marketing-bin/ffmpeg"
+          echo "$RUNNER_TEMP/marketing-bin" >> "$GITHUB_PATH"
           npm install --prefix /tmp/marketing-db @electric-sql/pglite@0.3.14
       - name: Database security and queue behavior
         env:
           MARKETING_PGLITE_PATH: /tmp/marketing-db/node_modules/@electric-sql/pglite/dist/index.js
         run: node tools/marketing/database.test.mjs
       - name: Render smoke test
+        timeout-minutes: 3
+        env:
+          MARKETING_FONT: ${{ github.workspace }}/assets/fonts/NanumGothic-Regular.ttf
         run: python tools/marketing/render_test.py

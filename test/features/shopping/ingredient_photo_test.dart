@@ -29,16 +29,17 @@ void main() {
     expect(IngredientPhoto.find('소고기 불고기용')?.id, 'beef-cuts');
     expect(IngredientPhoto.find('냉동 새우')?.id, 'seafood');
     expect(IngredientPhoto.find('부침가루')?.id, 'grains');
+    // These are explicit catalog aliases, not substring matches for potato.
+    expect(IngredientPhoto.find('감자전분')?.id, 'grains');
+    expect(IngredientPhoto.find('고구마')?.id, 'roots');
     for (final name in [
       '양파즙',
       '마늘소스',
-      '감자전분',
       '토마토케첩',
       '간장게장',
       '달걀국',
       '순두부',
       '닭발',
-      '고구마',
       '미등록재료'
     ]) {
       expect(IngredientPhoto.find(name), isNull, reason: name);
