@@ -26,14 +26,19 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install renderer
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-noto-cjk
-          python -m pip install Pillow==11.3.0
+          python -m pip install --only-binary=:all: Pillow==11.3.0 imageio-ffmpeg==0.6.0
+          mkdir -p "$RUNNER_TEMP/marketing-bin"
+          ln -s "$(python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')" "$RUNNER_TEMP/marketing-bin/ffmpeg"
+          echo "$RUNNER_TEMP/marketing-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/marketing-bin/ffmpeg" -version
+          python -c "from PIL import ImageFont; ImageFont.truetype('assets/fonts/NanumGothic-Regular.ttf', 52)"
       - name: Publish approved due campaign and collect video metrics
         env:
           MARKETING_ENABLED: 'true'
           MARKETING_PRIVACY: ${{ vars.MARKETING_PRIVACY || 'private' }}
+          MARKETING_FONT: ${{ github.workspace }}/assets/fonts/NanumGothic-Regular.ttf
           SUPABASE_URL: ${{ secrets.MARKETING_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.MARKETING_SUPABASE_SERVICE_ROLE_KEY }}
           YOUTUBE_CLIENT_ID: ${{ secrets.MARKETING_YOUTUBE_CLIENT_ID }}
