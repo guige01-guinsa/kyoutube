@@ -11,10 +11,9 @@ import 'package:k_youtube/core/widgets/official_channels_card.dart';
 
 void main() {
   setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
     await (FontLoader('MaterialIcons')
-          ..addFont(Future.value(ByteData.sublistView(await File(
-                  '.fvm/flutter_sdk/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf')
-              .readAsBytes()))))
+          ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf')))
         .load();
     for (final name in ['Roboto', 'Ahem']) {
       await (FontLoader(name)
@@ -56,8 +55,10 @@ void main() {
             key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
         final image = await boundary.toImage();
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        await File('.artifacts/official-channels-preview-${width.toInt()}.png')
-            .writeAsBytes(bytes!.buffer.asUint8List());
+        final output =
+            File('.artifacts/official-channels-preview-${width.toInt()}.png');
+        await output.parent.create(recursive: true);
+        await output.writeAsBytes(bytes!.buffer.asUint8List());
         image.dispose();
       });
     });

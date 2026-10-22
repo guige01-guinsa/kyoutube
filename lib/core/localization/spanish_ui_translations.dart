@@ -6,6 +6,61 @@ import 'shopping_market_translations.dart';
 const spanishUiTranslations = <String, String>{
   ...spanishCatalog,
   ...shoppingMarketSpanish,
+  'Uploading': 'Subiendo',
+  'Marketing automation': 'Automatización de marketing',
+  'Review marketing drafts and schedule uploads':
+      'Revisa borradores de marketing y programa las subidas',
+  'Could not complete the request. Check access, connection and schedule.':
+      'No se pudo completar la solicitud. Revisa el acceso, la conexión y la programación.',
+  'Reviewed · approve schedule': 'Revisado · aprobar programación',
+  'Have you reviewed the title, description and all three scenes?\n\n':
+      '¿Revisaste el título, la descripción y las tres escenas?\n\n',
+  'Have you reviewed the title, description and all three scenes?':
+      '¿Revisaste el título, la descripción y las tres escenas?',
+  'The upload worker will run. Videos are silent 24-second cards.':
+      'Se ejecutará la tarea de subida. Los videos son tarjetas sin sonido de 24 segundos.',
+  'Visibility follows the channel settings.':
+      'La visibilidad depende de la configuración del canal.',
+  'Approve': 'Aprobar',
+  'Could not open the video page.': 'No se pudo abrir la página del video.',
+  'Deploy marketing and configure administrator access.':
+      'Activa la función de marketing y configura el acceso de administrador.',
+  'Available to marketing administrators only.':
+      'Disponible solo para administradores de marketing.',
+  'Recipe Scout draft → review and approve schedule → render and upload':
+      'Borrador de Recipe Scout → revisar y aprobar programación → crear video y subir',
+  'Check the production settings before enabling draft generation and uploads.':
+      'Revisa la configuración de producción antes de activar la generación de borradores y las subidas.',
+  'Marketing topic': 'Tema de marketing',
+  'Search cooking videos': 'Buscar videos de cocina',
+  'Find recipes using available ingredients':
+      'Buscar recetas con los ingredientes disponibles',
+  'Working…': 'Procesando…',
+  'Generate an AI marketing draft': 'Generar un borrador de marketing con IA',
+  'Up to five drafts per day. Schedule at least five minutes ahead.':
+      'Hasta cinco borradores al día. Programa con al menos cinco minutos de anticipación.',
+  'The worker runs about once an hour and may be delayed.':
+      'La tarea se ejecuta aproximadamente una vez por hora y puede demorarse.',
+  'Shorts direct viewers to the app link on the channel profile.':
+      'Los Shorts indican a los espectadores el enlace de la app en el perfil del canal.',
+  'Views and likes do not measure app installations.':
+      'Las vistas y los Me gusta no miden las instalaciones de la app.',
+  'Could not load campaigns. Refresh to try again.':
+      'No se pudieron cargar las campañas. Actualiza para intentarlo de nuevo.',
+  'Create your first marketing draft.': 'Crea tu primer borrador de marketing.',
+  'Could not load content. Please refresh.':
+      'No se pudo cargar el contenido. Actualiza la página.',
+  'Views and likes are separate from app installations.':
+      'Las vistas y los Me gusta son métricas distintas de las instalaciones de la app.',
+  'Select all including existing items':
+      'Seleccionar todo, incluidos los elementos existentes',
+  'Awaiting review': 'Pendiente de revisión',
+  'Uploaded': 'Subido',
+  'Check the result on the channel': 'Revisa el resultado en el canal',
+  'Scene 1 · 8 seconds\n1': 'Escena 1 · 8 segundos\n1',
+  'View on YouTube': 'Ver en YouTube',
+  'Check the channel upload result and settings. Automatic retries are disabled to avoid duplicates.':
+      'Revisa el resultado de la subida y la configuración del canal. Los reintentos automáticos están desactivados para evitar duplicados.',
   'Paste from clipboard': 'Pegar desde el portapapeles',
   'Retry duplicate check': 'Reintentar la comprobación de duplicados',
   'Duplicate check required': 'Se requiere comprobar duplicados',

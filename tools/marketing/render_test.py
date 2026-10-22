@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
-import subprocess
 import tempfile
+import imageio_ffmpeg
 from render import render
 
 with tempfile.TemporaryDirectory() as directory:
@@ -13,11 +13,18 @@ with tempfile.TemporaryDirectory() as directory:
         '채널 프로필의 링크에서 Recipe Scout 확인',
     ]}), encoding='utf-8')
     render(source, output)
-    info = json.loads(subprocess.check_output(['ffprobe', '-v', 'quiet', '-print_format', 'json',
-                                               '-show_streams', '-show_format', str(output)]))
-    video = next(s for s in info['streams'] if s['codec_type'] == 'video')
-    assert (video['width'], video['height']) == (720, 1280)
-    assert video['pix_fmt'] == 'yuv420p'
-    assert 23.9 <= float(info['format']['duration']) <= 24.1
+    frames = imageio_ffmpeg.read_frames(str(output))
+    try:
+        video = next(frames)
+    finally:
+        frames.close()
+    assert video['source_size'] == (720, 1280)
+    assert video['codec'] == 'h264'
+    assert video['pix_fmt'].split('(')[0] == 'yuv420p'
+    assert video['fps'] == 24
+    assert 23.9 <= video['duration'] <= 24.1
+    frame_count, seconds = imageio_ffmpeg.count_frames_and_secs(str(output))
+    assert frame_count == 576
+    assert 23.9 <= seconds <= 24.1
     assert output.stat().st_size > 1000
     print('Render passed: 720×1280, H.264, 24 seconds.')
