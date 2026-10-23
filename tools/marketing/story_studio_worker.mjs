@@ -10,7 +10,9 @@ import { researchRequest, decodeResearch } from './story_studio_research.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const apiCodes = new Set(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found',
-  'permission_denied','insufficient_permissions','invalid_request_error','unsupported_parameter','unsupported_value']);
+  'permission_denied','insufficient_permissions','invalid_request_error','unsupported_parameter','unsupported_value',
+  'missing_scope','missing_scope_model_request','missing_scope_responses_write','missing_scope_responses_read',
+  'missing_scope_threads_read','missing_scope_threads_write','missing_scope_images_write']);
 export async function openaiJson(response, stage, limit = 200000) {
   if (!['responses','chat','images'].includes(stage)) throw new Error('invalid_api_stage');
   if (!response.ok) {
@@ -20,6 +22,19 @@ export async function openaiJson(response, stage, limit = 200000) {
       const error = JSON.parse(body)?.error;
       if (apiCodes.has(error?.code)) code = error.code;
       else if (apiCodes.has(error?.type)) code = error.type;
+      // Some 401 responses have no specific code. Classify locally; never log the message.
+      if ([401,403].includes(response.status) && ['unknown','invalid_request_error','missing_scope'].includes(code)) {
+        const message = typeof error?.message === 'string' ? error.message : '';
+        if (/incorrect api key|invalid api key|api key.*(?:expired|revoked)/i.test(message)) code='invalid_api_key';
+        else if (/insufficient permissions|missing scopes/i.test(message)) {
+          code='insufficient_permissions';
+          const missing=message.match(/missing scopes:\s*([a-z._, ]+)/i)?.[1] ?? '';
+          const scopes=[['model.request','model_request'],['api.responses.write','responses_write'],
+            ['api.responses.read','responses_read'],['api.threads.read','threads_read'],
+            ['api.threads.write','threads_write'],['api.images.write','images_write']];
+          for (const [scope,label] of scopes) if (missing.split(/[ ,]+/).map(s=>s.replace(/\.$/,'')).includes(scope)) {code=`missing_scope_${label}`;break;}
+        }
+      }
     } catch { /* Never echo provider bodies, credentials, prompts or arbitrary error text. */ }
     throw new Error(`openai_${stage}_http_${response.status}_${code}`);
   }

@@ -33,6 +33,17 @@ test('manual probe is disabled by default and stops on first rejected request wi
   await assert.rejects(probeStudio({...env,STORY_STUDIO_DRY_RUN:'false'},fetcher),{message:'openai_responses_http_429_insufficient_quota'});
   assert.equal(calls,1);
 });
+test('generic 401 responses distinguish missing scope from invalid key without exposing message',async()=>{
+  const cases=[
+    ['You have insufficient permissions. Missing scopes: api.responses.write. Private context follows.','missing_scope_responses_write'],
+    ['You have insufficient permissions. Missing scopes: model.request.','missing_scope_model_request'],
+    ['You have insufficient permissions. Missing scopes: private.unknown.','insufficient_permissions'],
+    ['Incorrect API key provided: sk-test-secret','invalid_api_key'],
+    ['Unexpected private context','invalid_request_error'],
+  ];
+  for(const [message,code] of cases) await assert.rejects(openaiJson(Response.json({error:{type:'invalid_request_error',code:null,message}},{status:401}),'responses'),
+    {message:`openai_responses_http_401_${code}`});
+});
 test('successful probe touches only two text endpoints, with bounded output and no stored content',async()=>{
   const paths=[];
   const result=await probeStudio({STORY_STUDIO_PREFLIGHT:'true',STORY_STUDIO_DRY_RUN:'false',OPENAI_API_KEY:'sk-test-only',OPENAI_MARKETING_MODEL:'configured-text'},async(url,options)=>{
