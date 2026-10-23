@@ -26,12 +26,50 @@ test('manual probe is disabled by default and stops on first rejected request wi
     calls++; assert.equal(url,'https://api.openai.com/v1/responses');
     const body=JSON.parse(options.body);
     assert.equal(body.max_tool_calls,1); assert.equal(body.max_output_tokens,512);
+    assert.equal(body.input[0].content,researchRequest(snapshot).input[0].content);
     return Response.json({error:{code:'insufficient_quota'}},{status:429});
   };
   const env={STORY_STUDIO_PREFLIGHT:'true',OPENAI_API_KEY:'sk-test-only',OPENAI_MARKETING_MODEL:'configured-text'};
   assert.deepEqual(await probeStudio(env,fetcher),{disabled:true}); assert.equal(calls,0);
   await assert.rejects(probeStudio({...env,STORY_STUDIO_DRY_RUN:'false'},fetcher),{message:'openai_responses_http_429_insufficient_quota'});
   assert.equal(calls,1);
+});
+test('model access diagnostics never echo project ids, model names or arbitrary provider text',async()=>{
+  for(const [message,expected] of [
+    ['Project private-project does not have access to model configured-text','project_model_denied'],
+    ['The model configured-text does not exist','model_not_found_requested'],
+    ['The model gpt-private-other does not exist','model_not_found_other'],
+    ['Unrecognized private error','model_not_found'],
+  ]) await assert.rejects(openaiJson(Response.json({error:{code:'model_not_found',message}},{status:403}),
+    'responses',200000,'configured-text'),{message:`openai_responses_http_403_${expected}`});
+});
+
+test('production draft transport keeps configured model and credentials separate from database requests',async()=>{
+  const env={STORY_STUDIO_ENABLED:'true',STORY_STUDIO_DRY_RUN:'false',
+    SUPABASE_URL:'https://test.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'database-test',
+    OPENAI_API_KEY:'sk-test-only',OPENAI_MARKETING_MODEL:'configured-text',OPENAI_STORY_IMAGE_MODEL:'configured-image',
+    YOUTUBE_CLIENT_ID:'unused',YOUTUBE_CLIENT_SECRET:'unused',YOUTUBE_REFRESH_TOKEN:'unused',YOUTUBE_CHANNEL_ID:'unused'};
+  const calls=[];
+  const result=await runStudio(env,async(url,options)=>{
+    const parsed=new URL(url); const body=JSON.parse(options.body); calls.push(parsed.hostname);
+    if(parsed.hostname==='test.supabase.co') {
+      assert.equal(options.headers.Authorization,'Bearer database-test');
+      if(body.p_action==='claim') return Response.json({...base,kind:'draft'});
+      if(body.p_action==='complete') assert.equal(body.p.result.title,creative.title);
+      return Response.json({});
+    }
+    assert.equal(parsed.hostname,'api.openai.com');
+    assert.equal(options.headers.Authorization,'Bearer sk-test-only');
+    assert.equal(body.model,env.OPENAI_MARKETING_MODEL);
+    if(parsed.pathname==='/v1/responses') {
+      assert.equal(body.max_output_tokens,3500); assert.equal(body.store,false);
+      return Response.json(researchResponse);
+    }
+    assert.equal(parsed.pathname,'/v1/chat/completions');
+    return Response.json(completion(creative));
+  });
+  assert.deepEqual(result,{completed:id,kind:'draft'});
+  assert.equal(calls.filter(x=>x==='api.openai.com').length,2);
 });
 test('generic 401 responses distinguish missing scope from invalid key without exposing message',async()=>{
   const cases=[

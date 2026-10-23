@@ -12,8 +12,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const apiCodes = new Set(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found',
   'permission_denied','insufficient_permissions','invalid_request_error','unsupported_parameter','unsupported_value',
   'missing_scope','missing_scope_model_request','missing_scope_responses_write','missing_scope_responses_read',
-  'missing_scope_threads_read','missing_scope_threads_write','missing_scope_images_write']);
-export async function openaiJson(response, stage, limit = 200000) {
+  'missing_scope_threads_read','missing_scope_threads_write','missing_scope_images_write',
+  'project_model_denied','model_not_found_requested','model_not_found_other']);
+export async function openaiJson(response, stage, limit = 200000, requestedModel = '') {
   if (!['responses','chat','images'].includes(stage)) throw new Error('invalid_api_stage');
   if (!response.ok) {
     let code = 'unknown';
@@ -22,6 +23,12 @@ export async function openaiJson(response, stage, limit = 200000) {
       const error = JSON.parse(body)?.error;
       if (apiCodes.has(error?.code)) code = error.code;
       else if (apiCodes.has(error?.type)) code = error.type;
+      if (code === 'model_not_found') {
+        const message = typeof error?.message === 'string' ? error.message : '';
+        if (/does not have access to model|model[^.]*not allowed|not allowed[^.]*model/i.test(message)) code='project_model_denied';
+        else if (requestedModel && message.includes(requestedModel)) code='model_not_found_requested';
+        else if (/\bgpt-[a-z0-9.-]+\b/i.test(message)) code='model_not_found_other';
+      }
       // Some 401 responses have no specific code. Classify locally; never log the message.
       if ([401,403].includes(response.status) && ['unknown','invalid_request_error','missing_scope'].includes(code)) {
         const message = typeof error?.message === 'string' ? error.message : '';
@@ -53,10 +60,13 @@ export async function probeStudio(env = process.env, fetcher = fetch) {
   if (env.STORY_STUDIO_PREFLIGHT !== 'true' || env.STORY_STUDIO_DRY_RUN !== 'false') return {disabled:true};
   if (!env.OPENAI_API_KEY || !env.OPENAI_MARKETING_MODEL) throw new Error('missing_studio_configuration');
   if (!/^sk-[A-Za-z0-9_-]+$/.test(env.OPENAI_API_KEY)) throw new Error('invalid_key_format');
+  // Use the production request builder, but keep the access probe's small limits.
+  // HTTP acceptance is not a completed research memo or production-quality draft.
+  const researchProbe = {...researchRequest({text_model:env.OPENAI_MARKETING_MODEL,
+    brief:'Find official Korean tourism and culinary institution sources about bibimbap.'}),
+    max_output_tokens:512,max_tool_calls:1};
   const requests = [
-    ['responses','responses',{model:env.OPENAI_MARKETING_MODEL,store:false,max_output_tokens:512,max_tool_calls:1,
-      tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',
-      input:'Find one official Korean tourism source about bibimbap. Reply with its title only.'}],
+    ['responses','responses',researchProbe],
     ['chat','chat/completions',{model:env.OPENAI_MARKETING_MODEL,max_completion_tokens:128,
       messages:[{role:'user',content:'Reply with an object whose ok field is true.'}],
       response_format:{type:'json_schema',json_schema:{name:'connection_check',strict:true,
@@ -66,7 +76,7 @@ export async function probeStudio(env = process.env, fetcher = fetch) {
   for (const [stage,path,body] of requests) {
     await openaiJson(await fetcher(`https://api.openai.com/v1/${path}`,{method:'POST',
       headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},
-      body:JSON.stringify(body),signal:AbortSignal.timeout(90000)}),stage);
+      body:JSON.stringify(body),signal:AbortSignal.timeout(90000)}),stage,200000,body.model);
     checked.push(stage);
   }
   return {api_access_checked:checked,images_checked:false,uploaded:false};
@@ -145,7 +155,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
     directory = await mkdtemp(join(tmpdir(), 'recipe-story-studio-'));
     const api = async (path, body, limit, timeout) => openaiJson(await fetcher(`https://api.openai.com/v1/${path}`, {
       method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) }), path === 'responses' ? 'responses' : path.startsWith('images/') ? 'images' : 'chat', limit);
+      body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) }), path === 'responses' ? 'responses' : path.startsWith('images/') ? 'images' : 'chat', limit, body.model);
     const storage = path => new URL(`/storage/v1/object/story-previews/${path}`, root);
     const result = await executeJob(job, {
       check: () => rpc('check', lease),
