@@ -6,6 +6,10 @@ on:
         description: 'Validate locally only; no paid API calls or uploads'
         type: boolean
         default: true
+      preflight:
+        description: 'Manual small text API access test only; no queue, images or uploads'
+        type: boolean
+        default: false
   schedule:
     - cron: '7,17,27,37,47,57 * * * *'
 permissions:
@@ -14,8 +18,25 @@ concurrency:
   group: recipe-scout-story-studio
   cancel-in-progress: false
 jobs:
+  api-preflight:
+    if: github.event_name == 'workflow_dispatch' && inputs.preflight && !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test tools/marketing/story_studio.test.mjs
+      - name: Check scoped text API access without queue or upload credentials
+        env:
+          STORY_STUDIO_PREFLIGHT: 'true'
+          STORY_STUDIO_DRY_RUN: 'false'
+          OPENAI_API_KEY: ${{ secrets.STORY_STUDIO_OPENAI_API_KEY }}
+          OPENAI_MARKETING_MODEL: ${{ vars.OPENAI_MARKETING_MODEL }}
+        run: node tools/marketing/story_studio_worker.mjs
   approved-job:
-    if: vars.STORY_STUDIO_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    if: (vars.STORY_STUDIO_ENABLED == 'true' || github.event_name == 'workflow_dispatch') && !inputs.preflight
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

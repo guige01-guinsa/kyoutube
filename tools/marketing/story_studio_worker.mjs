@@ -9,6 +9,53 @@ import { resolveChannel } from './worker.mjs';
 import { researchRequest, decodeResearch } from './story_studio_research.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const apiCodes = new Set(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found',
+  'permission_denied','insufficient_permissions','invalid_request_error','unsupported_parameter','unsupported_value']);
+export async function openaiJson(response, stage, limit = 200000) {
+  if (!['responses','chat','images'].includes(stage)) throw new Error('invalid_api_stage');
+  if (!response.ok) {
+    let code = 'unknown';
+    try {
+      const body = (await response.text()).slice(0, 16384);
+      const error = JSON.parse(body)?.error;
+      if (apiCodes.has(error?.code)) code = error.code;
+      else if (apiCodes.has(error?.type)) code = error.type;
+    } catch { /* Never echo provider bodies, credentials, prompts or arbitrary error text. */ }
+    throw new Error(`openai_${stage}_http_${response.status}_${code}`);
+  }
+  return json(response, limit);
+}
+function safeFailure(error) {
+  const match = /^openai_(responses|chat|images)_http_[45][0-9]{2}_([a-z_]+)$/.exec(error?.message ?? '');
+  if (match && (apiCodes.has(match[2]) || match[2] === 'unknown')) return error.message;
+  if (['missing_studio_configuration','invalid_key_format'].includes(error?.message)) return error.message;
+  if (['ETIMEDOUT','ENOTFOUND','ECONNRESET','ECONNREFUSED','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','ERR_INVALID_CHAR'].includes(error?.cause?.code)) return `transport_${error.cause.code.toLowerCase()}`;
+  if (['TimeoutError','AbortError','TypeError','SyntaxError'].includes(error?.name)) return `runtime_${error.name.toLowerCase()}`;
+  return 'studio_job_needs_review';
+}
+// Manual credential/model probe: no database access, image generation or upload, no retries.
+export async function probeStudio(env = process.env, fetcher = fetch) {
+  if (env.STORY_STUDIO_PREFLIGHT !== 'true' || env.STORY_STUDIO_DRY_RUN !== 'false') return {disabled:true};
+  if (!env.OPENAI_API_KEY || !env.OPENAI_MARKETING_MODEL) throw new Error('missing_studio_configuration');
+  if (!/^sk-[A-Za-z0-9_-]+$/.test(env.OPENAI_API_KEY)) throw new Error('invalid_key_format');
+  const requests = [
+    ['responses','responses',{model:env.OPENAI_MARKETING_MODEL,store:false,max_output_tokens:512,max_tool_calls:1,
+      tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',
+      input:'Find one official Korean tourism source about bibimbap. Reply with its title only.'}],
+    ['chat','chat/completions',{model:env.OPENAI_MARKETING_MODEL,max_completion_tokens:128,
+      messages:[{role:'user',content:'Reply with an object whose ok field is true.'}],
+      response_format:{type:'json_schema',json_schema:{name:'connection_check',strict:true,
+        schema:{type:'object',properties:{ok:{type:'boolean'}},required:['ok'],additionalProperties:false}}}}],
+  ];
+  const checked=[];
+  for (const [stage,path,body] of requests) {
+    await openaiJson(await fetcher(`https://api.openai.com/v1/${path}`,{method:'POST',
+      headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify(body),signal:AbortSignal.timeout(90000)}),stage);
+    checked.push(stage);
+  }
+  return {api_access_checked:checked,images_checked:false,uploaded:false};
+}
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 async function json(response, limit = 200000) {
   if (!response.ok) throw new Error('remote_request_failed');
@@ -81,9 +128,9 @@ export async function runStudio(env = process.env, fetcher = fetch) {
   try {
     if (job.snapshot.text_model !== env.OPENAI_MARKETING_MODEL || job.snapshot.image_model !== env.OPENAI_STORY_IMAGE_MODEL) throw new Error('model_configuration_changed');
     directory = await mkdtemp(join(tmpdir(), 'recipe-story-studio-'));
-    const api = async (path, body, limit, timeout) => json(await fetcher(`https://api.openai.com/v1/${path}`, {
+    const api = async (path, body, limit, timeout) => openaiJson(await fetcher(`https://api.openai.com/v1/${path}`, {
       method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) }), limit);
+      body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) }), path === 'responses' ? 'responses' : path.startsWith('images/') ? 'images' : 'chat', limit);
     const storage = path => new URL(`/storage/v1/object/story-previews/${path}`, root);
     const result = await executeJob(job, {
       check: () => rpc('check', lease),
@@ -122,10 +169,10 @@ export async function runStudio(env = process.env, fetcher = fetch) {
     });
     await rpc('complete', {...lease,result});
     return { completed: job.id, kind: job.kind };
-  } catch {
+  } catch (error) {
     // Even a lost completion response must never cause a second paid call/upload.
     await rpc('fail', lease).catch(() => {});
-    throw new Error('studio_job_needs_review');
+    throw new Error(safeFailure(error));
   } finally {
     // Only this invocation's validated mkdtemp directory is ever removed.
     if (directory) await rm(directory, { recursive:true, force:true });
@@ -163,7 +210,8 @@ export async function privateUpload(video, snapshot, env, fetcher = fetch) {
   return uploaded.id;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runStudio().then(result => console.log(JSON.stringify(result))).catch(() => {
-    console.error('Story studio stopped safely. Review the job before any retry.'); process.exitCode = 1;
+  const run = process.env.STORY_STUDIO_PREFLIGHT === 'true' ? probeStudio : runStudio;
+  run().then(result => console.log(JSON.stringify(result))).catch(error => {
+    console.error(`Story studio stopped safely: ${safeFailure(error)}. Review before retry.`); process.exitCode = 1;
   });
 }
