@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { agentRequest, decodeAgent, draftSchema, improvementSchema, validate } from './story_studio_contract.mjs';
-import { executeJob, runStudio, sha256, privateUpload } from './story_studio_worker.mjs';
+import { executeJob, runStudio, sha256, privateUpload, openaiJson, probeStudio } from './story_studio_worker.mjs';
 import { creative, draft, researchResponse } from './story_studio_fixture.mjs';
 import {decodeResearch,researchRequest} from './story_studio_research.mjs';
 
@@ -11,6 +11,39 @@ const snapshot = { series:{language:'ko',bible:'No magical notebook'},recipe:{se
   episode:{number:4,draft,variants:Object.fromEntries(['ko','en','es'].map(l=>[l,{asset_path:`${id}/${l}.mp4`,sha256:sha256(Buffer.from('video'))}]))} };
 const base = {id,lease_token:id,snapshot,request:{sources_reviewed:true,preview_reviewed:true,asset_sha256:snapshot.episode.variants.ko.sha256}};
 const completion = content => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify(content)}}]});
+
+test('API diagnostics expose only allowlisted codes, never secrets or provider text',async()=>{
+  await assert.rejects(openaiJson(Response.json({error:{code:'model_not_found',message:'secret raw body'}},{status:404}),'responses'),
+    {message:'openai_responses_http_404_model_not_found'});
+  await assert.rejects(openaiJson(Response.json({error:{code:'sk-sensitive',message:'secret raw body'}},{status:403}),'chat'),
+    {message:'openai_chat_http_403_unknown'});
+  await assert.rejects(openaiJson(new Response('secret raw body',{status:502}),'images'),
+    {message:'openai_images_http_502_unknown'});
+});
+test('manual probe is disabled by default and stops on first rejected request without retries',async()=>{
+  let calls=0;
+  const fetcher=async(url,options)=>{
+    calls++; assert.equal(url,'https://api.openai.com/v1/responses');
+    const body=JSON.parse(options.body);
+    assert.equal(body.max_tool_calls,1); assert.equal(body.max_output_tokens,512);
+    return Response.json({error:{code:'insufficient_quota'}},{status:429});
+  };
+  const env={STORY_STUDIO_PREFLIGHT:'true',OPENAI_API_KEY:'test-only',OPENAI_MARKETING_MODEL:'configured-text'};
+  assert.deepEqual(await probeStudio(env,fetcher),{disabled:true}); assert.equal(calls,0);
+  await assert.rejects(probeStudio({...env,STORY_STUDIO_DRY_RUN:'false'},fetcher),{message:'openai_responses_http_429_insufficient_quota'});
+  assert.equal(calls,1);
+});
+test('successful probe touches only two text endpoints, with bounded output and no stored content',async()=>{
+  const paths=[];
+  const result=await probeStudio({STORY_STUDIO_PREFLIGHT:'true',STORY_STUDIO_DRY_RUN:'false',OPENAI_API_KEY:'test-only',OPENAI_MARKETING_MODEL:'configured-text'},async(url,options)=>{
+    paths.push(new URL(url).pathname); const body=JSON.parse(options.body);
+    if(paths.length===1) assert.equal(body.store,false);
+    else {assert.equal(body.max_completion_tokens,128);assert.equal(body.response_format.json_schema.strict,true);}
+    return Response.json({});
+  });
+  assert.deepEqual(paths,['/v1/responses','/v1/chat/completions']);
+  assert.deepEqual(result,{api_access_checked:['responses','chat'],images_checked:false,uploaded:false});
+});
 test('draft schema rejects extra instructions, missing fields and oversized captions', () => {
   validate(creative,draftSchema);
   for (const invalid of [{...creative,code:'run()'},{...creative,summary:null},{...creative,captions:['x']},{...creative,captions:Array(6).fill('x'.repeat(61))}])
