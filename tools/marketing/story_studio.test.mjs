@@ -28,14 +28,14 @@ test('manual probe is disabled by default and stops on first rejected request wi
     assert.equal(body.max_tool_calls,1); assert.equal(body.max_output_tokens,512);
     return Response.json({error:{code:'insufficient_quota'}},{status:429});
   };
-  const env={STORY_STUDIO_PREFLIGHT:'true',OPENAI_API_KEY:'test-only',OPENAI_MARKETING_MODEL:'configured-text'};
+  const env={STORY_STUDIO_PREFLIGHT:'true',OPENAI_API_KEY:'sk-test-only',OPENAI_MARKETING_MODEL:'configured-text'};
   assert.deepEqual(await probeStudio(env,fetcher),{disabled:true}); assert.equal(calls,0);
   await assert.rejects(probeStudio({...env,STORY_STUDIO_DRY_RUN:'false'},fetcher),{message:'openai_responses_http_429_insufficient_quota'});
   assert.equal(calls,1);
 });
 test('successful probe touches only two text endpoints, with bounded output and no stored content',async()=>{
   const paths=[];
-  const result=await probeStudio({STORY_STUDIO_PREFLIGHT:'true',STORY_STUDIO_DRY_RUN:'false',OPENAI_API_KEY:'test-only',OPENAI_MARKETING_MODEL:'configured-text'},async(url,options)=>{
+  const result=await probeStudio({STORY_STUDIO_PREFLIGHT:'true',STORY_STUDIO_DRY_RUN:'false',OPENAI_API_KEY:'sk-test-only',OPENAI_MARKETING_MODEL:'configured-text'},async(url,options)=>{
     paths.push(new URL(url).pathname); const body=JSON.parse(options.body);
     if(paths.length===1) assert.equal(body.store,false);
     else {assert.equal(body.max_completion_tokens,128);assert.equal(body.response_format.json_schema.strict,true);}

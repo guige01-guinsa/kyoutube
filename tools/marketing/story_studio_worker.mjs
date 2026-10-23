@@ -27,12 +27,17 @@ export async function openaiJson(response, stage, limit = 200000) {
 }
 function safeFailure(error) {
   const match = /^openai_(responses|chat|images)_http_[45][0-9]{2}_([a-z_]+)$/.exec(error?.message ?? '');
-  return match && (apiCodes.has(match[2]) || match[2] === 'unknown') ? error.message : 'studio_job_needs_review';
+  if (match && (apiCodes.has(match[2]) || match[2] === 'unknown')) return error.message;
+  if (['missing_studio_configuration','invalid_key_format'].includes(error?.message)) return error.message;
+  if (['ETIMEDOUT','ENOTFOUND','ECONNRESET','ECONNREFUSED','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','ERR_INVALID_CHAR'].includes(error?.cause?.code)) return `transport_${error.cause.code.toLowerCase()}`;
+  if (['TimeoutError','AbortError','TypeError','SyntaxError'].includes(error?.name)) return `runtime_${error.name.toLowerCase()}`;
+  return 'studio_job_needs_review';
 }
 // Manual credential/model probe: no database access, image generation or upload, no retries.
 export async function probeStudio(env = process.env, fetcher = fetch) {
   if (env.STORY_STUDIO_PREFLIGHT !== 'true' || env.STORY_STUDIO_DRY_RUN !== 'false') return {disabled:true};
   if (!env.OPENAI_API_KEY || !env.OPENAI_MARKETING_MODEL) throw new Error('missing_studio_configuration');
+  if (!/^sk-[A-Za-z0-9_-]+$/.test(env.OPENAI_API_KEY)) throw new Error('invalid_key_format');
   const requests = [
     ['responses','responses',{model:env.OPENAI_MARKETING_MODEL,store:false,max_output_tokens:512,max_tool_calls:1,
       tools:[{type:'web_search',search_context_size:'low'}],tool_choice:'required',
