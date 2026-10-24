@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {reeditSpec,narrationChunks,narrationPlan,verifyReeditSource,prepareNarration,speechAudio} from './story_studio_narration.mjs';
-import {executeJob,reeditFailureCode,safeFailure} from './story_studio_worker.mjs';
+import {executeJob,reeditFailureCode,safeFailure,previewStoreFailure,REEDIT_MAX_PREVIEW_BYTES} from './story_studio_worker.mjs';
 import {draft} from './story_studio_fixture.mjs';
 const id='11111111-1111-4111-8111-111111111111';
 const video=Buffer.from('approved video');
@@ -11,6 +11,15 @@ const edition={title:'Food guide',chapters:['One paragraph.','Second paragraph.'
 const snapshot={series:{id:'same-series'},episode:{id:'different-id',brief:`[ENCYCLOPEDIA_REEDIT:${id}:${hash}]`,
   draft:{...edition,translations:{en:edition,es:edition}}}};
 const source={id,series_id:'same-series',status:'uploaded',brief:'[APP_DEMO:bibimbap-v1]',variants:{ko:{asset_path:`${id}/ko.mp4`,sha256:hash}}};
+test('storage diagnostics allow codes only and never leak provider text',async()=>{
+  for(const [body,code] of [[{code:'EntityTooLarge',message:'private content'},'EntityTooLarge'],
+    [{code:'secret',error:'private path'},'unknown']]) {
+    const diagnostic=await previewStoreFailure(new Response(JSON.stringify(body),{status:400}));
+    assert.equal(diagnostic,`preview_store_http_400_${code}`);
+    assert.equal(safeFailure(new Error(diagnostic)),diagnostic);
+  }
+  assert.equal(safeFailure(new Error('preview_store_http_400_privateSecret')),'studio_job_needs_review');
+});
 test('renderer diagnostics expose only exact safe codes, never private stderr',()=>{
   assert.equal(reeditFailureCode({stderr:'REEDIT_DIAGNOSTIC:invalid_voice_duration\n'}),'invalid_voice_duration');
   assert.equal(reeditFailureCode({error:{code:'ETIMEDOUT'}}),'renderer_timeout');
@@ -82,6 +91,9 @@ test('reviewed re-edit uses existing render gate and stores previews without ima
   assert.ok(stored.every(path=>path.startsWith(job.id+'/')));
   await assert.rejects(executeJob({...job,request:{sources_reviewed:false}},io),{message:'source_review_required'});
   await assert.rejects(executeJob(job,{...io,reedit:async()=>({ko:Buffer.from('ko'),en:Buffer.from('en')})}),{message:'unexpected_video_languages'});
+  const before=stored.length;
+  await assert.rejects(executeJob(job,{...io,reedit:async()=>({ko:Buffer.alloc(REEDIT_MAX_PREVIEW_BYTES+1)})}),{message:'invalid_video_size'});
+  assert.equal(stored.length,before,'oversized output must not be uploaded');
 });
 
 test('Korean-only re-edit never accesses archived translations or speaks other languages',async()=>{
