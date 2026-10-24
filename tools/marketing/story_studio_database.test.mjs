@@ -18,7 +18,7 @@ await db.exec(`create role anon; create role authenticated; create role service_
  alter table storage.objects enable row level security;
  grant usage on schema storage to authenticated; grant select on storage.objects to authenticated;
  insert into auth.users values('${admin}'),('${ordinary}');`);
-for (const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql'])
+for (const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql','20261024180000_korean_reedit_story_studio.sql'])
   await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'));
 await db.query('insert into marketing_admins values($1)',[admin]);
 await db.exec("insert into storage.objects(bucket_id,name) values('story-previews','test')");
@@ -113,5 +113,35 @@ await role('authenticated'); const oldMonth={...improve,id:randomUUID()}; await 
 await db.exec(`reset role; update story_jobs set created_at=now()-interval '2 months' where id='${oldMonth.id}'`);
 await role('service_role'); assert.equal(await call('claim',{},true),null);
 await role('authenticated'); assert.equal((await call('overview')).jobs.find(j=>j.id===oldMonth.id).status,'needs_review');
+// Korean narrated re-edits complete with one real asset, never fake translations.
+await role('service_role');
+const reeditId=randomUUID();
+const marker=`[ENCYCLOPEDIA_REEDIT:${episode.id}:${'a'.repeat(64)}]`;
+const required=async brief=>(await db.query('select story_render_languages($1::jsonb) as languages',
+  [JSON.stringify({episode:{brief}})])).rows[0].languages;
+assert.deepEqual(await required('ordinary episode'),['ko','en','es']);
+assert.deepEqual(await required('Reviewed guide\r\n'+marker+'\r\nKorean only'),['ko']);
+for (const invalid of ['[ENCYCLOPEDIA_REEDIT:bad]',marker+'\n'+marker,'prefix '+marker])
+  await assert.rejects(required(invalid),/STORY_INVALID/);
+await db.exec('reset role'); // Fixture setup only; real worker does not insert drafts.
+await db.query("insert into story_episodes(id,series_id,number,recipe_id,brief,draft,status) values($1,$2,3,$3,$4,$5::jsonb,'draft')",
+  [reeditId,series,firstRecipe,marker,JSON.stringify(draft)]);
+await role('authenticated');
+await assert.rejects(required(marker),/permission denied/);
+await call('render',{...request,id:randomUUID(),episode_id:reeditId,revision:1,sources_reviewed:true});
+await role('service_role'); job=await call('claim',{},true);
+const ko={asset_path:`${job.id}/ko.mp4`,sha256:'a'.repeat(64)};
+for (const variants of [{},{en:ko},{ko,en:ko},{ko:{...ko,asset_path:'other/ko.mp4'}},{ko:{...ko,youtube_id:'ZB8zJymlxCw'}}])
+  await assert.rejects(call('complete',{id:job.id,token:job.lease_token,result:{variants}},true),/STORY_INVALID/);
+await call('complete',{id:job.id,token:job.lease_token,result:{variants:{ko}}},true);
+await role('authenticated'); const koEpisode=(await call('overview')).episodes.find(e=>e.id===reeditId);
+assert.equal(koEpisode.status,'preview'); assert.deepEqual(Object.keys(koEpisode.variants),['ko']);
+const koUpload={...upload,id:randomUUID(),episode_id:reeditId,revision:koEpisode.revision};
+await assert.rejects(call('upload',{...koUpload,language:'en'}),/STORY_PREVIEW_REQUIRED/);
+await call('upload',koUpload);
+await role('service_role'); job=await call('claim',{},true);
+await call('complete',{id:job.id,token:job.lease_token,result:{youtube_id:'ZB8zJymlxCw',privacy:'private'}},true);
+await role('authenticated');
+assert.equal((await call('overview')).episodes.find(e=>e.id===reeditId).status,'uploaded');
 await db.close();
 console.log('Story database passed: MFA/RLS, fail-closed configuration, consent, idempotency, review gates, immutable recipes, continuity, rollback, uncertain-outcome hold and budget reservations.');

@@ -8,6 +8,7 @@ import { agentRequest, decodeAgent, validate, draftSchema } from './story_studio
 import { resolveChannel } from './worker.mjs';
 import { researchRequest, decodeResearch } from './story_studio_research.mjs';
 import { demoAssets } from './story_studio_demo.mjs';
+import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const apiCodes = new Set(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found',
@@ -49,6 +50,7 @@ export async function openaiJson(response, stage, limit = 200000, requestedModel
   return json(response, limit);
 }
 function safeFailure(error) {
+  if (/^speech_http_[45][0-9]{2}$/.test(error?.message ?? '')) return error.message;
   const match = /^openai_(responses|chat|images)_http_[45][0-9]{2}_([a-z_]+)$/.exec(error?.message ?? '');
   if (match && (apiCodes.has(match[2]) || match[2] === 'unknown')) return error.message;
   if (['missing_studio_configuration','invalid_key_format'].includes(error?.message)) return error.message;
@@ -104,6 +106,12 @@ export async function executeJob(job, io) {
   validate(creative, draftSchema);
   if (job.kind === 'render') {
     if(job.request.sources_reviewed !== true) throw new Error('source_review_required');
+    let videos;
+    if (reeditSpec(job.snapshot)) {
+      const prepared=await prepareNarration(job.snapshot,io);
+      await io.check();
+      videos=await io.reedit(prepared);
+    } else {
     // Validate approved captures before any paid image request. Never draw fake UI.
     const demos = await demoAssets(job.snapshot);
     const images=[];
@@ -114,9 +122,12 @@ export async function executeJob(job, io) {
         prompt:`Original culinary webtoon panel, not an actual restaurant photograph. No lettering, logos or watermarks. Consistent character/style bible: ${creative.image_prompt}\nPanel: ${prompt}`,
         size:'1024x1536',quality:'low',n:1,output_format:'png'}));
     }
-    const videos=await io.render(images,job.snapshot);
+    videos=await io.render(images,job.snapshot);
+    }
     const variants={};
-    for(const language of ['ko','en','es']) {
+    const outputLanguages=reeditSpec(job.snapshot) ? ['ko'] : ['ko','en','es'];
+    if (Object.keys(videos).sort().join(',')!==[...outputLanguages].sort().join(',')) throw new Error('unexpected_video_languages');
+    for(const language of outputLanguages) {
       const video=videos[language];
       if(!video?.length || video.length>104857600) throw new Error('invalid_video_size');
       await io.check();
@@ -165,6 +176,35 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       check: () => rpc('check', lease),
       chat: body => api('chat/completions', body, 200000, 180000),
       research:body=>api('responses',body,250000,180000),
+      sourceEpisode: async id => {
+        if (!uuid.test(id)) throw new Error('invalid_reedit_source');
+        const query=new URL('/rest/v1/story_episodes',root);
+        query.searchParams.set('id',`eq.${id}`);
+        query.searchParams.set('series_id',`eq.${job.snapshot.series.id}`);
+        query.searchParams.set('select','id,series_id,status,brief,variants');
+        const rows=await json(await fetcher(query,{headers,signal:AbortSignal.timeout(30000)}));
+        if (!Array.isArray(rows) || rows.length!==1) throw new Error('reedit_source_missing');
+        return rows[0];
+      },
+      validateSource: async video => {
+        await writeFile(join(directory,'source.mp4'),video);
+        const checked=spawnSync(env.STORY_PYTHON || 'python',['-c',
+          'from story_series import validate_video; import sys; validate_video(sys.argv[1],60)',join(directory,'source.mp4')],
+          {cwd:fileURLToPath(new URL('.',import.meta.url)),timeout:120000,encoding:'utf8',maxBuffer:100000});
+        if (checked.status!==0) throw new Error('invalid_reedit_source_video');
+      },
+      speech:(text,language)=>speechAudio(text,language,env.OPENAI_API_KEY,fetcher),
+      reedit: async ({plan,voices}) => {
+        await writeFile(join(directory,'narration.json'),JSON.stringify(plan));
+        for (const language of Object.keys(plan)) for (const [i,audio] of voices[language].entries()) {
+          await writeFile(join(directory,`${language}-${String(i).padStart(2,'0')}.wav`),audio);
+        }
+        const rendered=spawnSync(env.STORY_PYTHON || 'python',
+          [fileURLToPath(new URL('./story_studio_reedit.py',import.meta.url)),directory],
+          {timeout:900000,encoding:'utf8',maxBuffer:1000000});
+        if (rendered.status!==0) throw new Error('narrated_reedit_failed');
+        return Object.fromEntries(await Promise.all(Object.keys(plan).map(async language=>[language,await readFile(join(directory,`${language}.mp4`))])));
+      },
       image: async body => {
         const result = await api('images/generations', body, 30000000, 240000);
         const encoded = result.data?.[0]?.b64_json;
@@ -216,7 +256,11 @@ export async function privateUpload(video, snapshot, env, fetcher = fetch) {
   const auth = { Authorization:`Bearer ${oauth.access_token}` };
   const yt = path => jsonPromise(fetcher(`https://www.googleapis.com/youtube/v3/${path}`, {headers:auth,signal:AbortSignal.timeout(30000)}));
   const channelId = await resolveChannel(env, yt);
-  const disclosures = { ko:'홍보용 창작 이야기 · AI 삽화 · 창작 음악 · 실제 이용자 후기가 아닙니다.',
+  const disclosures = reeditSpec(snapshot) ? {
+    ko:'음식 정보 안내 · AI 내레이션 · 재사용한 AI 삽화와 창작 음악 · 삽화는 조리 실사나 역사 사료가 아닙니다. 가정용 조리 예시는 특정 업소의 공식 조리법이 아닙니다.',
+    en:'Food guide · AI-generated narration · Reused AI illustrations and original music. Illustrations are not cooking footage or historical records. The home recipe is not an official restaurant recipe.',
+    es:'Guía culinaria · Narración generada por IA · Ilustraciones de IA y música original reutilizadas. Las imágenes no son grabaciones de cocina ni documentos históricos. La receta casera no es una receta oficial de un restaurante.',
+  } : { ko:'홍보용 창작 이야기 · AI 삽화 · 창작 음악 · 실제 이용자 후기가 아닙니다.',
     en:'Fictional promotional story · AI illustration · Original music · Not a customer testimonial.',
     es:'Historia promocional ficticia · Ilustración de IA · Música original · No es un testimonio real.' };
   const language=snapshot.language;
