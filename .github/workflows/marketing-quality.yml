@@ -62,7 +62,7 @@ jobs:
         run: python tools/marketing/story_studio_reedit_test.py
       - name: Offline story pilot safety and layout tests
         timeout-minutes: 3
-        run: python tools/marketing/story_series_test.py
+        run: python tools/marketing/story_series_synthetic_test.py
       - name: Render smoke test
         timeout-minutes: 3
         env:
