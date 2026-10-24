@@ -49,8 +49,23 @@ export async function openaiJson(response, stage, limit = 200000, requestedModel
   }
   return json(response, limit);
 }
-function safeFailure(error) {
+const reeditCodes = new Set(['invalid_voice_file','invalid_voice_format','invalid_voice_duration',
+  'invalid_scroll_text','scroll_text_overflow','invalid_reedit_title','reedit_title_overflow',
+  'korean_only_required','invalid_chunk_count','narration_too_fast_for_scroll',
+  'edition_duration_out_of_bounds','output_already_exists','reedit_video_too_large','plan_too_large',
+  'invalid_arguments','invalid_video_format','invalid_pixel_format','invalid_video_length',
+  'renderer_timeout','renderer_command_failed','unknown']);
+export function reeditFailureCode(result) {
+  if (result?.error?.code === 'ETIMEDOUT') return 'renderer_timeout';
+  const match = /^REEDIT_DIAGNOSTIC:([a-z_]+)$/m.exec(result?.stderr ?? '');
+  return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
+}
+export function safeFailure(error) {
   if (error?.message === 'invalid_reedit_source_video') return error.message;
+  if (['invalid_speech_audio','preview_store_failed','preview_read_failed','preview_too_large',
+    'reedit_source_changed','reedit_source_missing','unexpected_video_languages','invalid_video_size'].includes(error?.message)) return error.message;
+  const reedit = /^narrated_reedit_failed_([a-z_]+)$/.exec(error?.message ?? '');
+  if (reedit && reeditCodes.has(reedit[1])) return error.message;
   if (/^speech_http_[45][0-9]{2}$/.test(error?.message ?? '')) return error.message;
   const match = /^openai_(responses|chat|images)_http_[45][0-9]{2}_([a-z_]+)$/.exec(error?.message ?? '');
   if (match && (apiCodes.has(match[2]) || match[2] === 'unknown')) return error.message;
@@ -194,9 +209,11 @@ export async function runStudio(env = process.env, fetcher = fetch) {
           '--validate-source',join(directory,'source.mp4')],
           {cwd:fileURLToPath(new URL('.',import.meta.url)),timeout:120000,encoding:'utf8',maxBuffer:100000});
         if (checked.status!==0) throw new Error('invalid_reedit_source_video');
+        console.log('Re-edit source validated before paid speech.');
       },
       speech:(text,language)=>speechAudio(text,language,env.OPENAI_API_KEY,fetcher),
       reedit: async ({plan,voices}) => {
+        console.log('Re-edit speech returned; starting offline video assembly.');
         await writeFile(join(directory,'narration.json'),JSON.stringify(plan));
         for (const language of Object.keys(plan)) for (const [i,audio] of voices[language].entries()) {
           await writeFile(join(directory,`${language}-${String(i).padStart(2,'0')}.wav`),audio);
@@ -204,7 +221,8 @@ export async function runStudio(env = process.env, fetcher = fetch) {
         const rendered=spawnSync(env.STORY_PYTHON || 'python',
           [fileURLToPath(new URL('./story_studio_reedit.py',import.meta.url)),directory],
           {timeout:900000,encoding:'utf8',maxBuffer:1000000});
-        if (rendered.status!==0) throw new Error('narrated_reedit_failed');
+        if (rendered.status!==0) throw new Error(`narrated_reedit_failed_${reeditFailureCode(rendered)}`);
+        console.log('Re-edit video verified; preparing private preview storage.');
         return Object.fromEntries(await Promise.all(Object.keys(plan).map(async language=>[language,await readFile(join(directory,`${language}.mp4`))])));
       },
       image: async body => {

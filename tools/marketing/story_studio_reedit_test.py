@@ -7,10 +7,16 @@ import sys
 
 from PIL import Image
 from story_series import run_ffmpeg
-from story_studio_reedit import layout, offset, chrome, speech_seconds, render_edition, validate_plan
+from story_studio_reedit import layout, offset, chrome, speech_seconds, render_edition, validate_plan, diagnostic_code
 
 
 class ReeditTests(unittest.TestCase):
+    def test_diagnostics_never_echo_private_exception_details(self):
+        self.assertEqual(diagnostic_code(ValueError('invalid_voice_duration')), 'invalid_voice_duration')
+        self.assertEqual(diagnostic_code(wave.Error('private path')), 'invalid_voice_format')
+        self.assertEqual(diagnostic_code(subprocess.TimeoutExpired('private command', 1)), 'renderer_timeout')
+        self.assertEqual(diagnostic_code(ValueError('private transcript and secret')), 'unknown')
+
     def test_scroll_moves_only_up_and_does_not_drop_lines(self):
         for language, text in [('ko', '비빔밥의 종류와 상세 조리법. '*35),
                                ('en', 'A bowl with carefully cooked vegetables. '*10),
