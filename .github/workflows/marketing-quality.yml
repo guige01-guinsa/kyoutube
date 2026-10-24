@@ -7,12 +7,16 @@ on:
       - 'tools/marketing/**'
       - 'supabase/functions/marketing_generate/**'
       - 'supabase/migrations/*_marketing_automation.sql'
+      - 'supabase/migrations/*_story_studio.sql'
+      - '.github/workflows/story-studio-*.yml'
       - '.github/workflows/marketing-*.yml'
   push:
     paths:
       - 'tools/marketing/**'
       - 'supabase/functions/marketing_generate/**'
       - 'supabase/migrations/*_marketing_automation.sql'
+      - 'supabase/migrations/*_story_studio.sql'
+      - '.github/workflows/story-studio-*.yml'
       - '.github/workflows/marketing-*.yml'
 permissions:
   contents: read
@@ -30,7 +34,7 @@ jobs:
       - name: Type check Edge Function
         run: deno check supabase/functions/marketing_generate/index.ts
       - name: Worker tests
-        run: node --test tools/marketing/worker.test.mjs
+        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -47,7 +51,18 @@ jobs:
       - name: Database security and queue behavior
         env:
           MARKETING_PGLITE_PATH: /tmp/marketing-db/node_modules/@electric-sql/pglite/dist/index.js
-        run: node tools/marketing/database.test.mjs
+        run: |
+          node tools/marketing/database.test.mjs
+          node tools/marketing/story_studio_database.test.mjs
+      - name: Trilingual studio layout and 60-second preview
+        timeout-minutes: 3
+        run: python tools/marketing/story_studio_render_test.py
+      - name: Existing-media narrated re-edit safety and scrolling
+        timeout-minutes: 3
+        run: python tools/marketing/story_studio_reedit_test.py
+      - name: Offline story pilot safety and layout tests
+        timeout-minutes: 3
+        run: python tools/marketing/story_series_synthetic_test.py
       - name: Render smoke test
         timeout-minutes: 3
         env:
