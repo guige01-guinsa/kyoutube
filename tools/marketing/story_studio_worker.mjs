@@ -7,6 +7,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { agentRequest, decodeAgent, validate, draftSchema } from './story_studio_contract.mjs';
 import { resolveChannel } from './worker.mjs';
 import { researchRequest, decodeResearch } from './story_studio_research.mjs';
+import { demoAssets } from './story_studio_demo.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const apiCodes = new Set(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found',
@@ -103,9 +104,12 @@ export async function executeJob(job, io) {
   validate(creative, draftSchema);
   if (job.kind === 'render') {
     if(job.request.sources_reviewed !== true) throw new Error('source_review_required');
+    // Validate approved captures before any paid image request. Never draw fake UI.
+    const demos = await demoAssets(job.snapshot);
     const images=[];
-    for (const prompt of creative.panels) {
+    for (const [index,prompt] of creative.panels.entries()) {
       await io.check();
+      if (demos.has(index)) { images.push(demos.get(index)); continue; }
       images.push(await io.image({model:job.snapshot.image_model,
         prompt:`Original culinary webtoon panel, not an actual restaurant photograph. No lettering, logos or watermarks. Consistent character/style bible: ${creative.image_prompt}\nPanel: ${prompt}`,
         size:'1024x1536',quality:'low',n:1,output_format:'png'}));

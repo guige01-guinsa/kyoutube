@@ -9,6 +9,36 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from story_music import score
 from story_series import FONT, WIDTH, HEIGHT, FPS, wrap, run_ffmpeg, write_audio, validate_video
 
+LATIN_FONT = Path(__file__).resolve().parents[2] / 'assets/fonts/NotoSans-Variable.ttf'
+DEMO_MANIFEST = Path(__file__).resolve().parents[2] / 'assets/story_demos/bibimbap-v1.json'
+
+
+def demo_indices(data):
+    brief = data['episode'].get('brief', '')
+    if '[APP_DEMO:' not in brief:
+        return set()
+    manifest = json.loads(DEMO_MANIFEST.read_text(encoding='utf-8'))
+    markers = [line for line in brief.splitlines() if '[APP_DEMO:' in line]
+    if markers != [manifest['marker']]:
+        raise ValueError('invalid_demo_template')
+    return {panel['index'] for panel in manifest['panels']}
+
+
+def background(original, is_demo=False):
+    if not is_demo:
+        return ImageOps.fit(original.convert('RGB'), (WIDTH, HEIGHT))
+    # Keep every captured UI pixel visible; no invented UI or account identifiers.
+    canvas = Image.new('RGB', (WIDTH, HEIGHT), '#251f2b')
+    capture = ImageOps.contain(original.convert('RGB'), (632, 490))
+    canvas.paste(capture, ((WIDTH-capture.width)//2, 330+(490-capture.height)//2))
+    return canvas
+
+
+def studio_font(language, size):
+    if language not in LABELS:
+        raise ValueError('invalid_language')
+    return ImageFont.truetype(str(FONT if language == 'ko' else LATIN_FONT), size)
+
 LABELS = {
     'ko': ('홍보용 허구 · AI 삽화 · 창작 음악', '요리 영상 검색과 저장 · Recipe Scout'),
     'en': ('Fiction · AI illustration · Original music', 'Find and save cooking videos · Recipe Scout'),
@@ -37,16 +67,21 @@ def validate(data):
     return settings, draft
 
 
-def layer(data, caption, last=False):
+def layer(data, caption, last=False, is_demo=False):
     settings, draft = validate(data)
     image = Image.new('RGBA', (WIDTH, HEIGHT))
     draw = ImageDraw.Draw(image)
     for y in range(HEIGHT):
         opacity = max(max(0, min(1, (310-y)/100))*195, max(0, min(1, (y-750)/250))*235)
         draw.line((0, y, WIDTH, y), fill=(12, 21, 20, round(opacity)))
-    small = ImageFont.truetype(str(FONT), 21)
-    title = ImageFont.truetype(str(FONT), 30)
-    body = ImageFont.truetype(str(FONT), settings['font_size'])
+    language = data['series']['language']
+    small = studio_font(language, 21)
+    title = studio_font(language, 30)
+    body = studio_font(language, settings['font_size'])
+    if is_demo:
+        demo_label = {'ko': '실제 앱 화면 · 한국어 UI', 'en': 'Actual app screen · Korean UI',
+                      'es': 'Pantalla real · Interfaz en coreano'}[language]
+        draw.text((44, 285), demo_label, font=small, fill='#efd3a0')
     draw.text((44, 55), 'RECIPE SCOUT / ORIGINAL STORY', font=small, fill='#efd3a0')
     title_lines = wrap(draw, f"{data['episode']['number']:02d} · {draft['title']}", title, 580)
     if len(title_lines) > 3:
@@ -72,7 +107,8 @@ def render(data, image_paths, output):
     if output.exists():
         raise ValueError('output_already_exists')
     # Check all typography BEFORE video encoding. Never silently truncate a line.
-    overlays = [layer(data, c, i == 5) for i, c in enumerate(draft['captions'])]
+    demos = demo_indices(data)
+    overlays = [layer(data, c, i == 5, i in demos) for i, c in enumerate(draft['captions'])]
     durations, seconds = [10] * 6, 60
     if len(image_paths) != 6:
         raise ValueError('six_panels_required')
@@ -82,7 +118,7 @@ def render(data, image_paths, output):
             with Image.open(image_path) as original:
                 if original.width * original.height > 20_000_000:
                     raise ValueError('image_too_large')
-                ImageOps.fit(original.convert('RGB'), (WIDTH, HEIGHT)).save(temp/f'background-{i}.png')
+                background(original, i in demos).save(temp/f'background-{i}.png')
         rows = ['ffconcat version 1.0']
         for i, (overlay, duration) in enumerate(zip(overlays, durations)):
             overlay.save(temp/f'layer-{i}.png')
@@ -90,7 +126,9 @@ def render(data, image_paths, output):
         rows.append("file 'layer-5.png'")
         (temp/'overlays.ffconcat').write_text('\n'.join(rows), encoding='utf-8')
         write_audio((v * 2 * settings['music_gain'] for v in score(seconds, (data['episode']['number']-1) % 12 + 1)), temp/'music.wav')
-        filters = (f"[0:v]scale=1080:1920,zoompan=z='1+mod(on,240)*0.0001':"
+        # Demo episodes are static so UI text is not blurred/cropped by camera zoom.
+        zoom = '1' if demos else '1+mod(on,240)*0.0001'
+        filters = (f"[0:v]scale=1080:1920,zoompan=z='{zoom}':"
                    f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={10*FPS}:s={WIDTH}x{HEIGHT}:fps={FPS}[bg];"
                    f'[1:v]fps={FPS}[titles];[bg][titles]overlay=0:0:format=auto,format=yuv420p[v]')
         run_ffmpeg(['-filter_complex_threads','1','-framerate','1/10','-i',str(temp/'background-%d.png'),'-f','concat','-safe','0',
