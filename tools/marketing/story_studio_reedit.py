@@ -16,6 +16,21 @@ from story_series import WIDTH, HEIGHT, FPS, run_ffmpeg, validate_video, wrap
 from story_studio_render import studio_font
 
 READ_HEIGHT, READ_Y, LINE = 400, 770, 48
+# Stay below the project's global 50 MB limit, not just its 100 MiB bucket limit.
+# This is decimal bytes; reserve 10% for muxing, short-segment VBV and AAC overhead.
+MAX_PREVIEW_BYTES = 45_000_000
+AUDIO_KBPS = 96
+
+
+def encoding_options(seconds):
+    if not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not 0 < seconds <= 900:
+        raise ValueError('edition_duration_out_of_bounds')
+    video_kbps = min(1800, math.floor(MAX_PREVIEW_BYTES * 8 * .9 / seconds / 1000) - AUDIO_KBPS)
+    return ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+            '-maxrate', f'{video_kbps}k', '-bufsize', f'{video_kbps * 2}k',
+            '-threads', '2', '-c:a', 'aac', '-b:a', f'{AUDIO_KBPS}k', '-ar', '44100']
+
+
 DIAGNOSTIC_CODES = frozenset({
     'invalid_voice_file', 'invalid_voice_format', 'invalid_voice_duration',
     'invalid_scroll_text', 'scroll_text_overflow', 'invalid_reedit_title',
@@ -133,6 +148,8 @@ def render_edition(source, edition, language, voices, output, durations):
     output = Path(output)
     if output.exists():
         raise ValueError('output_already_exists')
+    # One whole-video budget shared by every segment, without shortening narration.
+    encoding = encoding_options(sum(durations))
     with tempfile.TemporaryDirectory(prefix='story-reedit-') as temporary:
         temp = Path(temporary)
         start = 0
@@ -156,14 +173,13 @@ def render_edition(source, edition, language, voices, output, durations):
                         '-loop','1','-framerate',str(FPS),'-i',str(temp/'chrome.png'),
                         '-loop','1','-framerate',str(FPS),'-i',str(temp/'scroll.png'),
                         '-filter_complex',filters,'-map','[v]','-map','[a]','-t',str(seconds),
-                        '-r',str(FPS),'-c:v','libx264','-preset','ultrafast','-crf','25','-threads','2',
-                        '-c:a','aac','-b:a','128k','-ar','44100',str(target)], timeout=180)
+                        '-r',str(FPS),*encoding,str(target)], timeout=180)
             rows.append(f"file '{target.name}'")
             start += seconds
         (temp/'parts.ffconcat').write_text('\n'.join(rows), encoding='utf-8')
         run_ffmpeg(['-f','concat','-safe','0','-i',str(temp/'parts.ffconcat'),'-map','0:v:0','-map','0:a:0',
                     '-c','copy','-movflags','+faststart',str(output)])
-    if output.stat().st_size > 104857600:
+    if output.stat().st_size > MAX_PREVIEW_BYTES:
         raise ValueError('reedit_video_too_large')
     return validate_video(output, sum(durations))
 

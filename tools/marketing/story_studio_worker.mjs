@@ -11,6 +11,18 @@ import { demoAssets } from './story_studio_demo.mjs';
 import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const REEDIT_MAX_PREVIEW_BYTES = 45000000;
+const storageCodes = new Set(['EntityTooLarge','AccessDenied','InvalidMimeType','NoSuchBucket',
+  'KeyAlreadyExists','ResourceAlreadyExists','DatabaseError','InternalError','unknown']);
+export async function previewStoreFailure(response) {
+  let code = 'unknown';
+  try {
+    const body = JSON.parse((await response.text()).slice(0, 16384));
+    if (storageCodes.has(body?.code)) code = body.code;
+    else if (storageCodes.has(body?.error)) code = body.error;
+  } catch { /* Do not log provider messages, paths or credentials. */ }
+  return `preview_store_http_${response.status}_${code}`;
+}
 const apiCodes = new Set(['invalid_api_key','insufficient_quota','rate_limit_exceeded','model_not_found',
   'permission_denied','insufficient_permissions','invalid_request_error','unsupported_parameter','unsupported_value',
   'missing_scope','missing_scope_model_request','missing_scope_responses_write','missing_scope_responses_read',
@@ -61,6 +73,8 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
+  const storage = /^preview_store_http_([45][0-9]{2})_([A-Za-z]+)$/.exec(error?.message ?? '');
+  if (storage && storageCodes.has(storage[2])) return error.message;
   if (error?.message === 'invalid_reedit_source_video') return error.message;
   if (['invalid_speech_audio','preview_store_failed','preview_read_failed','preview_too_large',
     'reedit_source_changed','reedit_source_missing','unexpected_video_languages','invalid_video_size'].includes(error?.message)) return error.message;
@@ -145,7 +159,8 @@ export async function executeJob(job, io) {
     if (Object.keys(videos).sort().join(',')!==[...outputLanguages].sort().join(',')) throw new Error('unexpected_video_languages');
     for(const language of outputLanguages) {
       const video=videos[language];
-      if(!video?.length || video.length>104857600) throw new Error('invalid_video_size');
+      const maxBytes = reeditSpec(job.snapshot) ? REEDIT_MAX_PREVIEW_BYTES : 104857600;
+      if(!video?.length || video.length>maxBytes) throw new Error('invalid_video_size');
       await io.check();
       const path=`${job.id}/${language}.mp4`;
       await io.store(path,video);
@@ -245,7 +260,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       store: async (path, video) => {
         const response = await fetcher(storage(path), { method:'POST', headers:{...headers,'Content-Type':'video/mp4','x-upsert':'false'},
           body:video, signal:AbortSignal.timeout(120000) });
-        if (!response.ok) throw new Error('preview_store_failed');
+        if (!response.ok) throw new Error(await previewStoreFailure(response));
       },
       load: async path => {
         const response = await fetcher(storage(path), { headers, signal: AbortSignal.timeout(120000) });

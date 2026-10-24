@@ -7,10 +7,22 @@ import sys
 
 from PIL import Image
 from story_series import run_ffmpeg
-from story_studio_reedit import layout, offset, chrome, speech_seconds, render_edition, validate_plan, diagnostic_code
+from story_studio_reedit import layout, offset, chrome, speech_seconds, render_edition, validate_plan, diagnostic_code, encoding_options, MAX_PREVIEW_BYTES
 
 
 class ReeditTests(unittest.TestCase):
+    def test_whole_edition_encoding_budget_fits_free_storage_limit(self):
+        self.assertLess(MAX_PREVIEW_BYTES, 50_000_000)
+        for seconds in range(1, 901):
+            options = encoding_options(seconds)
+            rate = int(options[options.index('-maxrate')+1][:-1])
+            audio = int(options[options.index('-b:a')+1][:-1])
+            self.assertGreaterEqual(rate, 264)
+            self.assertLessEqual((rate+audio)*1000*seconds/8, MAX_PREVIEW_BYTES*.9)
+            self.assertEqual(options[options.index('-bufsize')+1], f'{rate*2}k')
+        for seconds in [0, -1, 901, float('nan'), float('inf')]:
+            with self.assertRaises(ValueError): encoding_options(seconds)
+
     def test_diagnostics_never_echo_private_exception_details(self):
         self.assertEqual(diagnostic_code(ValueError('invalid_voice_duration')), 'invalid_voice_duration')
         self.assertEqual(diagnostic_code(wave.Error('private path')), 'invalid_voice_format')
@@ -90,6 +102,7 @@ class ReeditTests(unittest.TestCase):
                                   'ko',root,root/'result.mp4',[3,3])
             self.assertTrue(result['audio'])
             self.assertEqual(result['frames'],144)
+            self.assertLessEqual((root/'result.mp4').stat().st_size, MAX_PREVIEW_BYTES)
             with self.assertRaises(ValueError):
                 render_edition(root/'source.mp4',{},'ko',root,root/'result.mp4',[])
 
