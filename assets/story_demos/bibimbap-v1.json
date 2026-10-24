@@ -1,0 +1,9 @@
+{
+  "marker": "[APP_DEMO:bibimbap-v1]",
+  "captured_at": "2026-10-24",
+  "source": "https://recipe-scout-workspace.web.app/#/workspace",
+  "panels": [
+    {"index": 2, "file": "bibimbap-source.jpg", "sha256": "11969e4f1da92ef1b1a4d51d530216875215ab3b619eee011055db44529a4182"},
+    {"index": 3, "file": "bibimbap-draft.jpg", "sha256": "2341af112984f879c39b5bc474638a924643f9af27c13ca10d811be059f94868"}
+  ]
+}

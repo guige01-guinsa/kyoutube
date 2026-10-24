@@ -4,6 +4,7 @@ import { agentRequest, decodeAgent, draftSchema, improvementSchema, validate } f
 import { executeJob, runStudio, sha256, privateUpload, openaiJson, probeStudio } from './story_studio_worker.mjs';
 import { creative, draft, researchResponse } from './story_studio_fixture.mjs';
 import {decodeResearch,researchRequest} from './story_studio_research.mjs';
+import {demoAssets} from './story_studio_demo.mjs';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const snapshot = { series:{language:'ko',bible:'No magical notebook'},recipe:{settings:{font_size:40,scene_seconds:10,music_gain:1}},language:'ko',
@@ -134,6 +135,25 @@ test('render produces a private preview only',async()=>{
     render:async images=>{assert.equal(images.length,6);return {ko:Buffer.from('video'),en:Buffer.from('video'),es:Buffer.from('video')};},store:async(path)=>{stored.push(path);}});
   assert.equal(imageCalls,6); assert.equal(stored.length,3);
   assert.equal(result.variants.ko.sha256,sha256(Buffer.from('video')));
+});
+test('explicit demo template substitutes two verified captures and only buys four images',async()=>{
+  const demoSnapshot={...snapshot,episode:{...snapshot.episode,brief:'[APP_DEMO:bibimbap-v1]\nUse the real app.'}};
+  const demos=await demoAssets(demoSnapshot);
+  let calls=0;
+  await executeJob({...base,kind:'render',snapshot:demoSnapshot},{check:async()=>{},image:async()=>{calls++;return Buffer.from('image');},
+    render:async images=>{assert.equal(images.length,6);assert.deepEqual(images[2],demos.get(2));assert.deepEqual(images[3],demos.get(3));
+      return Object.fromEntries(['ko','en','es'].map(l=>[l,Buffer.from('video')]));},store:async()=>{}});
+  assert.equal(calls,4);
+});
+test('unknown demo markers fail before paid calls; model panel text cannot opt in',async()=>{
+  let calls=0;
+  for (const brief of ['[APP_DEMO:../../secret]','prefix [APP_DEMO:bibimbap-v1]',
+    '[APP_DEMO:bibimbap-v1]\n[APP_DEMO:bibimbap-v1]']) {
+    await assert.rejects(executeJob({...base,kind:'render',snapshot:{...snapshot,episode:{...snapshot.episode,brief}}},
+      {check:async()=>{},image:async()=>{calls++;}}),{message:'invalid_demo_template'});
+  }
+  assert.equal(calls,0);
+  assert.equal((await demoAssets({episode:{draft:{panels:['[APP_DEMO:bibimbap-v1]']}}})).size,0);
 });
 test('upload requires exact reviewed preview and never retries',async()=>{
   let calls=0;

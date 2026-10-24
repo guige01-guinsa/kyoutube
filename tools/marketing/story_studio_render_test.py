@@ -2,7 +2,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from PIL import Image
-from story_studio_render import layer, render, validate
+from story_studio_render import layer, render, validate, studio_font, demo_indices, background
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -16,6 +16,33 @@ def fixture(language='ko'):
 
 
 class StudioRenderTests(unittest.TestCase):
+    def test_demo_is_explicit_and_captures_are_contained(self):
+        data = fixture()
+        self.assertEqual(demo_indices(data), set())
+        data['episode']['brief'] = '[APP_DEMO:bibimbap-v1]\nA new story.'
+        self.assertEqual(demo_indices(data), {2, 3})
+        for language in ('ko', 'en', 'es'):
+            data['series']['language'] = language
+            self.assertEqual(layer(data, 'Recipe Scout', is_demo=True).size, (720, 1280))
+        for brief in ['[APP_DEMO:unknown]', 'prefix [APP_DEMO:bibimbap-v1]']:
+            data['episode']['brief'] = brief
+            with self.assertRaises(ValueError):
+                demo_indices(data)
+        capture = Image.new('RGB', (418, 215), 'white')
+        canvas = background(capture, True)
+        self.assertEqual(canvas.size, (720, 1280))
+        self.assertEqual(canvas.getpixel((360, 575)), (255, 255, 255))
+        self.assertNotEqual(canvas.getpixel((0, 0)), (255, 255, 255))
+
+    def test_spanish_accents_have_real_glyphs(self):
+        font = studio_font('es', 40)
+        missing = bytes(font.getmask(chr(0x10ffff)))
+        for character in 'áéíóúüñÁÉÍÓÚÜÑ¿¡':
+            self.assertNotEqual(bytes(font.getmask(character)), missing, character)
+        data = fixture('es')
+        data['episode']['draft']['title'] = 'Un tazón, una historia'
+        self.assertEqual(layer(data, '¿Qué aprendió? Cocinó, escuchó y sonrió.').size, (720, 1280))
+
     def test_three_languages_at_both_font_limits(self):
         for language in ('ko', 'en', 'es'):
             for size in (32, 48):
@@ -43,7 +70,11 @@ class StudioRenderTests(unittest.TestCase):
                 image = directory/f'panel-{i}.png'
                 Image.new('RGB', (720, 1280), (35+i*25, 70, 95)).save(image)
                 images.append(image)
-            result = render(fixture('es'), images, directory/'preview.mp4')
+            data = fixture('es')
+            data['episode']['brief'] = '[APP_DEMO:bibimbap-v1]'
+            images[2] = ROOT/'assets/story_demos/bibimbap-source.jpg'
+            images[3] = ROOT/'assets/story_demos/bibimbap-draft.jpg'
+            result = render(data, images, directory/'preview.mp4')
             self.assertTrue((directory/'preview.mp4').stat().st_size > 10000)
             self.assertIsInstance(result, dict)
             with self.assertRaises(ValueError):
