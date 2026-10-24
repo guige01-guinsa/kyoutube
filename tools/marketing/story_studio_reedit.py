@@ -9,12 +9,35 @@ from pathlib import Path
 import sys
 import tempfile
 import wave
+import subprocess
 
 from PIL import Image, ImageDraw
 from story_series import WIDTH, HEIGHT, FPS, run_ffmpeg, validate_video, wrap
 from story_studio_render import studio_font
 
 READ_HEIGHT, READ_Y, LINE = 400, 770, 48
+DIAGNOSTIC_CODES = frozenset({
+    'invalid_voice_file', 'invalid_voice_format', 'invalid_voice_duration',
+    'invalid_scroll_text', 'scroll_text_overflow', 'invalid_reedit_title',
+    'reedit_title_overflow', 'korean_only_required', 'invalid_chunk_count',
+    'narration_too_fast_for_scroll', 'edition_duration_out_of_bounds',
+    'output_already_exists', 'reedit_video_too_large', 'plan_too_large',
+    'invalid_arguments', 'invalid_video_format', 'invalid_pixel_format',
+    'invalid_video_length',
+})
+
+
+def diagnostic_code(error):
+    if isinstance(error, wave.Error):
+        return 'invalid_voice_format'
+    if isinstance(error, subprocess.TimeoutExpired):
+        return 'renderer_timeout'
+    if isinstance(error, subprocess.CalledProcessError):
+        return 'renderer_command_failed'
+    message = str(error)
+    return message if message in DIAGNOSTIC_CODES else 'unknown'
+
+
 LABELS = {
     'ko': ('비빔밥 음식 백과', 'AI 음성 · AI 삽화 · 기존 음악 재사용'),
     'en': ('BIBIMBAP / FOOD GUIDE', 'AI voice · AI illustrations · Reused music'),
@@ -169,6 +192,7 @@ if __name__ == '__main__':
             print('Narrated re-edit verified; no upload performed.')
         else:
             raise ValueError('invalid_arguments')
-    except Exception:
-        print('Narrated re-edit stopped safely; review required.', file=sys.stderr)
+    except Exception as error:
+        # Never expose arbitrary exception text, paths, transcripts or FFmpeg stderr.
+        print(f'REEDIT_DIAGNOSTIC:{diagnostic_code(error)}', file=sys.stderr)
         sys.exit(1)
