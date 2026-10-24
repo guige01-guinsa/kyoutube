@@ -50,6 +50,7 @@ export async function openaiJson(response, stage, limit = 200000, requestedModel
   return json(response, limit);
 }
 function safeFailure(error) {
+  if (error?.message === 'invalid_reedit_source_video') return error.message;
   if (/^speech_http_[45][0-9]{2}$/.test(error?.message ?? '')) return error.message;
   const match = /^openai_(responses|chat|images)_http_[45][0-9]{2}_([a-z_]+)$/.exec(error?.message ?? '');
   if (match && (apiCodes.has(match[2]) || match[2] === 'unknown')) return error.message;
@@ -188,8 +189,9 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       },
       validateSource: async video => {
         await writeFile(join(directory,'source.mp4'),video);
-        const checked=spawnSync(env.STORY_PYTHON || 'python',['-c',
-          'from story_series import validate_video; import sys; validate_video(sys.argv[1],60)',join(directory,'source.mp4')],
+        const checked=spawnSync(env.STORY_PYTHON || 'python',[
+          fileURLToPath(new URL('./story_studio_reedit.py',import.meta.url)),
+          '--validate-source',join(directory,'source.mp4')],
           {cwd:fileURLToPath(new URL('.',import.meta.url)),timeout:120000,encoding:'utf8',maxBuffer:100000});
         if (checked.status!==0) throw new Error('invalid_reedit_source_video');
       },

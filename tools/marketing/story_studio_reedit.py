@@ -161,8 +161,14 @@ def main(directory):
 
 if __name__ == '__main__':
     try:
-        main(Path(sys.argv[1]))
-        print('Narrated re-edit verified; no upload performed.')
+        if len(sys.argv) == 3 and sys.argv[1] == '--validate-source':
+            validate_video(Path(sys.argv[2]), 60)
+            print('Source video verified; no paid API calls performed.')
+        elif len(sys.argv) == 2:
+            main(Path(sys.argv[1]))
+            print('Narrated re-edit verified; no upload performed.')
+        else:
+            raise ValueError('invalid_arguments')
     except Exception:
         print('Narrated re-edit stopped safely; review required.', file=sys.stderr)
         sys.exit(1)
