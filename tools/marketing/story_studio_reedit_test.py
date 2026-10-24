@@ -2,6 +2,8 @@ from pathlib import Path
 import tempfile
 import unittest
 import wave
+import subprocess
+import sys
 
 from PIL import Image
 from story_series import run_ffmpeg
@@ -66,6 +68,13 @@ class ReeditTests(unittest.TestCase):
                         '-f','lavfi','-i','sine=frequency=220:sample_rate=44100',
                         '-t','60','-c:v','libx264','-preset','ultrafast','-threads','2',
                         '-pix_fmt','yuv420p','-c:a','aac',str(root/'source.mp4')])
+            # Exercise the actual subprocess entry point used before paid speech.
+            command=[sys.executable,str(Path(__file__).with_name('story_studio_reedit.py')),
+                     '--validate-source']
+            checked=subprocess.run(command+[str(root/'source.mp4')],capture_output=True,timeout=120)
+            self.assertEqual(checked.returncode,0,checked.stderr)
+            rejected=subprocess.run(command+[str(root/'missing.mp4')],capture_output=True,timeout=120)
+            self.assertNotEqual(rejected.returncode,0)
             for i in range(2):
                 with wave.open(str(root/f'ko-{i:02}.wav'),'wb') as wav:
                     wav.setparams((1,2,24000,0,'NONE','not compressed'))
