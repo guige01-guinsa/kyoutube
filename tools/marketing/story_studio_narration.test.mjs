@@ -31,6 +31,29 @@ test('renderer diagnostics expose only exact safe codes, never private stderr',(
     'narrated_reedit_failed_invalid_voice_duration');
   assert.equal(safeFailure(new Error('narrated_reedit_failed_private_secret')),'studio_job_needs_review');
 });
+test('runtime diagnostics survive both worker and CLI sanitization without leaking details',()=>{
+  for(const name of ['TimeoutError','AbortError','TypeError','SyntaxError']) {
+    const first=safeFailure({name,message:'private transcript'});
+    assert.equal(first,`runtime_${name.toLowerCase()}`);
+    assert.equal(safeFailure(new Error(first)),first);
+  }
+  for(const code of ['ETIMEDOUT','ENOTFOUND','ECONNRESET','ECONNREFUSED','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','ERR_INVALID_CHAR']) {
+    const first=safeFailure({cause:{code},message:'private provider body'});
+    assert.equal(first,`transport_${code.toLowerCase()}`);
+    assert.equal(safeFailure(new Error(first)),first);
+  }
+  for(const message of ['runtime_secret','transport_secret','runtime_timeouterror private text']) {
+    assert.equal(safeFailure(new Error(message)),'studio_job_needs_review');
+  }
+});
+test('speech timeout is not retried and remains recognizable at the CLI boundary',async()=>{
+  let calls=0;
+  await assert.rejects(speechAudio('첫 문단입니다.','ko','sk-test',async()=>{
+    calls++;
+    throw new DOMException('private provider text','TimeoutError');
+  }),error=>safeFailure(new Error(safeFailure(error)))==='runtime_timeouterror');
+  assert.equal(calls,1);
+});
 test('only exact single opt-in marker permits re-edit',()=>{
   assert.equal(reeditSpec({episode:{brief:'normal'}}),null);
   assert.equal(reeditSpec(snapshot).episodeId,id);

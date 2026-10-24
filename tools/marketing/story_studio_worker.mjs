@@ -73,6 +73,10 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
+  // runStudio and the CLI both sanitize errors. Preserve only known safe results.
+  if (['runtime_timeouterror','runtime_aborterror','runtime_typeerror','runtime_syntaxerror',
+    'transport_etimedout','transport_enotfound','transport_econnreset','transport_econnrefused',
+    'transport_und_err_connect_timeout','transport_und_err_headers_timeout','transport_err_invalid_char'].includes(error?.message)) return error.message;
   const storage = /^preview_store_http_([45][0-9]{2})_([A-Za-z]+)$/.exec(error?.message ?? '');
   if (storage && storageCodes.has(storage[2])) return error.message;
   if (error?.message === 'invalid_reedit_source_video') return error.message;
@@ -226,7 +230,11 @@ export async function runStudio(env = process.env, fetcher = fetch) {
         if (checked.status!==0) throw new Error('invalid_reedit_source_video');
         console.log('Re-edit source validated before paid speech.');
       },
-      speech:(text,language)=>speechAudio(text,language,env.OPENAI_API_KEY,fetcher),
+      speech:async(text,language)=>{
+        const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher);
+        console.log('Re-edit speech chunk returned.');
+        return audio;
+      },
       reedit: async ({plan,voices}) => {
         console.log('Re-edit speech returned; starting offline video assembly.');
         await writeFile(join(directory,'narration.json'),JSON.stringify(plan));
