@@ -18,7 +18,7 @@ await db.exec(`create role anon; create role authenticated; create role service_
  alter table storage.objects enable row level security;
  grant usage on schema storage to authenticated; grant select on storage.objects to authenticated;
  insert into auth.users values('${admin}'),('${ordinary}');`);
-for (const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql','20261024180000_korean_reedit_story_studio.sql','20261025150000_speech_cache_story_studio.sql'])
+for (const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql','20261024180000_korean_reedit_story_studio.sql','20261025150000_speech_cache_story_studio.sql','20261025153000_speech_anon_guard_story_studio.sql'])
   await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'));
 await db.query('insert into marketing_admins values($1)',[admin]);
 await db.exec("insert into storage.objects(bucket_id,name) values('story-previews','test')");
@@ -142,6 +142,11 @@ await cache('reserve',pendingKey);
 await assert.rejects(cache('commit',key,{bytes:48044,sha256:'e'.repeat(64)}),/STORY_INVALID/);
 await db.exec('reset role');
 await db.query("insert into storage.objects(bucket_id,name,metadata) values('story-speech-cache',$1,'{\"size\":48044}')",[reserved.path]);
+await db.exec("grant usage on schema storage to anon; grant select on storage.objects to anon; create policy test_anon_public_read on storage.objects for select to anon using(true)");
+await role('anon');
+assert.equal((await db.query("select * from storage.objects where bucket_id='story-speech-cache'")).rows.length,0);
+assert.equal((await db.query("select * from storage.objects where bucket_id='story-previews'")).rows.length,1);
+await db.exec('reset role; drop policy test_anon_public_read on storage.objects');
 // Even an unrelated broad legacy policy cannot expose speech or permit client writes.
 await db.exec('create policy test_broad_read on storage.objects for select to authenticated using(true); grant insert,update,delete on storage.objects to authenticated; create policy test_broad_write on storage.objects for all to authenticated using(true) with check(true)');
 for(const [user,aal,expected] of [[ordinary,'aal2',0],[admin,'aal1',0],[admin,'aal2',1]]) {
