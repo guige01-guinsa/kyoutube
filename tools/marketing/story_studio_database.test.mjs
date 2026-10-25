@@ -14,11 +14,11 @@ await db.exec(`create role anon; create role authenticated; create role service_
  grant usage on schema auth to authenticated;
  create schema storage;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
- create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);
+ create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text,metadata jsonb);
  alter table storage.objects enable row level security;
  grant usage on schema storage to authenticated; grant select on storage.objects to authenticated;
  insert into auth.users values('${admin}'),('${ordinary}');`);
-for (const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql','20261024180000_korean_reedit_story_studio.sql'])
+for (const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql','20261024180000_korean_reedit_story_studio.sql','20261025150000_speech_cache_story_studio.sql'])
   await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'));
 await db.query('insert into marketing_admins values($1)',[admin]);
 await db.exec("insert into storage.objects(bucket_id,name) values('story-previews','test')");
@@ -131,9 +131,40 @@ await assert.rejects(required(marker),/permission denied/);
 await call('render',{...request,id:randomUUID(),episode_id:reeditId,revision:1,sources_reviewed:true});
 await role('service_role'); job=await call('claim',{},true);
 const ko={asset_path:`${job.id}/ko.mp4`,sha256:'a'.repeat(64)};
+const cache=async(action,key,extra={})=>(await db.query('select story_speech_checkpoint($1,$2::jsonb) as result',
+  [action,JSON.stringify({id:job.id,token:job.lease_token,key,...extra})])).rows[0].result;
+const key='c'.repeat(64),pendingKey='d'.repeat(64);
+await assert.rejects(cache('reserve',key,{token:randomUUID()}),/STORY_LEASE_LOST/);
+await assert.rejects(cache('reserve','invalid'),/STORY_INVALID/);
+const reserved=await cache('reserve',key);
+assert.equal(reserved.can_generate,true);assert.equal((await cache('reserve',key)).can_generate,false);
+await cache('reserve',pendingKey);
+await assert.rejects(cache('commit',key,{bytes:48044,sha256:'e'.repeat(64)}),/STORY_INVALID/);
+await db.exec('reset role');
+await db.query("insert into storage.objects(bucket_id,name,metadata) values('story-speech-cache',$1,'{\"size\":48044}')",[reserved.path]);
+// Even an unrelated broad legacy policy cannot expose speech or permit client writes.
+await db.exec('create policy test_broad_read on storage.objects for select to authenticated using(true); grant insert,update,delete on storage.objects to authenticated; create policy test_broad_write on storage.objects for all to authenticated using(true) with check(true)');
+for(const [user,aal,expected] of [[ordinary,'aal2',0],[admin,'aal1',0],[admin,'aal2',1]]) {
+ await role('authenticated',user,aal);
+ assert.equal((await db.query("select * from storage.objects where bucket_id='story-speech-cache'")).rows.length,expected);
+ await assert.rejects(cache('reserve',key),/permission denied/);
+ await assert.rejects(db.query('select * from story_speech_cache'),/permission denied/);
+ await assert.rejects(db.query("insert into storage.objects(bucket_id,name) values('story-speech-cache','forbidden')"),/row-level security/);
+ assert.equal((await db.query("delete from storage.objects where bucket_id='story-speech-cache' returning id")).rows.length,0);
+}
+await db.exec('reset role; drop policy test_broad_read on storage.objects; drop policy test_broad_write on storage.objects');
+await role('service_role');
+await assert.rejects(cache('commit',key,{bytes:48045,sha256:'e'.repeat(64)}),/STORY_INVALID/);
+await cache('commit',key,{bytes:48044,sha256:'e'.repeat(64)});
+assert.equal((await cache('reserve',key)).status,'ready');
+await assert.rejects(cache('commit',key,{bytes:48044,sha256:'e'.repeat(64)}),/STORY_INVALID/);
+// Reserve accounting includes in-progress chunks and rejects before any AI call.
+for(let i=0;i<14;i++) await cache('reserve',i.toString(16).padStart(64,'0'));
+await assert.rejects(cache('reserve','f'.repeat(64)),/STORY_SPEECH_CAPACITY/);
 for (const variants of [{},{en:ko},{ko,en:ko},{ko:{...ko,asset_path:'other/ko.mp4'}},{ko:{...ko,youtube_id:'ZB8zJymlxCw'}}])
   await assert.rejects(call('complete',{id:job.id,token:job.lease_token,result:{variants}},true),/STORY_INVALID/);
 await call('complete',{id:job.id,token:job.lease_token,result:{variants:{ko}}},true);
+await assert.rejects(cache('reserve',key),/STORY_LEASE_LOST/);
 await role('authenticated'); const koEpisode=(await call('overview')).episodes.find(e=>e.id===reeditId);
 assert.equal(koEpisode.status,'preview'); assert.deepEqual(Object.keys(koEpisode.variants),['ko']);
 const koUpload={...upload,id:randomUUID(),episode_id:reeditId,revision:koEpisode.revision};
@@ -143,5 +174,16 @@ await role('service_role'); job=await call('claim',{},true);
 await call('complete',{id:job.id,token:job.lease_token,result:{youtube_id:'ZB8zJymlxCw',privacy:'private'}},true);
 await role('authenticated');
 assert.equal((await call('overview')).episodes.find(e=>e.id===reeditId).status,'uploaded');
+// Fixture-only recovery: separately approved new job can reclaim unfinished chunks.
+await db.exec(`reset role; update story_episodes set status='draft' where id='${reeditId}'`);
+await role('authenticated');
+const retryEpisode=(await call('overview')).episodes.find(e=>e.id===reeditId);
+await call('render',{...request,id:randomUUID(),episode_id:reeditId,revision:retryEpisode.revision,sources_reviewed:true});
+await role('service_role');job=await call('claim',{},true);
+assert.equal((await cache('reserve',key)).status,'ready');
+assert.equal((await cache('reserve',pendingKey)).can_generate,true);
+assert.equal((await cache('reserve',pendingKey)).can_generate,false);
+await db.exec('reset role; update story_studio_config set enabled=false');
+await role('service_role');await assert.rejects(cache('reserve',key),/STORY_NOT_READY/);
 await db.close();
 console.log('Story database passed: MFA/RLS, fail-closed configuration, consent, idempotency, review gates, immutable recipes, continuity, rollback, uncertain-outcome hold and budget reservations.');
