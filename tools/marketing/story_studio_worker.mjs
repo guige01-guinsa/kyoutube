@@ -9,6 +9,7 @@ import { resolveChannel } from './worker.mjs';
 import { researchRequest, decodeResearch } from './story_studio_research.mjs';
 import { demoAssets } from './story_studio_demo.mjs';
 import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
+import {cachedSpeech, SPEECH_CACHE_MAX_BYTES} from './story_studio_speech_cache.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const REEDIT_MAX_PREVIEW_BYTES = 45000000;
@@ -73,6 +74,9 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
+  if (['speech_cache_invalid_audio','speech_cache_invalid_record','speech_cache_missing',
+    'speech_cache_integrity','speech_cache_read_failed','speech_cache_write_failed',
+    'speech_cache_checkpoint_failed','speech_cache_capacity'].includes(error?.message)) return error.message;
   // runStudio and the CLI both sanitize errors. Preserve only known safe results.
   if (['runtime_timeouterror','runtime_aborterror','runtime_typeerror','runtime_syntaxerror',
     'transport_etimedout','transport_enotfound','transport_econnreset','transport_econnrefused',
@@ -207,6 +211,43 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) }), path === 'responses' ? 'responses' : path.startsWith('images/') ? 'images' : 'chat', limit, body.model);
     const storage = path => new URL(`/storage/v1/object/story-previews/${path}`, root);
+    const checkpoint=async(action,key,metadata={})=>{
+      const response=await fetcher(new URL('/rest/v1/rpc/story_speech_checkpoint',root),{
+        method:'POST',headers:{...headers,'Content-Type':'application/json'},signal:AbortSignal.timeout(30000),
+        body:JSON.stringify({p_action:action,p:{...lease,key,...metadata}})});
+      if(!response.ok) {
+        let capacity=false;
+        try {capacity=(await response.json()).message==='STORY_SPEECH_CAPACITY';} catch { /* no body logging */ }
+        throw new Error(capacity?'speech_cache_capacity':'speech_cache_checkpoint_failed');
+      }
+      return json(response);
+    };
+    const speechStorage=path=>new URL(`/storage/v1/object/story-speech-cache/${path}`,root);
+    const speechIO={
+      check:()=>rpc('check',lease),reserve:key=>checkpoint('reserve',key),
+      commit:(key,metadata)=>checkpoint('commit',key,metadata),
+      generate:(text,language)=>speechAudio(text,language,env.OPENAI_API_KEY,fetcher),
+      read:async path=>{
+        const response=await fetcher(speechStorage(path),{headers,signal:AbortSignal.timeout(60000),redirect:'error'});
+        if(!response.ok) {
+          if(response.status===404) return null;
+          if(response.status===400) {
+            let body; try {body=await response.json();} catch { /* fail closed */ }
+            if(body?.code==='NoSuchKey' || (String(body?.statusCode)==='404' && body?.error==='not_found')) return null;
+          }
+          throw new Error('speech_cache_read_failed');
+        }
+        if(Number(response.headers.get('content-length'))>SPEECH_CACHE_MAX_BYTES) throw new Error('speech_cache_invalid_audio');
+        const bytes=Buffer.from(await response.arrayBuffer());
+        if(bytes.length>SPEECH_CACHE_MAX_BYTES) throw new Error('speech_cache_invalid_audio');
+        return bytes;
+      },
+      write:async(path,audio)=>{
+        const response=await fetcher(speechStorage(path),{method:'POST',headers:{...headers,'Content-Type':'audio/wav','x-upsert':'false'},
+          body:audio,signal:AbortSignal.timeout(60000),redirect:'error'});
+        if(!response.ok) throw new Error('speech_cache_write_failed');
+      },
+    };
     const result = await executeJob(job, {
       check: () => rpc('check', lease),
       chat: body => api('chat/completions', body, 200000, 180000),
@@ -231,8 +272,8 @@ export async function runStudio(env = process.env, fetcher = fetch) {
         console.log('Re-edit source validated before paid speech.');
       },
       speech:async(text,language)=>{
-        const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher);
-        console.log('Re-edit speech chunk returned.');
+        const audio=await cachedSpeech(text,language,speechIO);
+        console.log('Re-edit speech chunk verified in private storage.');
         return audio;
       },
       reedit: async ({plan,voices}) => {

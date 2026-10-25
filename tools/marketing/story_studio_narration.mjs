@@ -69,14 +69,18 @@ export async function prepareNarration(snapshot,io) {
   }
   return {video,plan,voices};
 }
-export async function speechAudio(text,language,key,fetcher=fetch) {
+export function speechRequest(text,language) {
   if (!languages.includes(language) || typeof text!=='string' || !text.trim() || text.length>600) throw new Error('invalid_speech_input');
-  if (!/^sk-[A-Za-z0-9_-]+$/.test(key ?? '')) throw new Error('invalid_key_format');
   const languageName={ko:'native Korean',en:'English',es:'Latin American Spanish'}[language];
+  return {model:NARRATION_MODEL,voice:'coral',input:text,response_format:'wav',speed:1,
+    instructions:`Read the provided text verbatim in ${languageName}. Warm, clear, feminine documentary narrator. Calm professional voice acting, unhurried but not sleepy. Natural phrasing, careful recipe quantities and names. No additions, no music, no sound effects, no impersonation.`};
+}
+export async function speechAudio(text,language,key,fetcher=fetch) {
+  const body=speechRequest(text,language);
+  if (!/^sk-[A-Za-z0-9_-]+$/.test(key ?? '')) throw new Error('invalid_key_format');
   const response=await fetcher('https://api.openai.com/v1/audio/speech',{
     method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-    body:JSON.stringify({model:NARRATION_MODEL,voice:'coral',input:text,response_format:'wav',speed:1,
-      instructions:`Read the provided text verbatim in ${languageName}. Warm, clear, feminine documentary narrator. Calm professional voice acting, unhurried but not sleepy. Natural phrasing, careful recipe quantities and names. No additions, no music, no sound effects, no impersonation.`}),
+    body:JSON.stringify(body),
     signal:AbortSignal.timeout(90000),redirect:'error'});
   if (!response.ok) throw new Error(`speech_http_${response.status}`); // never print provider bodies
   if (!/^audio\/(wav|x-wav|wave)(;|$)/i.test(response.headers.get('content-type') ?? '') ||

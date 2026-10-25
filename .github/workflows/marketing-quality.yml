@@ -34,7 +34,7 @@ jobs:
       - name: Type check Edge Function
         run: deno check supabase/functions/marketing_generate/index.ts
       - name: Worker tests
-        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs
+        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
