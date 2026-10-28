@@ -64,6 +64,10 @@ class AppLocalizations {
     if (exact != null) return exact;
 
     final patterns = _dynamicTranslationCache ??= <_DynamicTranslation>[
+      (
+        RegExp(r'^(\d+)번째 장면 · (\d+)~(\d+)초$'),
+        (m) => 'Scene ${m[1]} · ${m[2]}–${m[3]} seconds'
+      ),
       (RegExp(r'^(\d+)건을 복원했습니다\.$'), (m) => 'Restored ${m[1]} records.'),
       (
         RegExp(r'^(\d+)건을 보관했습니다\. 보관함에서 복원할 수 있습니다\.$'),

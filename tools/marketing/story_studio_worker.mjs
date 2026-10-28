@@ -10,6 +10,8 @@ import { researchRequest, decodeResearch } from './story_studio_research.mjs';
 import { demoAssets } from './story_studio_demo.mjs';
 import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
 import {cachedSpeech, SPEECH_CACHE_MAX_BYTES} from './story_studio_speech_cache.mjs';
+import {executeStandardJob} from './story_studio_standard_worker.mjs';
+import {validateStandardAudio} from './story_studio_standard.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const REEDIT_MAX_PREVIEW_BYTES = 45000000;
@@ -74,6 +76,16 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
+  const standardCodes = ['standard_shorten_script','standard_audio_quality_review',
+    'standard_sample_changed','standard_video_quality_review','standard_unknown_failure',
+    'standard_demo_not_ready','standard_render_failed','standard_invalid_plan',
+    'standard_sources_required','standard_invalid_source','standard_six_scenes_required',
+    'standard_invalid_scene','standard_unattributed_fact','standard_sample_listening_required',
+    'speech_cache_invalid_audio','speech_cache_integrity','speech_cache_missing','speech_cache_capacity'];
+  if (standardCodes.includes(error?.message)) return error.message;
+  if (error?.message === 'standard_needs_review') {
+    return standardCodes.includes(error.cause) ? error.cause : 'standard_unknown_failure';
+  }
   if (['speech_cache_invalid_audio','speech_cache_invalid_record','speech_cache_missing',
     'speech_cache_integrity','speech_cache_read_failed','speech_cache_write_failed',
     'speech_cache_checkpoint_failed','speech_cache_capacity'].includes(error?.message)) return error.message;
@@ -132,6 +144,7 @@ async function json(response, limit = 200000) {
 export async function executeJob(job, io) {
   if (!uuid.test(job.id) || !uuid.test(job.lease_token) || !['draft','improve','render','upload'].includes(job.kind)) throw new Error('invalid_job');
   await io.check(); // Revalidate lease, global pause and administrator before side effects.
+  if (job.snapshot?.standard_profile === 'ko-60-v1') return executeStandardJob(job,io);
   if (job.kind === 'improve') return decodeAgent(await io.chat(agentRequest(job)), job.kind);
   if (job.kind === 'draft') {
     const research = decodeResearch(await io.research(researchRequest(job.snapshot)));
@@ -199,7 +212,18 @@ export async function runStudio(env = process.env, fetcher = fetch) {
   const headers = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
   const rpc = (p_action, p = {}) => jsonPromise(fetcher(new URL('/rest/v1/rpc/story_studio_work', root), {
     method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(30000), body: JSON.stringify({p_action,p}) }));
-  await rpc('heartbeat', { text_model: env.OPENAI_MARKETING_MODEL, image_model: env.OPENAI_STORY_IMAGE_MODEL });
+  // A bundled real capture is required; no arbitrary URL or synthetic UI fallback.
+  const standardDemo=async()=>{
+    const manifest=JSON.parse(await readFile(new URL('../../assets/story_demos/standard-guide-v1.json',import.meta.url),'utf8'));
+    if(manifest.file!=='bibimbap-draft.jpg' || !/^[a-f0-9]{64}$/.test(manifest.sha256 ?? '') || manifest.personal_data_removed!==true)
+      throw new Error('standard_demo_not_ready');
+    const bytes=await readFile(new URL('../../assets/story_demos/bibimbap-draft.jpg',import.meta.url));
+    if(bytes.length>2000000 || sha256(bytes)!==manifest.sha256) throw new Error('standard_demo_not_ready');
+    return bytes;
+  };
+  const standardCaptureReady=await standardDemo().then(()=>true,()=>false);
+  await rpc('heartbeat', { text_model: env.OPENAI_MARKETING_MODEL, image_model: env.OPENAI_STORY_IMAGE_MODEL,
+    standard_profile:'ko-60-v1',standard_capture_ready:standardCaptureReady });
   const job = await rpc('claim');
   if (!job) return { idle: true };
   const lease = { id: job.id, token: job.lease_token };
@@ -211,8 +235,9 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) }), path === 'responses' ? 'responses' : path.startsWith('images/') ? 'images' : 'chat', limit, body.model);
     const storage = path => new URL(`/storage/v1/object/story-previews/${path}`, root);
+    const standard=job.snapshot.standard_profile==='ko-60-v1';
     const checkpoint=async(action,key,metadata={})=>{
-      const response=await fetcher(new URL('/rest/v1/rpc/story_speech_checkpoint',root),{
+      const response=await fetcher(new URL(`/rest/v1/rpc/${standard?'story_standard_checkpoint':'story_speech_checkpoint'}`,root),{
         method:'POST',headers:{...headers,'Content-Type':'application/json'},signal:AbortSignal.timeout(30000),
         body:JSON.stringify({p_action:action,p:{...lease,key,...metadata}})});
       if(!response.ok) {
@@ -222,11 +247,15 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       }
       return json(response);
     };
-    const speechStorage=path=>new URL(`/storage/v1/object/story-speech-cache/${path}`,root);
+    const speechStorage=path=>new URL(`/storage/v1/object/${standard?'story-standard-samples':'story-speech-cache'}/${path}`,root);
     const speechIO={
       check:()=>rpc('check',lease),reserve:key=>checkpoint('reserve',key),
       commit:(key,metadata)=>checkpoint('commit',key,metadata),
-      generate:(text,language)=>speechAudio(text,language,env.OPENAI_API_KEY,fetcher),
+      generate:async(text,language)=>{
+        const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher);
+        if(standard) validateStandardAudio(audio);
+        return audio;
+      },
       read:async path=>{
         const response=await fetcher(speechStorage(path),{headers,signal:AbortSignal.timeout(60000),redirect:'error'});
         if(!response.ok) {
@@ -250,6 +279,32 @@ export async function runStudio(env = process.env, fetcher = fetch) {
     };
     const result = await executeJob(job, {
       check: () => rpc('check', lease),
+      standardSpeech:(text,language)=>cachedSpeech(text,language,speechIO),
+      standardDemo,
+      standardStoreSample:async(path,audio)=>{
+        if(path!==`${job.id}/sample.wav` || audio.length>2000000) throw new Error('invalid_speech_audio');
+        await speechIO.write(path,audio);
+        const saved=await speechIO.read(path);
+        if(!saved || sha256(saved)!==sha256(audio)) throw new Error('speech_cache_integrity');
+      },
+      standardRender:async(plan,panels,audio)=>{
+        await writeFile(join(directory,'plan.json'),JSON.stringify(plan));
+        for(let i=0;i<6;i++) {
+          await writeFile(join(directory,`panel-${i}.png`),panels[i]);
+          await writeFile(join(directory,`ko-${i}.wav`),audio[i]);
+        }
+        const rendered=spawnSync(env.STORY_PYTHON || 'python',
+          [fileURLToPath(new URL('./story_studio_standard_render.py',import.meta.url)),directory],
+          {timeout:360000,encoding:'utf8',maxBuffer:1000000});
+        if(rendered.status!==0) throw new Error('standard_render_failed');
+        const video=await readFile(join(directory,'ko.mp4'));
+        const quality=JSON.parse(await readFile(join(directory,'quality.json'),'utf8'));
+        if(quality.video?.sha256!==sha256(video) || quality.video?.audio!==true ||
+          quality.video?.frames!==1440 || quality.video?.size?.join(',')!=='720,1280' ||
+          !Number.isFinite(quality.video?.seconds) || quality.video.seconds<59.9 || quality.video.seconds>60)
+          throw new Error('standard_render_failed');
+        return {video,quality:quality.video};
+      },
       chat: body => api('chat/completions', body, 200000, 180000),
       research:body=>api('responses',body,250000,180000),
       sourceEpisode: async id => {
@@ -340,7 +395,9 @@ export async function privateUpload(video, snapshot, env, fetcher = fetch) {
   const auth = { Authorization:`Bearer ${oauth.access_token}` };
   const yt = path => jsonPromise(fetcher(`https://www.googleapis.com/youtube/v3/${path}`, {headers:auth,signal:AbortSignal.timeout(30000)}));
   const channelId = await resolveChannel(env, yt);
-  const disclosures = reeditSpec(snapshot) ? {
+  const disclosures = snapshot.standard_profile==='ko-60-v1' ? {
+    ko:'한국어 1분 음식 안내 · AI 내레이션 · 창작 삽화와 음악 · 앱 안내에는 실제 캡처를 사용했습니다. 삽화는 실제 조리 장면이나 역사 사료가 아닙니다.',
+  } : reeditSpec(snapshot) ? {
     ko:'음식 정보 안내 · AI 내레이션 · 재사용한 AI 삽화와 창작 음악 · 삽화는 조리 실사나 역사 사료가 아닙니다. 가정용 조리 예시는 특정 업소의 공식 조리법이 아닙니다.',
     en:'Food guide · AI-generated narration · Reused AI illustrations and original music. Illustrations are not cooking footage or historical records. The home recipe is not an official restaurant recipe.',
     es:'Guía culinaria · Narración generada por IA · Ilustraciones de IA y música original reutilizadas. Las imágenes no son grabaciones de cocina ni documentos históricos. La receta casera no es una receta oficial de un restaurante.',

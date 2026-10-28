@@ -1,4 +1,5 @@
 import 'hardening_translations.dart';
+import 'standard_studio_translations.dart';
 import 'shopping_market_translations.dart';
 import 'purchase_cleanup_translations.dart';
 import 'business_meal_translations.dart';
@@ -16,6 +17,7 @@ import 'affiliate_ui_translations.dart';
 import 'shopping_preparation_translations.dart';
 
 const Map<String, String> koreanUiTranslations = <String, String>{
+  ...standardStudioTranslations,
   "업로드 중": "Uploading",
   "마케팅 자동화": "Marketing automation",
   "홍보 초안 검토 및 예약 게시": "Review marketing drafts and schedule uploads",
