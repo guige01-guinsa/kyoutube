@@ -34,7 +34,7 @@ jobs:
       - name: Type check Edge Function
         run: deno check supabase/functions/marketing_generate/index.ts
       - name: Worker tests
-        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs
+        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -54,12 +54,16 @@ jobs:
         run: |
           node tools/marketing/database.test.mjs
           node tools/marketing/story_studio_database.test.mjs
+          node tools/marketing/story_studio_standard_database.test.mjs
       - name: Trilingual studio layout and 60-second preview
         timeout-minutes: 3
         run: python tools/marketing/story_studio_render_test.py
       - name: Existing-media narrated re-edit safety and scrolling
         timeout-minutes: 3
         run: python tools/marketing/story_studio_reedit_test.py
+      - name: Korean one-minute standard (synthetic audio, no paid requests)
+        timeout-minutes: 3
+        run: python tools/marketing/story_studio_standard_render_test.py
       - name: Offline story pilot safety and layout tests
         timeout-minutes: 3
         run: python tools/marketing/story_series_synthetic_test.py

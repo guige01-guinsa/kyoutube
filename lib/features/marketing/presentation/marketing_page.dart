@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -140,6 +141,11 @@ class _MarketingPageState extends ConsumerState<MarketingPage> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: <Widget>[
+        OutlinedButton.icon(
+          onPressed: () => context.go('/marketing/standard'),
+          icon: const Icon(Icons.movie_creation_outlined),
+          label: const Text('한국어 1분 제작소'),
+        ),
         const Text('레시피 스카우트 홍보 초안 → 검토·예약 승인 → 영상 제작·업로드'),
         const SizedBox(height: 8),
         const Text('운영 연결 준비 단계입니다. 초안 생성·게시를 활성화하기 전 운영 설정을 확인하세요.'),

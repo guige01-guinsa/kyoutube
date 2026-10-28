@@ -1,9 +1,11 @@
 import 'spanish_catalog.dart';
+import 'standard_studio_spanish.dart';
 import 'shopping_market_translations.dart';
 
 /// Reviewed overrides take precedence over the generated Latin American
 /// Spanish catalog. Source copy is retained only for an unknown phrase.
 const spanishUiTranslations = <String, String>{
+  ...standardStudioSpanish,
   ...spanishCatalog,
   ...shoppingMarketSpanish,
   'Uploading': 'Subiendo',

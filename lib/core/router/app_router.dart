@@ -1,4 +1,5 @@
 import '../../features/marketing/presentation/marketing_page.dart';
+import '../../features/marketing/presentation/standard_studio_page.dart';
 import '../auth/auth_return.dart';
 import '../../features/shopping/presentation/purchase_cleanup_page.dart';
 import '../../features/shopping/presentation/affiliate_display_page.dart';
@@ -77,6 +78,7 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
   static const String account = '/account';
   static const String marketing = '/marketing';
+  static const String standardStudio = '/marketing/standard';
   static const String membership = '/membership';
   static const String membershipAdmin = '/membership/admin';
   static const String shoppingAffiliateWorkflow =
@@ -615,6 +617,11 @@ class AppRouter {
               path: AppRoutes.marketing,
               builder: (BuildContext context, GoRouterState state) =>
                   const MarketingPage(),
+            ),
+            GoRoute(
+              path: AppRoutes.standardStudio,
+              builder: (BuildContext context, GoRouterState state) =>
+                  const StandardStudioPage(),
             ),
 
             // Auth.
