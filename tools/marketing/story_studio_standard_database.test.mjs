@@ -117,8 +117,8 @@ await call('render',{...req('render'),project_id:sourceId,revision:sx.revision})
 await role('service_role');sj=await work('claim');
 const completion={id:sj.id,token:sj.lease_token,result:{path:`${sj.id}/ko.mp4`,sha256:'e'.repeat(64),seconds:180,language:'ko'}};
 await assert.rejects(work('complete',{...completion,result:{...completion.result,seconds:181}}),/STORY_INVALID/);
-await assert.rejects(work('complete',{...completion,result:{...completion.result,seconds:29.9}}),/STORY_INVALID/);
-await work('complete',{...completion,result:{...completion.result,seconds:72}});
+await assert.rejects(work('complete',{...completion,result:{...completion.result,seconds:0}}),/STORY_INVALID/);
+await work('complete',{...completion,result:{...completion.result,seconds:20}});
 await role('authenticated');assert.equal((await call('overview')).projects.find(p=>p.id===sourceId).status,'preview');
 await role('authenticated',ordinary);await assert.rejects(call('import_recipe',{...source,id:randomUUID()}),/marketing_admin_required/);
 console.log('Source recipe DB: original amounts, JS/SQL agreement, no duplicate import, access and 180s bound passed.');

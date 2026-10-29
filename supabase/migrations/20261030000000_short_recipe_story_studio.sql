@@ -15,6 +15,6 @@ begin
  end if;
  -- CREATE OR REPLACE retains the existing service-role-only grants and all
  -- authorization, lease, source-revision, path, hash and upload checks.
- execute replace(body,old_rule,'then (v->>''seconds'')::numeric between 30 and 180 else');
+ execute replace(body,old_rule,'then ((v->>''seconds'')::numeric > 0 and (v->>''seconds'')::numeric <= 180) else');
 end $$;
 commit;

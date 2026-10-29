@@ -8,11 +8,12 @@ from story_studio_recipe_render import timing, card, render_recipe
 class RecipeTests(unittest.TestCase):
     def test_short_recipe_keeps_actual_voice_length(self):
         with tempfile.TemporaryDirectory() as directory:
-            p=Path(directory)/'voice.wav'; tone(p,4)
+            p=Path(directory)/'voice.wav'; tone(p,1)
             frames=timing([p]*14)
             self.assertLess(sum(frames)/24,150)
-            self.assertGreaterEqual(sum(frames)/24,30)
-            self.assertAlmostEqual(sum(frames)/24,14*4.4166666667)
+            self.assertGreater(sum(frames)/24,0)
+            self.assertLess(sum(frames)/24,30)
+            self.assertAlmostEqual(sum(frames)/24,14*1.4166666667)
 
     def test_complete_three_minutes_and_no_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
