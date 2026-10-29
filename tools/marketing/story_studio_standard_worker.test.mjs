@@ -2,9 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {executeJob,safeFailure} from './story_studio_worker.mjs';
+import {executeJob,safeFailure,validateStandardRenderedVideo} from './story_studio_worker.mjs';
 import {researchResponse} from './story_studio_fixture.mjs';
 const digest=b=>createHash('sha256').update(b).digest('hex');
+test('actual renderer adapter accepts concise recipes and rejects overlong, empty or corrupt files',()=>{
+ const video=Buffer.from('validated fixture'),plan={profile:'ko-180-source-v1'};
+ const q={sha256:digest(video),audio:true,size:[720,1280],seconds:24,frames:576};
+ assert.equal(validateStandardRenderedVideo(plan,video,{video:q}),q);
+ for(const change of [{seconds:0,frames:0},{seconds:181,frames:4344},{sha256:'0'.repeat(64)},{audio:false},{frames:575}])
+  assert.throws(()=>validateStandardRenderedVideo(plan,video,{video:{...q,...change}}),/standard_render_failed/);
+ assert.throws(()=>validateStandardRenderedVideo({profile:'ko-60-v1'},video,{video:q}),/standard_render_failed/);
+});
 test('bundled demo is the unchanged reviewed generic app guidance crop',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../../assets/story_demos/standard-guide-v1.json',import.meta.url),'utf8'));
  assert.equal(manifest.file,'bibimbap-draft.jpg');assert.equal(manifest.personal_data_removed,true);
