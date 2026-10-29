@@ -5,6 +5,8 @@ on:
       - 'lib/features/marketing/**'
       - 'test/features/marketing/**'
       - 'tools/marketing/**'
+      - 'supabase/functions/_shared/recipe_source_eligibility*'
+      - 'supabase/functions/youtube_search/**'
       - 'supabase/functions/marketing_generate/**'
       - 'supabase/functions/story_studio_dispatch/**'
       - 'supabase/migrations/*_marketing_automation.sql'
@@ -15,6 +17,8 @@ on:
   push:
     paths:
       - 'tools/marketing/**'
+      - 'supabase/functions/_shared/recipe_source_eligibility*'
+      - 'supabase/functions/youtube_search/**'
       - 'supabase/functions/marketing_generate/**'
       - 'supabase/functions/story_studio_dispatch/**'
       - 'supabase/migrations/*_marketing_automation.sql'
@@ -39,6 +43,8 @@ jobs:
         run: |
           deno check supabase/functions/marketing_generate/index.ts supabase/functions/story_studio_dispatch/index.ts
           deno test supabase/functions/story_studio_dispatch/handler_test.ts
+          deno check supabase/functions/youtube_search/index.ts
+          deno test supabase/functions/_shared/recipe_source_eligibility_test.ts supabase/functions/youtube_search/youtube_client_test.ts supabase/functions/youtube_search/index_test.ts
       - name: Worker tests
         run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs
       - uses: actions/setup-python@v5

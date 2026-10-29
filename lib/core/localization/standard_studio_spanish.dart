@@ -2,8 +2,11 @@
 const standardStudioSpanish = <String, String>{
   "Automatically prepare a script from a video URL":
       "Preparar un guion automáticamente desde una URL de video",
-  "Enter the dish and source YouTube URL. Extract the original recipe from its description and prepare a script. Stop without guessing if information is missing.":
-      "Introduce el plato y la URL de YouTube. Extrae la receta original de su descripción y prepara el guion. Si falta información, se detiene sin adivinar.",
+  "Enter the dish and source YouTube URL. If source information is missing, check up to five Korean videos of the same dish and select one with a published recipe. Stop if none qualifies.":
+      "Introduce el plato y la URL de YouTube. Si falta información, se revisan hasta cinco videos en coreano del mismo plato y se elige uno con la receta publicada. Si ninguno cumple los requisitos, se detiene.",
+  "The requested video lacks source information. The reference was changed to a Korean video of the same dish with a published recipe. Review the selected video and script below.":
+      "El video solicitado no tiene suficiente información. Se eligió como referencia otro video en coreano del mismo plato con la receta publicada. Revisa el video seleccionado y el guion a continuación.",
+  "Originally requested video": "Video solicitado originalmente",
   "Check the YouTube video URL.": "Comprueba la URL del video de YouTube.",
   "Confirm script preparation costs next. Video production and upload have not started.":
       "Confirma el costo del guion en la siguiente pantalla. La producción y la subida aún no han comenzado.",

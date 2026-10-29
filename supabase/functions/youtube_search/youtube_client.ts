@@ -1,4 +1,5 @@
 import type { YoutubeSearchItem } from "./contract.ts";
+import { inspectRecipeDescription } from "../_shared/recipe_source_eligibility.mjs";
 
 export class YoutubeUpstreamError extends Error {
   constructor(
@@ -302,8 +303,9 @@ export async function searchYoutube({
 
   for (
     const [key, value] of Object.entries({
-      part: "contentDetails",
+      part: "snippet,contentDetails",
       id: candidates.map((candidate) => candidate.videoId).join(","),
+      hl: locale.languageCode,
       key: apiKey,
     })
   ) {
@@ -319,24 +321,33 @@ export async function searchYoutube({
   }
 
   const durationByVideoId = new Map<string, number>();
+  const descriptionByVideoId = new Map<string, string>();
 
   for (const raw of detailsPayload.items) {
     const item = asRecord(raw);
     const videoId = text(item?.id);
     const contentDetails = asRecord(item?.contentDetails);
+    const snippet = asRecord(item?.snippet);
+    const localized = asRecord(snippet?.localized);
+    const description = text(localized?.description) ?? text(snippet?.description);
 
     const seconds = durationSeconds(text(contentDetails?.duration));
 
     if (
       videoId != null &&
+      inspectRecipeDescription(description).eligible &&
       seconds != null &&
       seconds <= maxCookingDurationSec
     ) {
       durationByVideoId.set(videoId, seconds);
+      descriptionByVideoId.set(videoId, description!);
     }
   }
 
   return candidates
+    // Search snippets are truncated; only the complete videos.list description
+    // can establish source eligibility. Batch metadata keeps the request count.
+    .map((candidate) => ({...candidate,description:descriptionByVideoId.get(candidate.videoId)??''}))
     .filter((candidate) =>
       durationByVideoId.has(candidate.videoId) &&
       isLikelyCookingRecipe(candidate, query)

@@ -35,6 +35,41 @@ StandardRow overview(
     };
 
 void main() {
+  testWidgets(
+      'alternative source is disclosed before recipe review and production',
+      (tester) async {
+    final data = overview(status: 'draft');
+    final project = (data['projects'] as List).first as Map;
+    project['plan'] = {
+      'profile': 'ko-180-source-v1',
+      'title': '대체 영상 원고',
+      'recipe': {'url': 'https://www.youtube.com/watch?v=12345678901'},
+      'scenes': <Map<String, dynamic>>[],
+      'sources': <Map<String, dynamic>>[],
+    };
+    project['source_receipt'] = {
+      'selection': {
+        'requested_url': 'https://www.youtube.com/watch?v=abcdefghijk',
+        'selected_url': 'https://www.youtube.com/watch?v=12345678901',
+        'requires_review': true,
+      },
+    };
+    await tester.pumpWidget(ProviderScope(overrides: [
+      marketingAdminProvider.overrideWith((ref) async => true),
+      standardStudioProvider.overrideWith((ref) async => data),
+    ], child: const MaterialApp(home: StandardStudioPage())));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('기준을 변경했습니다.'), findsOneWidget);
+    expect(find.text('처음 요청한 영상'), findsOneWidget);
+    expect(find.text('https://www.youtube.com/watch?v=abcdefghijk'),
+        findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, '확인한 원고로 자동 제작'))
+            .onPressed,
+        isNull);
+  });
   test('recipe URLs normalize shared links without accepting other origins',
       () {
     expect(canonicalRecipeVideoUrl('https://youtu.be/abcdefghijk?si=share'),

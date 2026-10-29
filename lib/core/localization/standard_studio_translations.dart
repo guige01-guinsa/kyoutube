@@ -1,8 +1,11 @@
 // Admin interface labels only. Produced scripts and media remain Korean-only.
 const standardStudioTranslations = <String, String>{
   "영상 주소로 원고 자동 준비": "Automatically prepare a script from a video URL",
-  "음식 이름과 기준 유튜브 주소만 입력하세요. 설명란에서 원본 레시피를 추출하고 원고를 준비합니다. 정보가 부족하면 추측하지 않고 멈춥니다.":
-      "Enter the dish and source YouTube URL. Extract the original recipe from its description and prepare a script. Stop without guessing if information is missing.",
+  "음식 이름과 기준 유튜브 주소만 입력하세요. 원문 정보가 부족하면 같은 음식의 한국어 영상 최대 5개를 확인하고, 레시피가 공개된 한 영상으로 기준을 변경합니다. 적합한 영상이 없으면 멈춥니다.":
+      "Enter the dish and source YouTube URL. If source information is missing, check up to five Korean videos of the same dish and select one with a published recipe. Stop if none qualifies.",
+  "입력한 영상의 원문 정보가 부족하여, 레시피가 공개된 같은 음식의 한국어 영상으로 기준을 변경했습니다. 아래 기준 영상과 원고를 확인해 주세요.":
+      "The requested video lacks source information. The reference was changed to a Korean video of the same dish with a published recipe. Review the selected video and script below.",
+  "처음 요청한 영상": "Originally requested video",
   "유튜브 영상 주소를 확인해 주세요.": "Check the YouTube video URL.",
   "다음 화면에서 원고 준비 비용을 확인합니다. 영상 제작과 업로드는 아직 시작하지 않습니다.":
       "Confirm script preparation costs next. Video production and upload have not started.",
