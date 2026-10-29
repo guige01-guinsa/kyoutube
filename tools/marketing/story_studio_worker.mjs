@@ -11,6 +11,7 @@ import { demoAssets } from './story_studio_demo.mjs';
 import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
 import {cachedSpeech, SPEECH_CACHE_MAX_BYTES} from './story_studio_speech_cache.mjs';
 import {executeStandardJob} from './story_studio_standard_worker.mjs';
+import {fetchRecipeSource,recipeVideoId} from './story_studio_recipe_source.mjs';
 import {validateStandardAudio} from './story_studio_standard.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -76,7 +77,7 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
-  const standardCodes = ['standard_shorten_script','standard_audio_quality_review',
+  const standardCodes = ['recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','standard_shorten_script','standard_audio_quality_review',
     'standard_sample_changed','standard_video_quality_review','standard_unknown_failure',
     'standard_demo_not_ready','standard_render_failed','standard_invalid_plan',
     'standard_sources_required','standard_invalid_source','standard_six_scenes_required',
@@ -253,7 +254,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       commit:(key,metadata)=>checkpoint('commit',key,metadata),
       generate:async(text,language)=>{
         const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher);
-        if(standard) validateStandardAudio(audio);
+        if(standard) validateStandardAudio(audio,job.snapshot.project?.plan?.profile==='ko-180-source-v1'?30:9.5);
         return audio;
       },
       read:async path=>{
@@ -279,6 +280,22 @@ export async function runStudio(env = process.env, fetcher = fetch) {
     };
     const result = await executeJob(job, {
       check: () => rpc('check', lease),
+      recipeSource:async url=>{
+        const id=recipeVideoId(url),cacheUrl=new URL('/rest/v1/story_recipe_sources',root);
+        cacheUrl.searchParams.set('video_id',`eq.${id}`);cacheUrl.searchParams.set('limit','1');
+        const cached=await json(await fetcher(cacheUrl,{headers,signal:AbortSignal.timeout(15000)}));
+        const record=Array.isArray(cached)?cached[0]:null;
+        if(record && Date.now()-Date.parse(record.fetched_at)>=0 && Date.now()-Date.parse(record.fetched_at)<86400000) {
+          if(record.source?.url!==url||typeof record.source.description!=='string'||sha256(Buffer.from(record.source.description))!==record.source.sha256) throw new Error('recipe_source_cache');
+          return record.source;
+        }
+        await rpc('check',lease);const source=await fetchRecipeSource(url,env,fetcher);
+        await rpc('check',lease);
+        const saved=await fetcher(new URL('/rest/v1/story_recipe_sources',root),{
+          method:'POST',headers:{...headers,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+          body:JSON.stringify({video_id:id,source,fetched_at:source.checked_at}),signal:AbortSignal.timeout(15000)});
+        if(!saved.ok) throw new Error('recipe_source_cache');return source;
+      },
       standardSpeech:(text,language)=>cachedSpeech(text,language,speechIO),
       standardDemo,
       standardStoreSample:async(path,audio)=>{
@@ -289,19 +306,20 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       },
       standardRender:async(plan,panels,audio)=>{
         await writeFile(join(directory,'plan.json'),JSON.stringify(plan));
-        for(let i=0;i<6;i++) {
+        for(let i=0;i<plan.scenes.length;i++) {
           await writeFile(join(directory,`panel-${i}.png`),panels[i]);
           await writeFile(join(directory,`ko-${i}.wav`),audio[i]);
         }
         const rendered=spawnSync(env.STORY_PYTHON || 'python',
-          [fileURLToPath(new URL('./story_studio_standard_render.py',import.meta.url)),directory],
+          [fileURLToPath(new URL(plan.profile==='ko-180-source-v1'?'./story_studio_recipe_render.py':'./story_studio_standard_render.py',import.meta.url)),directory],
           {timeout:360000,encoding:'utf8',maxBuffer:1000000});
         if(rendered.status!==0) throw new Error('standard_render_failed');
         const video=await readFile(join(directory,'ko.mp4'));
         const quality=JSON.parse(await readFile(join(directory,'quality.json'),'utf8'));
         if(quality.video?.sha256!==sha256(video) || quality.video?.audio!==true ||
-          quality.video?.frames!==1440 || quality.video?.size?.join(',')!=='720,1280' ||
-          !Number.isFinite(quality.video?.seconds) || quality.video.seconds<59.9 || quality.video.seconds>60)
+          quality.video?.size?.join(',')!=='720,1280' ||
+          !Number.isFinite(quality.video?.seconds) ||
+          (plan.profile==='ko-180-source-v1' ? quality.video.seconds<150 || quality.video.seconds>180 || quality.video.frames!==Math.round(quality.video.seconds*24) : quality.video.frames!==1440 || quality.video.seconds<59.9 || quality.video.seconds>60))
           throw new Error('standard_render_failed');
         return {video,quality:quality.video};
       },
@@ -395,7 +413,9 @@ export async function privateUpload(video, snapshot, env, fetcher = fetch) {
   const auth = { Authorization:`Bearer ${oauth.access_token}` };
   const yt = path => jsonPromise(fetcher(`https://www.googleapis.com/youtube/v3/${path}`, {headers:auth,signal:AbortSignal.timeout(30000)}));
   const channelId = await resolveChannel(env, yt);
-  const disclosures = snapshot.standard_profile==='ko-60-v1' ? {
+  const disclosures = snapshot.project?.plan?.profile==='ko-180-source-v1' ? {
+    ko:'원본 영상 레시피 안내 · AI 내레이션 · 재료표와 조리 안내 화면 · 창작 배경음악. 원본 영상의 출처는 아래에서 확인하세요.',
+  } : snapshot.standard_profile==='ko-60-v1' ? {
     ko:'한국어 1분 음식 안내 · AI 내레이션 · 창작 삽화와 음악 · 앱 안내에는 실제 캡처를 사용했습니다. 삽화는 실제 조리 장면이나 역사 사료가 아닙니다.',
   } : reeditSpec(snapshot) ? {
     ko:'음식 정보 안내 · AI 내레이션 · 재사용한 AI 삽화와 창작 음악 · 삽화는 조리 실사나 역사 사료가 아닙니다. 가정용 조리 예시는 특정 업소의 공식 조리법이 아닙니다.',

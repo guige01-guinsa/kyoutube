@@ -15,6 +15,19 @@ String standardRequestId() {
 }
 
 class StandardStudioRepository {
+  Future<bool> requestStart(String jobId) async {
+    try {
+      final response = await Supabase.instance.client.functions
+          .invoke('story_studio_dispatch', body: {'job_id': jobId});
+      return response.status == 200 &&
+          response.data is Map &&
+          response.data['state'] == 'requested';
+    } catch (_) {
+      // Approved queue entry remains intact. Never create another paid job.
+      return false;
+    }
+  }
+
   Future<StandardRow> command(String action, StandardRow values) async {
     final result =
         await Supabase.instance.client.rpc('story_standard', params: {
@@ -61,7 +74,7 @@ String standardError(Object error) {
     return '현재 영상의 재생과 내용을 먼저 확인해 주세요.';
   }
   if (code.contains('STORY_NOT_READY')) {
-    return '한국어 1분 제작 서버 연결 또는 비용 설정이 필요합니다.';
+    return '한국어 제작 서버 연결 또는 비용 설정이 필요합니다.';
   }
   if (code.contains('STORY_MONTHLY_LIMIT') ||
       code.contains('STORY_BUDGET_LIMIT')) {

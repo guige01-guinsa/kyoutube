@@ -6,16 +6,20 @@ on:
       - 'test/features/marketing/**'
       - 'tools/marketing/**'
       - 'supabase/functions/marketing_generate/**'
+      - 'supabase/functions/story_studio_dispatch/**'
       - 'supabase/migrations/*_marketing_automation.sql'
       - 'supabase/migrations/*_story_studio.sql'
+      - 'supabase/migrations/*_source_recipe_studio.sql'
       - '.github/workflows/story-studio-*.yml'
       - '.github/workflows/marketing-*.yml'
   push:
     paths:
       - 'tools/marketing/**'
       - 'supabase/functions/marketing_generate/**'
+      - 'supabase/functions/story_studio_dispatch/**'
       - 'supabase/migrations/*_marketing_automation.sql'
       - 'supabase/migrations/*_story_studio.sql'
+      - 'supabase/migrations/*_source_recipe_studio.sql'
       - '.github/workflows/story-studio-*.yml'
       - '.github/workflows/marketing-*.yml'
 permissions:
@@ -32,9 +36,11 @@ jobs:
         with:
           deno-version: 'v2.x'
       - name: Type check Edge Function
-        run: deno check supabase/functions/marketing_generate/index.ts
+        run: |
+          deno check supabase/functions/marketing_generate/index.ts supabase/functions/story_studio_dispatch/index.ts
+          deno test supabase/functions/story_studio_dispatch/handler_test.ts
       - name: Worker tests
-        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs
+        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -72,3 +78,7 @@ jobs:
         env:
           MARKETING_FONT: ${{ github.workspace }}/assets/fonts/NanumGothic-Regular.ttf
         run: python tools/marketing/render_test.py
+
+      - name: Source recipe three-minute offline render
+        timeout-minutes: 3
+        run: python tools/marketing/story_studio_recipe_render_test.py

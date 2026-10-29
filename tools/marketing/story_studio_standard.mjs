@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {speechRequest} from './story_studio_narration.mjs';
 import {speechCacheKey, validateCachedSpeech} from './story_studio_speech_cache.mjs';
+import {RECIPE_PROFILE,validateRecipePlan,recipePlanHash} from './story_studio_recipe.mjs';
 
 export const STANDARD_PROFILE = 'ko-60-v1';
 export const STANDARD_SECONDS = 60;
@@ -21,6 +22,7 @@ const canonical = value => Array.isArray(value) ? value.map(canonical) : value &
   ? Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])])) : value;
 
 export function validateStandardPlan(plan) {
+  if(plan?.profile===RECIPE_PROFILE) return validateRecipePlan(plan);
   if (!exact(plan,['profile','language','food','title','presenter','sources','scenes']) ||
       plan.profile !== STANDARD_PROFILE || plan.language !== 'ko' || !text(plan.food,30) ||
       !text(plan.title,45) || !text(plan.presenter,500)) fail('standard_invalid_plan');
@@ -48,6 +50,7 @@ export function validateStandardPlan(plan) {
 }
 
 export function standardPlanHash(plan) {
+  if(plan?.profile===RECIPE_PROFILE) return recipePlanHash(plan);
   validateStandardPlan(plan);
   // A changed voice setting, source, image brief or wording invalidates approval.
   return digest(JSON.stringify(canonical({plan,voice:speechRequest('설정 확인','ko')})));
@@ -55,6 +58,12 @@ export function standardPlanHash(plan) {
 
 export function standardChecklist(plan) {
   const planHash=standardPlanHash(plan);
+  if(plan.profile===RECIPE_PROFILE) return {
+    profile:RECIPE_PROFILE,plan_hash:planHash,languages:['ko'],seconds_range:[150,180],target_ms:300000,
+    stages:['source_and_script_review','existing_voice_consent_or_sample_review','render','full_review','private_upload_approval'],
+    scene_timing:'measured_speech',voice_max_seconds:30,max_unique_speech_requests:plan.scenes.length,
+    automatic_retries:0,auto_upload:false,new_illustrations:0,cost_status:'quote_and_actual_billing_required',
+    scenes:plan.scenes.map((scene,index)=>({index,speech_key:speechCacheKey(scene.spoken,'ko')}))};
   return {profile:STANDARD_PROFILE,plan_hash:planHash,languages:['ko'],seconds:60,
     stages:['source_and_script_review','sample','sample_listening_review','render','full_review','private_upload_approval'],
     sample_scene:0,scene_seconds:10,voice_max_seconds:9.5,
@@ -64,7 +73,7 @@ export function standardChecklist(plan) {
       speech_key:speechCacheKey(scene.spoken,'ko')}))};
 }
 
-function audioInfo(bytes) {
+function audioInfo(bytes,maxSeconds=9.5) {
   const metadata=validateCachedSpeech(bytes);
   let rate,channels;
   for (let offset=12;offset+8<=bytes.length;) {
@@ -73,7 +82,7 @@ function audioInfo(bytes) {
     if (type==='data') {
       const pcmBytes=size===0xffffffff?bytes.length-start:size;
       const seconds=pcmBytes/(rate*channels*2);
-      if (seconds>9.5) fail('standard_shorten_script'); // Never truncate or speed up speech.
+      if (seconds>maxSeconds) fail('standard_shorten_script'); // Never truncate or speed up speech.
       let peak=0,clipped=0,total=0;
       for(let p=start;p<start+pcmBytes;p+=2) {
         const sample=Math.abs(bytes.readInt16LE(p)); peak=Math.max(peak,sample);
@@ -87,7 +96,7 @@ function audioInfo(bytes) {
   fail('standard_audio_quality_review');
 }
 
-export function validateStandardAudio(bytes) { return audioInfo(bytes); }
+export function validateStandardAudio(bytes,maxSeconds=9.5) { return audioInfo(bytes,maxSeconds); }
 
 // The adapter's claimOnce must persist before any paid call and deny repeated or
 // uncertain attempts. check must revalidate administrator, lease and reservation.

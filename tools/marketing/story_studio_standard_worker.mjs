@@ -3,6 +3,9 @@ import {createHash} from 'node:crypto';
 import {validate} from './story_studio_contract.mjs';
 import {researchRequest,decodeResearch} from './story_studio_research.mjs';
 import {validateStandardPlan,standardPlanHash,executeStandardStage,validateStandardAudio} from './story_studio_standard.mjs';
+import {RECIPE_PROFILE} from './story_studio_recipe.mjs';
+import {executeRecipeJob} from './story_studio_recipe_worker.mjs';
+import {sourceLocatorRequest,planFromOriginal} from './story_studio_recipe_source.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const str=max=>({type:'string',minLength:1,maxLength:max});
 const obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -26,7 +29,18 @@ export async function executeStandardJob(job,io) {
   if(s.standard_profile!=='ko-60-v1' || s.standard_project_id!==project?.id ||
     !['draft','sample','render','upload'].includes(stage)) throw new Error('invalid_standard_job');
   await io.check();
+  if(project.plan?.profile===RECIPE_PROFILE && ['sample','render'].includes(stage)) return executeRecipeJob(job,io);
   if(stage==='draft') {
+    if(project.source_video_url) {
+      const started=Date.now(),created=Date.parse(job.created_at ?? '');
+      const source=await io.recipeSource(project.source_video_url);
+      await io.check();
+      const output=planFromOriginal(job,source,await io.chat(sourceLocatorRequest(s.text_model,source,project.food)));
+      output.source_receipt.production_ms=Date.now()-started;
+      output.source_receipt.queue_wait_ms=Number.isFinite(created)?Math.max(0,started-created):null;
+      output.source_receipt.automation_ms=Number.isFinite(created)?Math.max(0,Date.now()-created):null;
+      return output;
+    }
     const research=decodeResearch(await io.research(researchRequest({...s,
       brief:`한국어 1분 음식 안내: ${project.food}. 확인된 특징, 대표 재료와 조리법. 기원 논쟁은 단정하지 않는다.`})));
     const sources=research.sources.slice(0,8).map((source,index)=>({...source,id:`source-${index+1}`,note:'원문과 사실 관계를 제작 전 검토하세요.'}));
