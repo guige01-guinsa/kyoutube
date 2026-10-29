@@ -17,7 +17,7 @@ insert into auth.users values('${admin}'),('${ordinary}');`);
 for(const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql',
   '20261024180000_korean_reedit_story_studio.sql','20261025150000_speech_cache_story_studio.sql',
   '20261025153000_speech_anon_guard_story_studio.sql','20261028180000_standard_pilot_story_studio.sql',
-  '20261029120000_source_recipe_studio.sql'])
+  '20261029120000_source_recipe_studio.sql','20261030000000_short_recipe_story_studio.sql'])
   await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'));
 await db.query('insert into marketing_admins values($1)',[admin]);
 const role=async(name,user=admin,aal='aal2')=>db.exec(`reset role; set role ${name}; select set_config('request.jwt.claim.sub','${user}',false); select set_config('request.jwt.claims','{"aal":"${aal}"}',false);`);
@@ -117,7 +117,8 @@ await call('render',{...req('render'),project_id:sourceId,revision:sx.revision})
 await role('service_role');sj=await work('claim');
 const completion={id:sj.id,token:sj.lease_token,result:{path:`${sj.id}/ko.mp4`,sha256:'e'.repeat(64),seconds:180,language:'ko'}};
 await assert.rejects(work('complete',{...completion,result:{...completion.result,seconds:181}}),/STORY_INVALID/);
-await work('complete',completion);
+await assert.rejects(work('complete',{...completion,result:{...completion.result,seconds:0}}),/STORY_INVALID/);
+await work('complete',{...completion,result:{...completion.result,seconds:20}});
 await role('authenticated');assert.equal((await call('overview')).projects.find(p=>p.id===sourceId).status,'preview');
 await role('authenticated',ordinary);await assert.rejects(call('import_recipe',{...source,id:randomUUID()}),/marketing_admin_required/);
 console.log('Source recipe DB: original amounts, JS/SQL agreement, no duplicate import, access and 180s bound passed.');
