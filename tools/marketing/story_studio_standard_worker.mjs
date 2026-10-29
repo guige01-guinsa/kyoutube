@@ -5,7 +5,7 @@ import {researchRequest,decodeResearch} from './story_studio_research.mjs';
 import {validateStandardPlan,standardPlanHash,executeStandardStage,validateStandardAudio} from './story_studio_standard.mjs';
 import {RECIPE_PROFILE} from './story_studio_recipe.mjs';
 import {executeRecipeJob} from './story_studio_recipe_worker.mjs';
-import {sourceLocatorRequest,planFromOriginal,assertRecipeSourceReady} from './story_studio_recipe_source.mjs';
+import {sourceLocatorRequest,planFromOriginal,planFromStructuredDescription,assertRecipeSourceReady} from './story_studio_recipe_source.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const str=max=>({type:'string',minLength:1,maxLength:max});
 const obj=properties=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -36,14 +36,14 @@ export async function executeStandardJob(job,io) {
       let source;
       try {
         source=await io.recipeSource(project.source_video_url);
-        assertRecipeSourceReady(source);
+        assertRecipeSourceReady(source,project.food);
       } catch(error) {
         if(!io.recipeAlternative||!['recipe_source_external_required','recipe_source_translation_required','recipe_source_incomplete'].includes(error?.message)) throw error;
         await io.check();
         source=await io.recipeAlternative(project.source_video_url,project.food,error.message);
       }
       await io.check();
-      const output=planFromOriginal(job,source,await io.chat(sourceLocatorRequest(s.text_model,source,project.food)));
+      const output=planFromStructuredDescription(job,source)??planFromOriginal(job,source,await io.chat(sourceLocatorRequest(s.text_model,source,project.food)));
       output.source_receipt.production_ms=Date.now()-started;
       output.source_receipt.queue_wait_ms=Number.isFinite(created)?Math.max(0,started-created):null;
       output.source_receipt.automation_ms=Number.isFinite(created)?Math.max(0,Date.now()-created):null;

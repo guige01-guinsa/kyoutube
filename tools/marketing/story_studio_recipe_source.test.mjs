@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {fetchRecipeSource,planFromOriginal,sourceLocatorRequest,recipeVideoId,assertRecipeSourceReady,findRecipeAlternative} from './story_studio_recipe_source.mjs';
+import {fetchRecipeSource,planFromOriginal,planFromStructuredDescription,sourceLocatorRequest,recipeVideoId,assertRecipeSourceReady,findRecipeAlternative} from './story_studio_recipe_source.mjs';
 import {executeStandardJob} from './story_studio_standard_worker.mjs';
 const url='https://www.youtube.com/watch?v=abcdefghijk';
 const description='검사 음식 2인분\n[재료]\n재료 200g\n간장 2큰술(20g)\n후추 약간\n[만드는 법]\n재료를 순서대로 섞습니다.\n팬에서 충분히 익힙니다.';
@@ -117,8 +117,29 @@ test('unavailable alternatives and access errors do not make an AI call',async()
 });
 test('usable requested source has priority and does not trigger an alternative search',async()=>{
  let search=0,paid=0;
- const result=await executeStandardJob(draftJob(),{check:async()=>{},recipeSource:async()=>source,
+ const result=await executeStandardJob(draftJob(),{check:async()=>{},recipeSource:async()=>({...source,title:'검사 음식 영상'}),
   recipeAlternative:async()=>{search++;},chat:async()=>{paid++;return response(located);}});
  assert.equal(result.plan.recipe.url,url);assert.equal(search,0);assert.equal(paid,1);
  assert.equal(result.source_receipt.selection,undefined);
+});
+
+const structured={...source,title:'검사 음식',description:'검사 음식 소개\n📌재료(밥 숟가락, 종이컵 계량)\n재료 1컵(150g), 물 600ml, 양파 1/4개, 두부\n* 간은 원문대로 맞춥니다.\n* 설탕은 선택 사항입니다.\n📌만드는 법\n1. 물과 재료를 넣고 10분 끓입니다.\n2. 양파를 넣고 5분 끓입니다.\n#검사음식 #레시피'};
+test('structured comma-separated ingredients, units, missing servings and tips require zero paid calls',async()=>{
+ let paid=0;
+ const result=await executeStandardJob(draftJob(),{check:async()=>{},recipeSource:async()=>structured,chat:async()=>{paid++;throw new Error('must not spend');}});
+ assert.equal(paid,0);assert.equal(result.source_receipt.paid_ai_calls,0);
+ assert.equal(result.plan.recipe.servings,'원문에 인분 표기 없음');
+ assert.deepEqual(result.plan.recipe.ingredients,['계량 안내: 재료(밥 숟가락, 종이컵 계량)','재료 1컵(150g)','물 600ml','양파 1/4개','두부']);
+ assert.deepEqual(result.plan.recipe.steps,['물과 재료를 넣고 10분 끓입니다.','양파를 넣고 5분 끓입니다.','원문 참고: * 간은 원문대로 맞춥니다.','원문 참고: * 설탕은 선택 사항입니다.']);
+ assert.equal(result.source_receipt.status,'human_source_review_required');
+});
+test('ambiguous numbering, extra prose and broken parentheses never silently lose recipe content',()=>{
+ for(const description of [structured.description.replace('2. 양파','3. 양파'),structured.description.replace('#검사음식','빠진 조리 문장\n#검사음식'),structured.description.replace('(150g)','(150g')])
+  assert.equal(planFromStructuredDescription(job,{...structured,description}),null);
+});
+test('a wrong dish is replaced before any paid locator call',async()=>{
+ let searched=0;
+ const result=await executeStandardJob(draftJob(),{check:async()=>{},recipeSource:async()=>({...structured,title:'다른 음식'}),
+  recipeAlternative:async()=>{searched++;return {...structured,id:alternative.id,url:alternative.url,selection};},chat:async()=>{throw new Error('must not spend');}});
+ assert.equal(searched,1);assert.equal(result.plan.recipe.url,alternative.url);
 });

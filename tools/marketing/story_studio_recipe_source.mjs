@@ -41,7 +41,7 @@ export function sourceLines(source) {return source.description.split(/\r?\n/).ma
 // request just to discover that a description contains only promotional links.
 const quantity=/(?:\d|[¼½¾⅓⅔⅛⅜⅝⅞])(?:[\d.,/\s~–-]*)(?:kg|mg|g|ml|mL|l|L|컵|큰술|작은술|스푼|개|대|쪽|포기|인분|근|줌|장|cup|tablespoon|teaspoon|pound)\b/iu;
 const withoutLinks=s=>s.replace(/https?:\/\/\S+/g,'');
-export function assertRecipeSourceReady(source) {
+export function assertRecipeSourceReady(source,food) {
  if(typeof source?.description!=='string') throw new Error('recipe_source_incomplete');
  const prose=withoutLinks(source.description);
  // Korean units do not have JavaScript ASCII word boundaries.
@@ -50,6 +50,7 @@ export function assertRecipeSourceReady(source) {
  if(!/[가-힣]/.test(prose)) throw new Error('recipe_source_translation_required');
  const eligibility=inspectRecipeDescription(source.description);
  if(!eligibility.eligible) throw new Error(eligibility.reason==='external_recipe_required'?'recipe_source_external_required':'recipe_source_incomplete');
+ if(food&&!normalized(source.title).includes(normalized(food))) throw new Error('recipe_source_incomplete');
  return source;
 }
 const normalized=s=>s.normalize('NFKC').replace(/[^\p{L}\p{N}]/gu,'').toLowerCase();
@@ -59,8 +60,7 @@ export function isRecipeAlternative(source,food) {
  const lines=sourceLines(source).map(withoutLinks);
  const ingredients=lines.findIndex(s=>/재료/.test(s)&&s.length<55);
  const directions=lines.findIndex((s,i)=>i>ingredients&&/(만드는\s*(법|방법)|조리\s*(법|방법|순서)|요리\s*순서)/.test(s)&&s.length<55);
- return ingredients>=0&&directions>ingredients+2&&lines.some(s=>/\d\s*인분/.test(s))&&
-  lines.slice(ingredients+1,directions).filter(s=>quantity.test(s)||/\d\s*(컵|큰술|작은술|개|대|쪽)/.test(s)).length>=2&&
+ return ingredients>=0&&directions>ingredients+1&&
   lines.slice(directions+1).filter(s=>/(끓|볶|썰|섞|넣|굽|익|찌|무치|버무|삶)/.test(s)).length>=2;
 }
 export async function findRecipeAlternative(requestedUrl,food,reason,env,fetcher=fetch) {
@@ -97,14 +97,8 @@ export function sourceLocatorRequest(model,source,food) {
   response_format:{type:'json_schema',json_schema:{name:'source_recipe_sections',strict:true,schema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false}}}};
 }
 export function planFromOriginal(job,source,response) {
- const requested=job.snapshot.project.source_video_url,selection=source.selection;
- const replaced=source.url!==requested;
- if(!idPattern.test(source.id)||recipeVideoId(source.url)!==source.id||
-  (replaced&&(!selection||selection.requested_url!==requested||selection.selected_url!==source.url||
-   selection.method!=='youtube_description_v1'||selection.requires_review!==true||
-   !['recipe_source_external_required','recipe_source_translation_required','recipe_source_incomplete'].includes(selection.reason)||
-   !Number.isInteger(selection.checked_candidates)||selection.checked_candidates<1||selection.checked_candidates>5||
-   !isRecipeAlternative(source,job.snapshot.project.food)))) throw new Error('recipe_source_required');
+ assertSourceIdentity(job,source);
+ const selection=source.selection,replaced=source.url!==job.snapshot.project.source_video_url;
  const choice=response?.choices?.[0];if(choice?.finish_reason!=='stop'||choice.message?.refusal) throw new Error('recipe_source_incomplete');
  let parsed;try{parsed=JSON.parse(choice.message.content);}catch{throw new Error('recipe_source_incomplete');}
  if(parsed.complete!==true) throw new Error('recipe_source_incomplete');
@@ -123,4 +117,52 @@ export function planFromOriginal(job,source,response) {
  return {plan,source_receipt:{url:source.url,title:source.title,channel:source.channel,sha256:source.sha256,
   checked_at:source.checked_at,view_count:source.view_count,ingredients:parsed.ingredients,steps:parsed.steps,
   ...(replaced?{selection}:{}),status:'human_source_review_required'}};
+}
+function assertSourceIdentity(job,source) {
+ const requested=job.snapshot.project.source_video_url,selection=source.selection;
+ const replaced=source.url!==requested;
+ if(!idPattern.test(source.id)||recipeVideoId(source.url)!==source.id||
+  (replaced&&(!selection||selection.requested_url!==requested||selection.selected_url!==source.url||
+   selection.method!=='youtube_description_v1'||selection.requires_review!==true||
+   !['recipe_source_external_required','recipe_source_translation_required','recipe_source_incomplete'].includes(selection.reason)||
+   !Number.isInteger(selection.checked_candidates)||selection.checked_candidates<1||selection.checked_candidates>5||
+   !isRecipeAlternative(source,job.snapshot.project.food)))) throw new Error('recipe_source_required');
+}
+// Deterministic extraction for explicit ingredient headers and numbered steps.
+// Keep original strings; split only top-level commas, never parenthetical units.
+export function planFromStructuredDescription(job,source) {
+ assertSourceIdentity(job,source);
+ if(!normalized(source.title).includes(normalized(job.snapshot.project.food))) return null;
+ const lines=sourceLines(source),ing=lines.findIndex(s=>/^[^\p{L}\p{N}]{0,8}재료(?:\s|\(|\[|\]|:|$)/u.test(s));
+ const dir=lines.findIndex((s,i)=>i>ing&&/^[^\p{L}\p{N}]{0,8}(만드는\s*(법|방법)|조리\s*(법|방법|순서))[^\p{L}\p{N}]*$/u.test(s));
+ if(ing<0||dir<=ing+1)return null;
+ const ingredients=[],notes=[],steps=[];let depth=0,part='';
+ const split=line=>{const out=[];depth=0;part='';for(const c of line){if(c==='('||c==='[')depth++;if(c===')'||c===']')depth--;if(depth<0)return null;if(c===','&&depth===0){if(!part.trim())return null;out.push(part.trim());part='';}else part+=c;}if(depth!==0||!part.trim())return null;out.push(part.trim());return out;};
+ const header=lines[ing].replace(/^[^\p{L}\p{N}]*/u,'');
+ if(header!=='재료'&&header!=='재료]') ingredients.push('계량 안내: '+header);
+ for(const line of lines.slice(ing+1,dir)) {
+  if(/^[*＊]/u.test(line)){notes.push(line);continue;}
+  if(notes.length)return null;
+  const items=split(line);if(!items)return null;ingredients.push(...items);
+ }
+ let number=1,ended=false;
+ for(const line of lines.slice(dir+1)) {
+  if(/^#/.test(line)){ended=true;continue;}
+  if(ended)return null;
+  if(/^[*＊]/u.test(line)){notes.push(line);continue;}
+  const match=/^(\d+)[.)]\s*(.+)$/.exec(line);
+  if(!match||Number(match[1])!==number++)return null;
+  steps.push(match[2]);
+ }
+ if(!steps.length)return null;
+ const servings=lines.find(s=>/^\d+(?:\s*[~–-]\s*\d+)?\s*인분$/.test(s))??'원문에 인분 표기 없음';
+ try {
+  const plan=makeRecipePlan({food:job.snapshot.project.food,presenter:job.snapshot.project.presenter,
+   intro:'안녕하세요. 원문에 공개된 재료와 조리법을 안내합니다.',outro:'분량이 없는 재료는 원문에서도 미표기입니다. 기준 영상과 원고를 확인해 주세요.',
+   recipe:{url:source.url,title:source.title,channel:source.channel,servings,ingredients,steps:[...steps,...notes.map(s=>'원문 참고: '+s)]}});
+  return {plan,source_receipt:{url:source.url,title:source.title,channel:source.channel,sha256:source.sha256,checked_at:source.checked_at,
+   method:'structured_description_v1',paid_ai_calls:0,servings_unspecified:servings==='원문에 인분 표기 없음',
+   original_ingredient_lines:lines.slice(ing,dir),original_instruction_lines:lines.slice(dir),
+   ...(source.selection?{selection:source.selection}:{}),status:'human_source_review_required'}};
+ }catch{return null;}
 }
