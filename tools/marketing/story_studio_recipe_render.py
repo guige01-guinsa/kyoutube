@@ -26,7 +26,7 @@ def timing(voices):
             raise ValueError('voice_quality')
         import math
         frames.append(math.ceil((seconds+.4)*FPS))
-    if not 150*FPS <= sum(frames) <= 180*FPS:
+    if not 30*FPS <= sum(frames) <= 180*FPS:
         raise ValueError('recipe_duration_review')
     return frames
 

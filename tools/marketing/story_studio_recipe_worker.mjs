@@ -31,9 +31,9 @@ export async function executeRecipeJob(job,io) {
  } else {
   // Renderer derives frame-aligned durations from the actual voice, never fixed gaps.
   const duration=audio.reduce((sum,a)=>sum+Math.ceil((a.info.seconds+.4)*24)/24,0);
-  if(duration>180||duration<150) throw new Error('recipe_duration_review');
+  if(duration>180||duration<30) throw new Error('recipe_duration_review');
   const {video,quality}=await io.standardRender(plan,plan.scenes.map(()=>demo),audio.map(a=>a.bytes));
-  if(quality.sha256!==digest(video)||quality.seconds>180||quality.seconds<150) throw new Error('standard_video_quality_review');
+  if(quality.sha256!==digest(video)||quality.seconds>180||quality.seconds<30) throw new Error('standard_video_quality_review');
   await io.check();const path=`${job.id}/ko.mp4`;await io.store(path,video);
   output={path,sha256:digest(video),seconds:quality.seconds,language:'ko',bytes:video.length};
  }

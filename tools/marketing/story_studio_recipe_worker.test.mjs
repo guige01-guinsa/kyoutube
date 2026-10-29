@@ -31,6 +31,12 @@ test('source sample still costs only one voice and requires no images',async()=>
  const {job,io,calls}=setup('sample');const r=await executeStandardJob(job,io);
  assert.equal(calls.length,2);assert.equal(r.seconds,6);assert.equal(calls[1],'sample');
 });
+test('a concise recipe below 150 seconds completes without padding or altered speech',async()=>{
+ const {job,io}=setup();io.standardSpeech=async()=>wav(4);
+ job.snapshot.project.sample.sha256=digest(wav(4));
+ io.standardRender=async()=>{const video=Buffer.from('short');return {video,quality:{seconds:72,sha256:digest(video)}};};
+ assert.equal((await executeStandardJob(job,io)).seconds,72);
+});
 test('source mutation, source review missing and changed sample stop before new speech',async()=>{
  for(const mutation of [j=>j.request.sources_reviewed=false,j=>j.snapshot.project.plan.scenes[1].spoken+='설탕 10g',j=>j.snapshot.project.sample.plan_hash='0'.repeat(64)]) {
   const {job,io,calls}=setup();mutation(job);await assert.rejects(executeStandardJob(job,io));assert.equal(calls.length,0);
