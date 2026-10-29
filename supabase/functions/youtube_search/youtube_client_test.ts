@@ -5,6 +5,7 @@ import {
 import { searchYoutube } from "./youtube_client.ts";
 
 const neverTimeout = () => new AbortController().signal;
+const readableDescription = '[재료] 2인분\n김치 200g\n고기 100g\n[만드는 법]\n1. 재료를 넣습니다.\n2. 끓여 익힙니다.';
 
 const searchPayload = {
   items: [
@@ -52,14 +53,17 @@ const detailsPayload = {
   items: [
     {
       id: "short-video",
+      snippet: {description:readableDescription},
       contentDetails: { duration: "PT2M59S" },
     },
     {
       id: "long-video",
+      snippet: {description:readableDescription},
       contentDetails: { duration: "PT3M1S" },
     },
     {
       id: "advertisement-video",
+      snippet: {description:'협찬 상품 리뷰'},
       contentDetails: { duration: "PT30S" },
     },
   ],
@@ -127,7 +131,8 @@ Deno.test("returns embeddable cooking candidates at or under 60 minutes", async 
   assertEquals(searchUrl.searchParams.get("maxResults"), "20");
 
   const detailsUrl = requestedUrls[1];
-  assertEquals(detailsUrl.searchParams.get("part"), "contentDetails");
+  assertEquals(detailsUrl.searchParams.get("part"), "snippet,contentDetails");
+  assertEquals(detailsUrl.searchParams.get("hl"), "ko");
   assertEquals(
     detailsUrl.searchParams.get("id"),
     "short-video,long-video,missing-duration,advertisement-video",
@@ -156,10 +161,12 @@ Deno.test("returns an empty list when every candidate exceeds 60 minutes", async
         items: [
           {
             id: "short-video",
+            snippet: {description:readableDescription},
             contentDetails: { duration: "PT1H1S" },
           },
           {
             id: "long-video",
+            snippet: {description:readableDescription},
             contentDetails: { duration: "PT2H" },
           },
         ],
@@ -170,4 +177,23 @@ Deno.test("returns an empty list when every candidate exceeds 60 minutes", async
   });
 
   assertEquals(items, []);
+});
+
+Deno.test('unreadable sources are removed from all searches using the full batched description', async()=>{
+ const descriptions=[readableDescription,'조리법: https://creator.test/recipe','',undefined];
+ let calls=0;
+ const search={items:descriptions.map((_,i)=>({...searchPayload.items[0],id:{videoId:`candidate-${i}`},snippet:{...searchPayload.items[0].snippet,description:readableDescription}}))};
+ const items=await searchYoutube({apiKey:'test-key',query:'김치찌개',limit:5,timeoutSignal:neverTimeout,
+  fetcher:async input=>{
+   calls++;
+   return Response.json(new URL(input).pathname.endsWith('/search')?search:{items:descriptions.map((description,i)=>({id:`candidate-${i}`,snippet:{description},contentDetails:{duration:'PT3M'}}))});
+  }});
+ assertEquals(calls,2);assertEquals(items.map(x=>x.videoId),['candidate-0']);
+});
+Deno.test('transient metadata error never creates a permanent video exclusion',async()=>{
+ let broken=true;
+ const run=()=>searchYoutube({apiKey:'test-key',query:'김치찌개',limit:5,timeoutSignal:neverTimeout,sleep:async()=>{},
+  fetcher:async input=>new URL(input).pathname.endsWith('/search')?Response.json(searchPayload):broken?new Response('',{status:503}):Response.json(detailsPayload)});
+ await assertRejects(run);broken=false;
+ assertEquals((await run()).length,2);
 });

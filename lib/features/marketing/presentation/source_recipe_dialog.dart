@@ -31,7 +31,7 @@ Future<Map<String, dynamic>?> showRecipeSourceStart(
                     key: form,
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                       const Text(
-                          '음식 이름과 기준 유튜브 주소만 입력하세요. 설명란에서 원본 레시피를 추출하고 원고를 준비합니다. 정보가 부족하면 추측하지 않고 멈춥니다.'),
+                          '음식 이름과 기준 유튜브 주소만 입력하세요. 원문 정보가 부족하면 같은 음식의 한국어 영상 최대 5개를 확인하고, 레시피가 공개된 한 영상으로 기준을 변경합니다. 적합한 영상이 없으면 멈춥니다.'),
                       TextFormField(
                           maxLength: 30,
                           decoration: const InputDecoration(labelText: '음식 이름'),

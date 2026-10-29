@@ -146,4 +146,22 @@ assert.equal(fastJob.snapshot.project.sample.listened,false);
 assert.equal(fastJob.snapshot.project.sample.review_mode,'existing_voice_without_sample');
 await role('authenticated');assert.equal(await dispatch(fast.id),false);
 console.log('Automatic source and render: idempotence, consent, cost rollback, private cache and single authorized dispatch passed.');
+// A changed source remains a draft for review, never a fabricated approval.
+await role('service_role');await work('fail',{id:fastJob.id,token:fastJob.lease_token});
+await role('authenticated');
+const fallbackId=randomUUID();await call('create_source',{...auto,id:fallbackId});
+let fx=(await call('overview')).projects.find(p=>p.id===fallbackId);
+await call('draft',{id:randomUUID(),project_id:fallbackId,revision:fx.revision,quote_revision:1,cost_confirmed:true});
+await role('service_role');const fallbackJob=await work('claim');
+assert.equal(fallbackJob.snapshot.standard_project_id,fallbackId);
+const selectedUrl='https://www.youtube.com/watch?v=12345678901';
+const selectedPlan=makeRecipePlan({...source,recipe:{...source.recipe,url:selectedUrl}});
+const receipt={status:'human_source_review_required',selection:{requested_url:source.recipe.url,selected_url:selectedUrl,
+ reason:'recipe_source_external_required',checked_candidates:3,method:'youtube_description_v1',requires_review:true}};
+await work('complete',{id:fallbackJob.id,token:fallbackJob.lease_token,result:{plan:selectedPlan,source_receipt:receipt}});
+await role('authenticated');fx=(await call('overview')).projects.find(p=>p.id===fallbackId);
+assert.equal(fx.status,'draft');assert.equal(fx.source_video_url,source.recipe.url);
+assert.equal(fx.plan.recipe.url,selectedUrl);assert.deepEqual(fx.source_receipt,receipt);
+assert.equal(fx.sample_approved_by,null);assert.equal(fx.preview,null);
+console.log('Alternative source DB: selected recipe and original request retained, human review required, no voice or upload approval.');
 await db.close();

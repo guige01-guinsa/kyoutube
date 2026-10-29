@@ -11,7 +11,7 @@ import { demoAssets } from './story_studio_demo.mjs';
 import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
 import {cachedSpeech, SPEECH_CACHE_MAX_BYTES} from './story_studio_speech_cache.mjs';
 import {executeStandardJob} from './story_studio_standard_worker.mjs';
-import {fetchRecipeSource,recipeVideoId} from './story_studio_recipe_source.mjs';
+import {fetchRecipeSource,recipeVideoId,findRecipeAlternative} from './story_studio_recipe_source.mjs';
 import {validateStandardAudio} from './story_studio_standard.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -77,7 +77,7 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
-  const standardCodes = ['recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','standard_shorten_script','standard_audio_quality_review',
+  const standardCodes = ['recipe_source_external_required','recipe_source_translation_required','recipe_alternative_unavailable','recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','standard_shorten_script','standard_audio_quality_review',
     'standard_sample_changed','standard_video_quality_review','standard_unknown_failure',
     'standard_demo_not_ready','standard_render_failed','standard_invalid_plan',
     'standard_sources_required','standard_invalid_source','standard_six_scenes_required',
@@ -296,6 +296,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
           body:JSON.stringify({video_id:id,source,fetched_at:source.checked_at}),signal:AbortSignal.timeout(15000)});
         if(!saved.ok) throw new Error('recipe_source_cache');return source;
       },
+      recipeAlternative:(url,food,reason)=>findRecipeAlternative(url,food,reason,env,fetcher),
       standardSpeech:(text,language)=>cachedSpeech(text,language,speechIO),
       standardDemo,
       standardStoreSample:async(path,audio)=>{

@@ -415,6 +415,11 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
     final sample = project['sample'] as Map?;
     final preview = project['preview'] as Map?;
     final sourceRecipe = plan?['profile'] == 'ko-180-source-v1';
+    final selection = (project['source_receipt'] as Map?)?['selection'] as Map?;
+    final referenceChanged = sourceRecipe &&
+        selection?['requires_review'] == true &&
+        selection?['selected_url'] == (plan?['recipe'] as Map?)?['url'] &&
+        selection?['requested_url'] != selection?['selected_url'];
     return Card(
         child: Padding(
             padding: const EdgeInsets.all(16),
@@ -422,6 +427,12 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${project['food']} · ${standardStatus(status)}',
                   style: Theme.of(context).textTheme.titleMedium),
+              if (referenceChanged) ...[
+                const Text(
+                    '입력한 영상의 원문 정보가 부족하여, 레시피가 공개된 같은 음식의 한국어 영상으로 기준을 변경했습니다. 아래 기준 영상과 원고를 확인해 주세요.'),
+                const Text('처음 요청한 영상'),
+                SelectableText(selection!['requested_url'] as String),
+              ],
               if (status == 'planning')
                 FilledButton(
                     onPressed:
