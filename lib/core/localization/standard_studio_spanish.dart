@@ -1,5 +1,82 @@
 // Interface translations only; the production profile remains Korean-only.
 const standardStudioSpanish = <String, String>{
+  "Automatically prepare a script from a video URL":
+      "Preparar un guion automáticamente desde una URL de video",
+  "Enter the dish and source YouTube URL. Extract the original recipe from its description and prepare a script. Stop without guessing if information is missing.":
+      "Introduce el plato y la URL de YouTube. Extrae la receta original de su descripción y prepara el guion. Si falta información, se detiene sin adivinar.",
+  "Check the YouTube video URL.": "Comprueba la URL del video de YouTube.",
+  "Confirm script preparation costs next. Video production and upload have not started.":
+      "Confirma el costo del guion en la siguiente pantalla. La producción y la subida aún no han comenzado.",
+  "Prepare script automatically": "Preparar guion automáticamente",
+  "Could not check script status. Refresh and check again.":
+      "No se pudo comprobar el guion. Actualiza y vuelve a comprobar.",
+  "Immediate execution requested. Refresh to check progress.":
+      "Se solicitó la ejecución inmediata. Actualiza para ver el progreso.",
+  "The task is saved but immediate execution is unconfirmed. Scheduled execution may take time; do not submit another production request.":
+      "La tarea está guardada pero la ejecución inmediata no se ha confirmado. La ejecución programada puede tardar; no envíes otra solicitud.",
+  "Use the existing Korean female voice without listening to a new sample.":
+      "Usar la voz femenina coreana existente sin escuchar una nueva muestra.",
+  "Produce automatically from the reviewed script":
+      "Producir automáticamente con el guion revisado",
+  "Enter original text manually": "Introducir el texto original manualmente",
+  "Produce one Korean video up to three minutes from the original recipe.":
+      "Producir un video en coreano de hasta tres minutos basado en la receta original.",
+  "Hello. Today we will follow the quantities and steps in the original video.":
+      "Hola. Hoy seguiremos las cantidades y los pasos del video original.",
+  "Follow each step with the ingredient list and original video.":
+      "Sigue cada paso con la lista de ingredientes y el video original.",
+  "Original YouTube URL": "URL original de YouTube",
+  "Original video title": "Título del video original",
+  "Channel name": "Nombre del canal",
+  "Original serving size": "Porciones de la receta original",
+  "Ingredients and original quantities, one per line":
+      "Ingredientes y cantidades originales, uno por línea",
+  "Original cooking steps, one per line":
+      "Pasos originales de preparación, uno por línea",
+  "Introduction": "Introducción",
+  "Closing narration": "Narración final",
+  "Plan a source-based video up to three minutes":
+      "Planificar un video de hasta tres minutos basado en la fuente",
+  "Copy original quantities, units, options and steps without alteration. Keep approximate amounts as written. Saving is free; confirm costs before voice or video production.":
+      "Copia las cantidades, unidades, opciones y pasos originales sin cambios. Conserva las cantidades aproximadas. Guardar es gratis; confirma el costo antes de producir voz o video.",
+  "Enter the original content.": "Introduce el contenido original.",
+  "Enter 2 to 24 ingredient lines, up to 100 characters each.":
+      "Introduce de 2 a 24 líneas de ingredientes, hasta 100 caracteres cada una.",
+  "Enter 1 to 12 cooking steps, up to 160 characters each.":
+      "Introduce de 1 a 12 pasos, hasta 160 caracteres cada uno.",
+  "I checked the ingredients, quantities, units, options and steps against the original video.":
+      "Comparé los ingredientes, cantidades, unidades, opciones y pasos con el video original.",
+  "Use ingredient and cooking cards without new illustrations. Target processing is five minutes after script review; services and queues can add delays.":
+      "Usa tarjetas de ingredientes y preparación sin ilustraciones nuevas. La meta es cinco minutos tras revisar el guion; los servicios y las colas pueden causar demoras.",
+  "Warm, clear Korean female presenter. Preserve the original quantities and cooking order.":
+      "Presentadora coreana con voz cálida y clara. Conserva las cantidades y el orden originales.",
+  "Save script": "Guardar guion",
+  "Could not open the original video. Check the URL.":
+      "No se pudo abrir el video original. Comprueba la URL.",
+  "Korean recipe studio": "Estudio de recetas en coreano",
+  "Korean: source recipe, script review, voice, video review up to three minutes":
+      "Coreano: receta original, revisión del guion, voz y revisión del video de hasta tres minutos",
+  "Preserve original ingredients and steps. Target processing is five minutes; track queue and service delays separately. No automatic public posts or paid retries.":
+      "Conserva los ingredientes y pasos originales. La meta es cinco minutos; registra las demoras por separado. No se publica ni se repiten tareas pagadas automáticamente.",
+  "Plan three minutes from a YouTube source":
+      "Planificar tres minutos desde una fuente de YouTube",
+  "Legacy one-minute pilot": "Prueba anterior de un minuto",
+  "Open the original YouTube reference": "Abrir el video original de YouTube",
+  "Produce source recipe video, up to three minutes":
+      "Producir un video de la receta original de hasta tres minutos",
+  "Five-minute target met": "Meta de cinco minutos cumplida",
+  "Five-minute target not confirmed": "Meta de cinco minutos sin confirmar",
+  "Recipe videos: scripts and completed previews":
+      "Videos de recetas: guiones y vistas previas terminadas",
+  "Use the original YouTube ingredients and steps, and find finished previews here.":
+      "Usa los ingredientes y pasos originales de YouTube y consulta aquí las vistas previas terminadas.",
+  "Open script editing and production": "Abrir edición de guion y producción",
+  "Open the studio to check admin authentication and connection.":
+      "Abre el estudio para comprobar la autenticación y la conexión.",
+  "Could not open the preview. Check it in the studio.":
+      "No se pudo abrir la vista previa. Compruébala en el estudio.",
+  "Recipe production and completed videos":
+      "Producción de recetas y videos terminados",
   "Korean one-minute production": "Producción de un minuto en coreano",
   "Korean one-minute studio": "Estudio de un minuto en coreano",
   "New dish · one minute in Korean": "Nuevo plato · un minuto en coreano",

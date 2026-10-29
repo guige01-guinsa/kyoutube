@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate studio agents without credentials
-        run: node --test tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs
+        run: node --test tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

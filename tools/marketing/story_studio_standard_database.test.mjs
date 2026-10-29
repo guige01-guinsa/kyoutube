@@ -16,7 +16,8 @@ alter table storage.objects enable row level security; grant usage on schema sto
 insert into auth.users values('${admin}'),('${ordinary}');`);
 for(const name of ['20261007053241_marketing_automation.sql','20261023130000_story_studio.sql',
   '20261024180000_korean_reedit_story_studio.sql','20261025150000_speech_cache_story_studio.sql',
-  '20261025153000_speech_anon_guard_story_studio.sql','20261028180000_standard_pilot_story_studio.sql'])
+  '20261025153000_speech_anon_guard_story_studio.sql','20261028180000_standard_pilot_story_studio.sql',
+  '20261029120000_source_recipe_studio.sql'])
   await db.exec(await readFile(new URL(`../../supabase/migrations/${name}`,import.meta.url),'utf8'));
 await db.query('insert into marketing_admins values($1)',[admin]);
 const role=async(name,user=admin,aal='aal2')=>db.exec(`reset role; set role ${name}; select set_config('request.jwt.claim.sub','${user}',false); select set_config('request.jwt.claims','{"aal":"${aal}"}',false);`);
@@ -94,4 +95,55 @@ await role('authenticated',ordinary);assert.equal((await db.query("select * from
 await role('authenticated',admin,'aal1');assert.equal((await db.query("select * from storage.objects where bucket_id='story-standard-samples'")).rows.length,0);
 await role('authenticated');assert.equal((await db.query("select * from storage.objects where bucket_id='story-standard-samples'")).rows.length,1);
 console.log('Standard pilot DB: access, shared reservations, idempotency, cache, listening, exact duration and private publication passed.');
+// New source profile shares the same access, quota and private publication gates.
+await db.exec('reset role; update story_studio_config set daily_usd=2');
+await role('authenticated');
+const sourceId=randomUUID(),source={id:sourceId,series_id:series,food:'원본 음식',presenter:'진행자',intro:'안녕하세요.',outro:'원본을 확인하세요.',source_verified:true,
+ recipe:{url:'https://www.youtube.com/watch?v=abcdefghijk',title:'합성 검사',channel:'시험',servings:'2인분',ingredients:['검사 재료 200g','간장 2큰술(20g)','후추 약간'],steps:['재료를 순서대로 섞습니다.','팬에서 충분히 익힙니다.']}};
+await assert.rejects(call('import_recipe',{...source,source_verified:false}),/STORY_SOURCES_REQUIRED/);
+await call('import_recipe',source);await call('import_recipe',source);
+let sx=(await call('overview')).projects.find(p=>p.id===sourceId);
+const {makeRecipePlan}=await import('./story_studio_recipe.mjs');
+assert.deepEqual(sx.plan,makeRecipePlan(source));
+const bad=structuredClone(sx.plan);bad.scenes[1].spoken+=' 설탕 50g.';
+await assert.rejects(call('save_plan',{project_id:sourceId,revision:sx.revision,plan:bad}),/STORY_INVALID/);
+const sr={...req('sample'),project_id:sourceId,revision:sx.revision};await call('sample',sr);
+await role('service_role');let sj=await work('claim');
+await work('complete',{id:sj.id,token:sj.lease_token,result:{path:`${sj.id}/sample.wav`,sha256:'d'.repeat(64),seconds:5}});
+await role('authenticated');sx=(await call('overview')).projects.find(p=>p.id===sourceId);
+await call('approve_sample',{project_id:sourceId,revision:sx.revision,sha256:'d'.repeat(64),listened:true});
+sx=(await call('overview')).projects.find(p=>p.id===sourceId);
+await call('render',{...req('render'),project_id:sourceId,revision:sx.revision});
+await role('service_role');sj=await work('claim');
+const completion={id:sj.id,token:sj.lease_token,result:{path:`${sj.id}/ko.mp4`,sha256:'e'.repeat(64),seconds:180,language:'ko'}};
+await assert.rejects(work('complete',{...completion,result:{...completion.result,seconds:181}}),/STORY_INVALID/);
+await work('complete',completion);
+await role('authenticated');assert.equal((await call('overview')).projects.find(p=>p.id===sourceId).status,'preview');
+await role('authenticated',ordinary);await assert.rejects(call('import_recipe',{...source,id:randomUUID()}),/marketing_admin_required/);
+console.log('Source recipe DB: original amounts, JS/SQL agreement, no duplicate import, access and 180s bound passed.');
+// URL-only creation and one-step render retain the old cost and source gates.
+await role('authenticated');
+const autoId=randomUUID(),auto={id:autoId,series_id:series,food:'원본 음식',presenter:'진행자',source_url:source.recipe.url};
+await call('create_source',auto);await call('create_source',auto);
+await assert.rejects(call('create_source',{...auto,source_url:'https://www.youtube.com/watch?v=xxxxxxxxxxx'}),/STORY_CONFLICT/);
+let ax=(await call('overview')).projects.find(p=>p.id===autoId);
+assert.equal(ax.source_video_url,source.recipe.url);
+await call('save_plan',{project_id:autoId,revision:ax.revision,plan:makeRecipePlan(source)});
+ax=(await call('overview')).projects.find(p=>p.id===autoId);
+const fast={id:randomUUID(),project_id:autoId,revision:ax.revision,quote_revision:1,cost_confirmed:true,sources_reviewed:true,voice_use_confirmed:true};
+await assert.rejects(call('render_recipe',{...fast,cost_confirmed:false}),/STORY_COST_CONFIRMATION_REQUIRED/);
+assert.equal((await call('overview')).projects.find(p=>p.id===autoId).status,'draft');
+await assert.rejects(call('render_recipe',{...fast,voice_use_confirmed:false}),/STORY_SOURCES_REQUIRED/);
+await call('render_recipe',fast);await call('render_recipe',fast);
+const dispatch=async id=>(await db.query('select story_request_dispatch($1::uuid) as ok',[id])).rows[0].ok;
+await role('authenticated',ordinary);await assert.rejects(dispatch(fast.id),/marketing_admin_required/);
+await role('authenticated',admin,'aal1');await assert.rejects(dispatch(fast.id),/ADMIN_MFA_REQUIRED/);
+await role('authenticated');assert.equal(await dispatch(randomUUID()),false);
+assert.equal(await dispatch(fast.id),true);assert.equal(await dispatch(fast.id),false);
+await assert.rejects(db.query('select * from story_recipe_sources'),/permission denied/);
+await role('service_role');const fastJob=await work('claim');assert.equal(fastJob.id,fast.id);
+assert.equal(fastJob.snapshot.project.sample.listened,false);
+assert.equal(fastJob.snapshot.project.sample.review_mode,'existing_voice_without_sample');
+await role('authenticated');assert.equal(await dispatch(fast.id),false);
+console.log('Automatic source and render: idempotence, consent, cost rollback, private cache and single authorized dispatch passed.');
 await db.close();

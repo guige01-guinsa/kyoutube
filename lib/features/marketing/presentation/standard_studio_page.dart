@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../application/marketing_providers.dart';
 import '../data/standard_studio_repository.dart';
+import 'source_recipe_dialog.dart';
 
 class StandardStudioPage extends ConsumerStatefulWidget {
   const StandardStudioPage({super.key});
@@ -14,10 +15,66 @@ class StandardStudioPage extends ConsumerStatefulWidget {
 class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
   bool _busy = false;
   String? _error;
+  String? _dispatchNote;
   ({String action, StandardRow values})? _pending;
   final _opened = <String>{};
   final _reviewed = <String>{};
   final _sources = <String>{};
+  final _voiceUse = <String>{};
+
+  Future<void> _startSource(List<StandardRow> series) async {
+    final input = await showRecipeSourceStart(context);
+    if (input == null || !mounted) return;
+    final id = standardRequestId();
+    await _command(
+        'create_source', {...input, 'id': id, 'series_id': series.first['id']});
+    if (!mounted || _pending != null || _error != null) return;
+    try {
+      final overview = await ref.read(standardStudioProvider.future);
+      final project =
+          standardRows(overview, 'projects').firstWhere((p) => p['id'] == id);
+      if (mounted) {
+        await _queue('draft', project,
+            Map<String, dynamic>.from(overview['config'] as Map));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = '원고 준비 상태를 확인하지 못했습니다. 새로고침 후 확인해 주세요.');
+      }
+    }
+  }
+
+  Future<void> _openSource(String url) async {
+    try {
+      if (!RegExp(r'^https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}$')
+              .hasMatch(url) ||
+          !await launchUrl(Uri.parse(url),
+              mode: LaunchMode.externalApplication)) {
+        throw StateError('source_not_opened');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = '원본 영상을 열지 못했습니다. 주소를 확인해 주세요.');
+      }
+    }
+  }
+
+  Future<void> _sourceRecipe(List<StandardRow> series,
+      [StandardRow? project]) async {
+    final input = await showSourceRecipeDialog(context,
+        initial: project?['plan'] as Map<String, dynamic>?);
+    if (input == null || !mounted) return;
+    await _command(project == null ? 'import_recipe' : 'update_recipe', {
+      ...input,
+      if (project == null) ...{
+        'id': standardRequestId(),
+        'series_id': series.first['id'],
+      } else ...{
+        'project_id': project['id'],
+        'revision': project['revision'],
+      },
+    });
+  }
 
   Future<void> _command(String action, StandardRow values) async {
     setState(() {
@@ -26,9 +83,20 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
       _pending = (action: action, values: values);
     });
     try {
-      await ref.read(standardStudioRepositoryProvider).command(action, values);
+      final repository = ref.read(standardStudioRepositoryProvider);
+      await repository.command(action, values);
       _pending = null;
       ref.invalidate(standardStudioProvider);
+      if (['draft', 'sample', 'render', 'render_recipe', 'upload']
+              .contains(action) &&
+          values['id'] is String) {
+        final started = await repository.requestStart(values['id'] as String);
+        if (mounted) {
+          setState(() => _dispatchNote = started
+              ? '즉시 실행 요청을 전달했습니다. 진행 상태는 새로고침으로 확인하세요.'
+              : '작업은 저장됐지만 즉시 실행 연결은 확인되지 않았습니다. 정기 실행을 기다릴 수 있으므로 새 제작 요청을 반복하지 마세요.');
+        }
+      }
     } catch (error) {
       // A server rejection is known not to have queued work. An uncertain network
       // response retains the exact id/payload; never offer a fresh paid request.
@@ -120,7 +188,13 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
 
   Future<void> _queue(
       String stage, StandardRow project, StandardRow config) async {
-    final cost = stage == 'upload' ? 0 : config['${stage}_usd'];
+    final cost = stage == 'upload'
+        ? 0
+        : config['${stage == 'render_recipe' ? 'render' : stage}_usd'];
+    final renderDescription =
+        (project['plan'] as Map?)?['profile'] == 'ko-180-source-v1'
+            ? '원본 레시피로 한국어 3분 이내 영상 한 편을 제작합니다.'
+            : '한국어 60초 영상 한 편을 제작합니다.';
     if (cost == null) return;
     final accepted = await showDialog<bool>(
         context: context,
@@ -128,7 +202,7 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
               title: Text(stage == 'upload' ? '비공개 업로드 확인' : '작업 비용 확인'),
               content: Text(
                   '예상 예약액: USD $cost\n실제 청구 상한이 아닙니다. 실패 작업도 예약액을 보존하며 자동 재시도하지 않습니다.\n\n'
-                  '${stage == 'sample' ? '첫 장면의 짧은 시험 음성만 생성합니다.' : stage == 'render' ? '한국어 60초 영상 한 편을 제작합니다.' : stage == 'upload' ? '확인한 영상만 비공개로 업로드합니다.' : '출처를 조사하고 한국어 원고를 작성합니다.'}'),
+                  '${stage == 'sample' ? '첫 장면의 짧은 시험 음성만 생성합니다.' : stage == 'render' || stage == 'render_recipe' ? renderDescription : stage == 'upload' ? '확인한 영상만 비공개로 업로드합니다.' : '출처를 조사하고 한국어 원고를 작성합니다.'}'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(dialog, false),
@@ -145,7 +219,9 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
       'revision': project['revision'],
       'quote_revision': config['revision'],
       'cost_confirmed': true,
-      if (stage == 'sample' || stage == 'render') 'sources_reviewed': true,
+      if (stage == 'sample' || stage == 'render' || stage == 'render_recipe')
+        'sources_reviewed': true,
+      if (stage == 'render_recipe') 'voice_use_confirmed': true,
       if (stage == 'upload') ...{
         'preview_reviewed': true,
         'sha256': (project['preview'] as Map)['sha256']
@@ -252,7 +328,7 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('한국어 1분 제작소'), actions: [
+        appBar: AppBar(title: const Text('한국어 레시피 제작소'), actions: [
           IconButton(
               tooltip: '새로고침',
               onPressed:
@@ -287,12 +363,14 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
     final produce = editable && ready;
     final series = standardRows(data, 'series');
     return ListView(padding: const EdgeInsets.all(20), children: [
-      const Text('한국어만 · 60초 · 원고 → 시험 음성 → 영상 → 비공개 검토'),
+      const Text('한국어 · 원본 레시피 → 원고 확인 → 음성 → 3분 이내 영상 검토'),
       Text(ready ? '제작 서버 연결됨' : '운영 연결 대기 · 새 유료 작업은 잠겨 있습니다.'),
-      const Text('3분·5분 제작은 안정화 후 추가합니다. 공개 게시와 유료 재시도는 자동 실행하지 않습니다.'),
+      const Text(
+          '재료와 조리 순서는 원본 그대로 사용합니다. 제작 처리 목표 5분 · 대기·외부 서비스 지연은 별도 확인합니다. 공개 게시와 유료 재시도는 자동 실행하지 않습니다.'),
       if (_error != null)
         Text(_error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      if (_dispatchNote != null) Text(_dispatchNote!),
       if (_busy) const LinearProgressIndicator(),
       if (_pending != null)
         OutlinedButton(
@@ -302,9 +380,20 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
             child: const Text('같은 요청 결과 확인')),
       FilledButton.icon(
           onPressed:
+              editable && series.isNotEmpty ? () => _startSource(series) : null,
+          icon: const Icon(Icons.auto_awesome),
+          label: const Text('영상 주소로 원고 자동 준비')),
+      OutlinedButton.icon(
+          onPressed: editable && series.isNotEmpty
+              ? () => _sourceRecipe(series)
+              : null,
+          icon: const Icon(Icons.receipt_long),
+          label: const Text('원본 레시피 직접 입력')),
+      OutlinedButton.icon(
+          onPressed:
               editable && series.isNotEmpty ? () => _create(series) : null,
           icon: const Icon(Icons.add),
-          label: const Text('새 음식 기획')),
+          label: const Text('기존 1분 시험 기획')),
       if (series.isEmpty) const Text('기존 제작소에서 한국어 시리즈를 먼저 만들어 주세요.'),
       for (final project in standardRows(data, 'projects'))
         _project(project, config, editable, produce),
@@ -325,6 +414,7 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
     final identity = '${project['id']}:${project['plan_revision']}';
     final sample = project['sample'] as Map?;
     final preview = project['preview'] as Map?;
+    final sourceRecipe = plan?['profile'] == 'ko-180-source-v1';
     return Card(
         child: Padding(
             padding: const EdgeInsets.all(16),
@@ -348,11 +438,21 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
                         title: Text(source['title'] as String),
                         subtitle: SelectableText(source['url'] as String)),
                 ]),
+              if (sourceRecipe && plan?['recipe'] is Map)
+                TextButton.icon(
+                    onPressed: () =>
+                        _openSource((plan!['recipe'] as Map)['url'] as String),
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('기준 유튜브 원본 영상 보기')),
               if (plan != null &&
                   ['draft', 'sample_review', 'sample_approved', 'needs_review']
                       .contains(status))
                 OutlinedButton(
-                    onPressed: editable ? () => _edit(project) : null,
+                    onPressed: editable
+                        ? () => sourceRecipe
+                            ? _sourceRecipe([], project)
+                            : _edit(project)
+                        : null,
                     child: const Text('원고 수정')),
               if (status == 'draft') ...[
                 CheckboxListTile(
@@ -365,11 +465,29 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
                                   : _sources.remove(identity);
                             })
                         : null),
+                if (sourceRecipe)
+                  CheckboxListTile(
+                      title: const Text(
+                          '기존 한국어 여성 목소리로 제작합니다. 새 시험 음성 청취는 생략합니다.'),
+                      value: _voiceUse.contains(identity),
+                      onChanged: editable
+                          ? (v) => setState(() {
+                                v == true
+                                    ? _voiceUse.add(identity)
+                                    : _voiceUse.remove(identity);
+                              })
+                          : null),
                 FilledButton(
-                    onPressed: produce && _sources.contains(identity)
-                        ? () => _queue('sample', project, config)
+                    onPressed: produce &&
+                            _sources.contains(identity) &&
+                            (!sourceRecipe || _voiceUse.contains(identity))
+                        ? () => _queue(
+                            sourceRecipe ? 'render_recipe' : 'sample',
+                            project,
+                            config)
                         : null,
-                    child: const Text('첫 장면 시험 음성 만들기')),
+                    child: Text(
+                        sourceRecipe ? '확인한 원고로 자동 제작' : '첫 장면 시험 음성 만들기')),
               ],
               if (sample != null &&
                   ['sample_review', 'sample_approved'].contains(status)) ...[
@@ -410,10 +528,17 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
                         produce && config['standard_capture_ready'] == true
                             ? () => _queue('render', project, config)
                             : null,
-                    child: const Text('한국어 60초 영상 제작')),
+                    child: Text(sourceRecipe
+                        ? '원본 레시피 영상 제작 · 3분 이내'
+                        : '한국어 60초 영상 제작')),
               ],
               if (preview != null &&
                   ['preview', 'uploaded'].contains(status)) ...[
+                if (sourceRecipe && preview['production_ms'] is num)
+                  Text(
+                      '제작 처리 ${((preview['production_ms'] as num) / 1000).ceil()}초 · '
+                      '${preview['queue_wait_ms'] is num ? '서버 대기 ${((preview['queue_wait_ms'] as num) / 1000).ceil()}초' : '대기 시간 확인 필요'} · '
+                      '${preview['target_met'] == true ? '5분 목표 달성' : '5분 목표 달성 미확인'}'),
                 OutlinedButton(
                     onPressed: editable
                         ? () => _open(Map<String, dynamic>.from(preview), false)

@@ -143,3 +143,8 @@ entrypoint = "./functions/marketing_video_draft/index.ts"
 enabled = true
 verify_jwt = true
 entrypoint = "./functions/marketing_generate/index.ts"
+
+[functions.story_studio_dispatch]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/story_studio_dispatch/index.ts"
