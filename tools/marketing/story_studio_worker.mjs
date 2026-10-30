@@ -136,6 +136,13 @@ export async function probeStudio(env = process.env, fetcher = fetch) {
   return {api_access_checked:checked,images_checked:false,uploaded:false};
 }
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+export function validateStandardRenderedVideo(plan,video,quality) {
+ const q=quality?.video,recipe=plan?.profile==='ko-180-source-v1';
+ if(q?.sha256!==sha256(video)||q?.audio!==true||!Array.isArray(q?.size)||q.size.join(',')!=='720,1280'||
+  !Number.isFinite(q.seconds)||(recipe?q.seconds<=0||q.seconds>180||q.frames!==Math.round(q.seconds*24):
+  q.frames!==1440||q.seconds<59.9||q.seconds>60)) throw new Error('standard_render_failed');
+ return q;
+}
 async function json(response, limit = 200000) {
   if (!response.ok) throw new Error('remote_request_failed');
   const text = await response.text();
@@ -253,6 +260,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       check:()=>rpc('check',lease),reserve:key=>checkpoint('reserve',key),
       commit:(key,metadata)=>checkpoint('commit',key,metadata),
       generate:async(text,language)=>{
+        if(job.request.cached_only===true) throw new Error('speech_cache_missing');
         const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher);
         if(standard) validateStandardAudio(audio,job.snapshot.project?.plan?.profile==='ko-180-source-v1'?30:9.5);
         return audio;
@@ -317,11 +325,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
         if(rendered.status!==0) throw new Error('standard_render_failed');
         const video=await readFile(join(directory,'ko.mp4'));
         const quality=JSON.parse(await readFile(join(directory,'quality.json'),'utf8'));
-        if(quality.video?.sha256!==sha256(video) || quality.video?.audio!==true ||
-          quality.video?.size?.join(',')!=='720,1280' ||
-          !Number.isFinite(quality.video?.seconds) ||
-          (plan.profile==='ko-180-source-v1' ? quality.video.seconds<150 || quality.video.seconds>180 || quality.video.frames!==Math.round(quality.video.seconds*24) : quality.video.frames!==1440 || quality.video.seconds<59.9 || quality.video.seconds>60))
-          throw new Error('standard_render_failed');
+        validateStandardRenderedVideo(plan,video,quality);
         return {video,quality:quality.video};
       },
       chat: body => api('chat/completions', body, 200000, 180000),
