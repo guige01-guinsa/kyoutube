@@ -82,6 +82,11 @@ def render_recipe(plan, voices, output):
                     'alimiter=limit=0.95:level=false:latency=true[audio]']
         run_ffmpeg(['-filter_complex_threads','1',*inputs,'-filter_complex',';'.join(filters),
                     '-map','0:v','-map','[audio]','-t',f'{seconds:.9f}','-r',str(FPS),
+                    # Image concat timestamps can end before fractional narration
+                    # boundaries. Generate the exact planned frame count; extend
+                    # only the final still within the existing audio timeline.
+                    '-vf',f'fps={FPS},tpad=stop_mode=clone:stop_duration={seconds:.9f}',
+                    '-frames:v',str(sum(frames)),
                     '-pix_fmt','yuv420p',*encoding_options(seconds),'-movflags','+faststart',str(output)])
     result = validate_video(Path(output), seconds)
     if Path(output).stat().st_size > 45000000:
