@@ -1,8 +1,15 @@
 // Recipe-first profile. The approved source strings, not an LLM paraphrase,
 // supply every ingredient and cooking instruction in captions AND narration.
 import {createHash} from 'node:crypto';
-import {speechRequest} from './story_studio_narration.mjs';
+import {speechRequest,RECIPE_VOICE_PROFILE} from './story_studio_narration.mjs';
 export const RECIPE_PROFILE='ko-180-source-v1';
+export const RECIPE_VISUAL_PROFILE='recipe-sketch-v1';
+export function validateRecipeVisuals(v,count) {
+ if(!Number.isInteger(count)||count<4||count>20||v?.profile!==RECIPE_VISUAL_PROFILE || v.scene_count!==count || v.verified_frames!==count ||
+  !Number.isFinite(v.min_ink_fraction)||v.min_ink_fraction<.003||v.min_ink_fraction>.4)
+  throw new Error('recipe_visual_review');
+ return v;
+}
 const fail=()=>{throw new Error('recipe_source_required');};
 const canonical=o=>Array.isArray(o)?o.map(canonical):o&&typeof o==='object'?Object.fromEntries(Object.keys(o).sort().map(k=>[k,canonical(o[k])])):o;
 const same=(a,b)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
@@ -46,7 +53,7 @@ export function validateRecipePlan(p) {
 }
 export function recipePlanHash(p) {
  validateRecipePlan(p);
- return createHash('sha256').update(JSON.stringify(canonical({plan:p,voice:speechRequest('설정 확인','ko')}))).digest('hex');
+ return createHash('sha256').update(JSON.stringify(canonical({plan:p,visual_profile:RECIPE_VISUAL_PROFILE,voice:speechRequest('설정 확인','ko',RECIPE_VOICE_PROFILE)}))).digest('hex');
 }
 // At most two paid requests in flight. On failure, drain in-flight checkpoints,
 // stop scheduling new requests and never retry. Order is stable.

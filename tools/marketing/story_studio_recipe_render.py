@@ -1,4 +1,4 @@
-"""Source-preserving recipe cards. Offline; no AI images or voice speed changes."""
+"""Source-preserving sketch recipe cards. Offline, with unchanged audio speed."""
 from array import array
 import json
 from pathlib import Path
@@ -10,6 +10,7 @@ from story_music import score
 from story_series import WIDTH, HEIGHT, FPS, run_ffmpeg, validate_video, wrap, write_audio
 from story_studio_render import studio_font
 from story_studio_reedit import speech_seconds, encoding_options
+from story_studio_recipe_sketch import sketch, BOX, ink_fraction, verify_encoded_sketches
 
 
 def timing(voices):
@@ -32,23 +33,31 @@ def timing(voices):
 
 
 def card(plan, index):
-    canvas = Image.new('RGB', (WIDTH, HEIGHT), '#251f2b')
+    canvas = Image.new('RGB', (WIDTH, HEIGHT), '#f5eedf')
     draw = ImageDraw.Draw(canvas)
-    small, heading, body = [studio_font('ko', size) for size in (20, 30, 30)]
-    draw.text((40, 30), 'RECIPE SCOUT · 원본 영상 레시피', font=small, fill='#efd3a0')
+    small, heading = [studio_font('ko', size) for size in (20, 30)]
+    draw.text((40, 30), 'RECIPE SCOUT · 원본 영상 레시피', font=small, fill='#72543c')
     y = 90
     for line in wrap(draw, plan['title'], heading, 640):
-        draw.text((40, y), line, font=heading, fill='#fff7e9'); y += 42
-    y = max(210, y+30)
+        draw.text((40, y), line, font=heading, fill='#352a32'); y += 42
+    if y > 222: raise ValueError('recipe_layout_review')
     scene = plan['scenes'][index]
+    picture = sketch(plan, index)
+    if not .003 <= ink_fraction(picture) <= .4: raise ValueError('recipe_sketch_missing')
+    canvas.paste(picture, BOX[:2])
+    draw.rounded_rectangle(BOX, radius=18, outline='#d3c4ad', width=2)
     # Ingredient quantities are never converted, rounded, invented or shortened.
-    for paragraph in scene['caption'].split(' / '):
-        for line in wrap(draw, paragraph, body, 640):
-            if y > 1110:
-                raise ValueError('recipe_layout_review')
-            draw.text((40, y), line, font=body, fill='#fff7e9'); y += 43
-        y += 18
-    draw.text((40, 1190), f"{index+1} / {len(plan['scenes'])} · AI 음성 · 검토용", font=small, fill='#dfd7c8')
+    for size in (30, 28, 26, 24):
+        body = studio_font('ko', size)
+        paragraphs = [wrap(draw, p, body, 640) for p in scene['caption'].split(' / ')]
+        if sum(len(p)*(size+11)+12 for p in paragraphs) <= 445: break
+    else: raise ValueError('recipe_layout_review')
+    y = 685
+    for paragraph in paragraphs:
+        for line in paragraph:
+            draw.text((40, y), line, font=body, fill='#352a32'); y += size+11
+        y += 12
+    draw.text((40, 1190), f"{index+1} / {len(plan['scenes'])} · AI 음성 · 조리 개념 스케치", font=small, fill='#72543c')
     return canvas
 
 
@@ -89,9 +98,10 @@ def render_recipe(plan, voices, output):
                     '-frames:v',str(sum(frames)),
                     '-pix_fmt','yuv420p',*encoding_options(seconds),'-movflags','+faststart',str(output)])
     result = validate_video(Path(output), seconds)
+    visuals = verify_encoded_sketches(Path(output), frames)
     if Path(output).stat().st_size > 45000000:
         raise ValueError('recipe_video_size')
-    return {'video':result,'human_listening_review_required':True,'scene_frames':frames}
+    return {'video':result,'visuals':visuals,'human_listening_review_required':True,'scene_frames':frames}
 
 
 if __name__ == '__main__':

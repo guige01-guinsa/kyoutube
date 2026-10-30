@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 
 export const NARRATION_MODEL = 'gpt-4o-mini-tts';
+export const RECIPE_VOICE_PROFILE = 'fictional-girl-8-ko-v1';
 const languages = ['ko','en','es'];
 const marker = /^\[ENCYCLOPEDIA_REEDIT:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([0-9a-f]{64})\]$/;
 export function reeditSpec(snapshot) {
@@ -69,14 +70,17 @@ export async function prepareNarration(snapshot,io) {
   }
   return {video,plan,voices};
 }
-export function speechRequest(text,language) {
+export function speechRequest(text,language,profile='documentary-v1') {
   if (!languages.includes(language) || typeof text!=='string' || !text.trim() || text.length>600) throw new Error('invalid_speech_input');
+  if(!['documentary-v1',RECIPE_VOICE_PROFILE].includes(profile) || (profile===RECIPE_VOICE_PROFILE && language!=='ko')) throw new Error('invalid_speech_profile');
   const languageName={ko:'native Korean',en:'English',es:'Latin American Spanish'}[language];
+  if(profile===RECIPE_VOICE_PROFILE) return {model:NARRATION_MODEL,voice:'shimmer',input:text,response_format:'wav',speed:1,
+    instructions:'Read the provided text verbatim in native Korean. Perform an original fictional eight-year-old girl character: a light, bright, youthful feminine voice, naturally higher pitch, cheerful curiosity and gentle expressive intonation. Clear Korean diction and precise recipe quantities, units and ingredient names. Comfortable conversational pace, no baby talk, squealing or exaggerated cartoon delivery. No additions, singing, music or sound effects. Do not imitate any real person. Keep the same character voice throughout.'};
   return {model:NARRATION_MODEL,voice:'coral',input:text,response_format:'wav',speed:1,
     instructions:`Read the provided text verbatim in ${languageName}. Warm, clear, feminine documentary narrator. Calm professional voice acting, unhurried but not sleepy. Natural phrasing, careful recipe quantities and names. No additions, no music, no sound effects, no impersonation.`};
 }
-export async function speechAudio(text,language,key,fetcher=fetch) {
-  const body=speechRequest(text,language);
+export async function speechAudio(text,language,key,fetcher=fetch,profile='documentary-v1') {
+  const body=speechRequest(text,language,profile);
   if (!/^sk-[A-Za-z0-9_-]+$/.test(key ?? '')) throw new Error('invalid_key_format');
   const response=await fetcher('https://api.openai.com/v1/audio/speech',{
     method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},

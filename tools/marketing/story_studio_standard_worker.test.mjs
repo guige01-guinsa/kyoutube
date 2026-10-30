@@ -6,12 +6,15 @@ import {executeJob,safeFailure,validateStandardRenderedVideo} from './story_stud
 import {researchResponse} from './story_studio_fixture.mjs';
 const digest=b=>createHash('sha256').update(b).digest('hex');
 test('actual renderer adapter accepts concise recipes and rejects overlong, empty or corrupt files',()=>{
- const video=Buffer.from('validated fixture'),plan={profile:'ko-180-source-v1'};
+ const video=Buffer.from('validated fixture'),plan={profile:'ko-180-source-v1',scenes:Array(4).fill({})};
  const q={sha256:digest(video),audio:true,size:[720,1280],seconds:24,frames:576};
- assert.equal(validateStandardRenderedVideo(plan,video,{video:q}),q);
+ const visuals={profile:'recipe-sketch-v1',scene_count:4,verified_frames:4,min_ink_fraction:.02};
+ assert.equal(validateStandardRenderedVideo(plan,video,{video:q,visuals}),q);
  for(const change of [{seconds:0,frames:0},{seconds:181,frames:4344},{sha256:'0'.repeat(64)},{audio:false},{frames:575}])
   assert.throws(()=>validateStandardRenderedVideo(plan,video,{video:{...q,...change}}),/standard_render_failed/);
  assert.throws(()=>validateStandardRenderedVideo({profile:'ko-60-v1'},video,{video:q}),/standard_render_failed/);
+ assert.throws(()=>validateStandardRenderedVideo(plan,video,{video:q}),/recipe_visual_review/);
+ assert.throws(()=>validateStandardRenderedVideo(plan,video,{video:q,visuals:{...visuals,verified_frames:3}}),/recipe_visual_review/);
 });
 test('bundled demo is the unchanged reviewed generic app guidance crop',async()=>{
  const manifest=JSON.parse(await readFile(new URL('../../assets/story_demos/standard-guide-v1.json',import.meta.url),'utf8'));
