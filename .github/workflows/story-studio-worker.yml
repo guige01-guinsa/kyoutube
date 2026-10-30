@@ -1,75 +1,32 @@
-name: Recipe Scout Story Studio
+name: YouTube read-only diagnostic
 on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Validate locally only; no paid API calls or uploads'
         type: boolean
         default: true
       preflight:
-        description: 'Manual small text API access test only; no queue, images or uploads'
         type: boolean
         default: false
-  schedule:
-    - cron: '7,17,27,37,47,57 * * * *'
 permissions:
   contents: read
-concurrency:
-  group: recipe-scout-story-studio
-  cancel-in-progress: false
 jobs:
-  api-preflight:
-    if: github.event_name == 'workflow_dispatch' && inputs.preflight && !inputs.dry_run
+  readonly:
+    if: inputs.dry_run == true
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --test tools/marketing/story_studio.test.mjs
-      - name: Check scoped text API access without queue or upload credentials
+      - name: Diagnose connection and existing videos without uploading
         env:
-          STORY_STUDIO_PREFLIGHT: 'true'
-          STORY_STUDIO_DRY_RUN: 'false'
-          OPENAI_API_KEY: ${{ secrets.STORY_STUDIO_OPENAI_API_KEY }}
-          OPENAI_MARKETING_MODEL: ${{ vars.OPENAI_MARKETING_MODEL }}
-        run: node tools/marketing/story_studio_worker.mjs
-  approved-job:
-    if: (vars.STORY_STUDIO_ENABLED == 'true' || github.event_name == 'workflow_dispatch') && !inputs.preflight
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Validate studio agents without credentials
-        run: node --test tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: tools/marketing/requirements.txt
-      - name: Install bounded renderer
-        timeout-minutes: 5
-        run: 'python -m pip install --only-binary=:all: -r tools/marketing/requirements.txt'
-      - name: Offline preview test
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
-        run: python tools/marketing/story_studio_render_test.py
-      - name: Process one explicitly approved job
-        if: vars.STORY_STUDIO_ENABLED == 'true' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run)
-        env:
-          STORY_STUDIO_ENABLED: 'true'
-          STORY_STUDIO_DRY_RUN: 'false'
           SUPABASE_URL: ${{ secrets.MARKETING_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.MARKETING_SUPABASE_SERVICE_ROLE_KEY }}
-          OPENAI_API_KEY: ${{ secrets.STORY_STUDIO_OPENAI_API_KEY }}
-          OPENAI_MARKETING_MODEL: ${{ vars.OPENAI_MARKETING_MODEL }}
-          OPENAI_STORY_IMAGE_MODEL: ${{ vars.OPENAI_STORY_IMAGE_MODEL }}
           YOUTUBE_CLIENT_ID: ${{ secrets.MARKETING_YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.MARKETING_YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.MARKETING_YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_CHANNEL_ID: ${{ vars.MARKETING_YOUTUBE_CHANNEL_ID }}
           YOUTUBE_CHANNEL_HANDLE: ${{ vars.MARKETING_YOUTUBE_CHANNEL_HANDLE }}
-        run: node tools/marketing/story_studio_worker.mjs
+        run: node tools/marketing/youtube_readonly_diagnostic.mjs
