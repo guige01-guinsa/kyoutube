@@ -6,6 +6,22 @@ from story_studio_recipe_render import timing, card, render_recipe
 
 
 class RecipeTests(unittest.TestCase):
+    def test_fractional_scene_lengths_render_the_entire_narration_timeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            durations = [5.1, 11.2, 4.55, 5.7, 1.1, 5.6, 4.75,
+                         6.95, 6.25, 4.95, 9.8, 7.4, 7.05, 9.95]
+            voices = []
+            for i, seconds in enumerate(durations):
+                path = root/f'{i}.wav'; tone(path, seconds); voices.append(path)
+            plan = {'profile':'ko-180-source-v1', 'language':'ko',
+                    'title':'합성 검사 · 소수점 길이',
+                    'scenes':[{'caption':'검사 재료 200g / 원문 계량 유지'} for _ in voices]}
+            result = render_recipe(plan, voices, root/'fractional.mp4')
+            self.assertEqual(result['video']['frames'], 2308)
+            self.assertAlmostEqual(result['video']['seconds'], 2308/24, delta=.1)
+            self.assertTrue(result['video']['audio'])
+
     def test_short_recipe_keeps_actual_voice_length(self):
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory)/'voice.wav'; tone(p,1)
