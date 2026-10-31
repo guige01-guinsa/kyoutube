@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../application/marketing_providers.dart';
@@ -51,19 +52,79 @@ final standardStudioRepositoryProvider =
     Provider((ref) => StandardStudioRepository());
 final standardStudioProvider =
     FutureProvider.autoDispose<StandardRow>((ref) async {
+  final repository = ref.watch(standardStudioRepositoryProvider);
+  Timer? timer;
+  var disposed = false;
+  ref.onDispose(() {
+    disposed = true;
+    timer?.cancel();
+  });
   if (!await ref.watch(marketingAdminProvider.future)) {
     throw StateError('marketing_admin_required');
   }
-  return ref.watch(standardStudioRepositoryProvider).command('overview', {});
+  final result = await repository.command('overview', {});
+  if (!disposed &&
+      standardRows(result, 'projects').any((p) => [
+            'draft_queued',
+            'drafting',
+            'sample_queued',
+            'sampling',
+            'render_queued',
+            'rendering',
+            'upload_queued',
+            'uploading'
+          ].contains(p['status']))) {
+    timer = Timer(const Duration(seconds: 3), ref.invalidateSelf);
+  }
+  return result;
 });
+
+String standardPipelineTiming(StandardRow artifact) {
+  final elapsed = artifact['end_to_end_ms'];
+  if (elapsed is num &&
+      elapsed >= 0 &&
+      artifact['privacy'] == 'private' &&
+      artifact['youtube_id'] is String) {
+    final met = artifact['target_ms'] == 180000 &&
+        elapsed <= 180000 &&
+        artifact['target_met'] == true;
+    return '요청 접수 → 비공개 업로드 ${(elapsed / 1000).ceil()}초 · ${met ? '3분 목표 달성' : elapsed > 180000 ? '3분 목표 초과' : '목표 달성 미확인'}';
+  }
+  if (artifact['timing_scope'] == 'approved_request_to_private_upload') {
+    return artifact['pipeline_state'] == 'duration_review_required'
+        ? '영상 길이가 3분 이상입니다. 계속 업로드할지 확인이 필요합니다.'
+        : '영상 제작 완료 · 비공개 업로드 완료 후 전체 소요 시간을 확인합니다.';
+  }
+  return artifact['production_ms'] is num
+      ? '영상 처리 ${((artifact['production_ms'] as num) / 1000).ceil()}초 · 비공개 업로드 전체 시간은 별도 확인'
+      : '전체 소요 시간 확인 필요';
+}
 
 List<StandardRow> standardRows(StandardRow data, String key) =>
     (data[key] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
 
+String? standardPipelineProgress(StandardRow project, DateTime now) {
+  if (!['render_queued', 'rendering', 'upload_queued', 'uploading']
+      .contains(project['status'])) {
+    return null;
+  }
+  final raw = (project['source_receipt'] as Map?)?['pipeline_started_at'];
+  final start = raw is String ? DateTime.tryParse(raw) : null;
+  if (start == null) return null;
+  final seconds = max(0, now.toUtc().difference(start.toUtc()).inSeconds);
+  return '요청 접수 후 $seconds초 · ${seconds > 180 ? '3분 목표 초과' : '대기 시간 포함'}';
+}
+
 String standardError(Object error) {
   final code = error is PostgrestException ? error.message : '';
+  if (code.contains('STORY_FAST_NOT_READY')) {
+    return '빠른 제작 서버가 아직 준비되지 않았습니다. 기존 검토용 제작을 이용할 수 있습니다.';
+  }
+  if (code.contains('STORY_PRIVATE_UPLOAD_CONFIRMATION_REQUIRED')) {
+    return '제작 후 비공개 업로드까지 진행한다는 승인이 필요합니다.';
+  }
   if (code.contains('STORY_DEMO_REQUIRED')) {
     return '개인정보 없는 실제 앱 화면이 준비되지 않았습니다. 제작비는 예약하지 않았습니다.';
   }

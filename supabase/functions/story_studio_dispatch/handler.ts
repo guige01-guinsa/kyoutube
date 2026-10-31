@@ -19,7 +19,7 @@ export function createDispatchHandler(deps: Dependencies) {
       const body = await request.text();
       if (body.length > 2000) return reply(400,'invalid_job');
       const {job_id} = JSON.parse(body);
-      if (typeof job_id !== 'string' || !/^[0-9a-f-]{36}$/.test(job_id)) return reply(400,'invalid_job');
+      if (typeof job_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(job_id)) return reply(400,'invalid_job');
       // DB checks current administrator, MFA, job owner, approved queue state and
       // one dispatch reservation per job. It never creates or requeues a paid job.
       if (!await deps.authorize(jwt,job_id)) return reply(200,'already_requested_or_not_queued');
@@ -27,7 +27,7 @@ export function createDispatchHandler(deps: Dependencies) {
         'https://api.github.com/repos/guige01-guinsa/kyoutube/actions/workflows/story-studio-worker.yml/dispatches',{
           method:'POST',signal:AbortSignal.timeout(10000),
           headers:{Authorization:`Bearer ${deps.token}`,Accept:'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2026-03-10'},
-          body:JSON.stringify({ref:'main',inputs:{dry_run:false,preflight:false}}),
+          body:JSON.stringify({ref:'main',inputs:{dry_run:false,preflight:false,job_id}}),
         });
       return [200,204].includes(result.status) ? reply(200,'requested') : reply(503,'dispatch_uncertain_scheduled_queue_retained');
     } catch {

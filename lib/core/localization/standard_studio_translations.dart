@@ -1,5 +1,32 @@
 // Admin interface labels only. Produced scripts and media remain Korean-only.
 const standardStudioTranslations = <String, String>{
+  '즉시 실행 요청을 전달했습니다. 진행 상태는 자동으로 갱신됩니다.':
+      'Immediate execution requested. Progress updates automatically.',
+  '제작·비공개 업로드 승인': 'Approve production and private upload',
+  '제작·비공개 업로드 (180초 목표)': 'Produce and upload privately (180-second target)',
+  '설정된 한국어 소녀 캐릭터 AI 목소리로 제작합니다. 새 시험 음성 청취는 생략합니다.':
+      'Use the configured Korean girl-character AI voice without a new listening review.',
+  '한국어 · 원본 레시피 → 원고 확인 → 제작·검사 → 비공개 업로드':
+      'Korean · source recipe → script review → production and checks → private upload',
+  '재료와 조리 순서는 원본 그대로 사용합니다. 빠른 제작은 요청 접수부터 비공개 업로드 확인까지 180초가 목표이며, 대기·외부 서비스 지연을 포함한 실제 시간을 표시합니다. 공개 게시와 유료 재시도는 자동 실행하지 않습니다.':
+      'Preserve source ingredients and cooking order. Fast production targets 180 seconds from accepted request to confirmed private upload, including queue and external delays. Show actual elapsed time. No automatic public publishing or paid retries.',
+  '확인한 원고와 설정된 AI 목소리로 제작하고, 화면·음성·길이 검사를 통과하면 같은 실행에서 유튜브에 비공개 업로드합니다. 추가 영상 확인 승인을 기다리지 않습니다. 요청 접수부터 업로드 확인까지 180초가 목표이며 외부 대기 시간도 포함해 실제 시간을 표시합니다. 영상 길이가 3분 이상이면 업로드 전에 선택을 요청합니다.':
+      'Produce the reviewed script using the configured AI voice, then upload privately in the same run after picture, audio and duration checks. Do not wait for a separate video review. Target 180 seconds from acceptance to upload confirmation, including external waiting. Ask before uploading videos lasting three minutes or more.',
+  '추가 유료 이미지 생성 없이 재료표와 조리 스케치를 제작합니다. 원고 확인 후 빠른 제작을 선택하면 비공개 업로드까지 180초를 목표로 진행하며 외부 대기를 포함한 실제 시간을 표시합니다.':
+      'Produce ingredient cards and cooking sketches without paid image generation. After script review, fast production targets 180 seconds through private upload and reports actual time including external waiting.',
+  '3분 목표 달성': 'Three-minute target met',
+  '3분 목표 초과': 'Three-minute target exceeded',
+  '목표 달성 미확인': 'Target not confirmed',
+  '대기 시간 포함': 'Including waiting time',
+  '영상 길이가 3분 이상입니다. 계속 업로드할지 확인이 필요합니다.':
+      'This video lasts three minutes or more. Confirm whether to continue uploading.',
+  '영상 제작 완료 · 비공개 업로드 완료 후 전체 소요 시간을 확인합니다.':
+      'Video ready · total elapsed time is confirmed after private upload.',
+  '전체 소요 시간 확인 필요': 'Total elapsed time not yet confirmed',
+  '빠른 제작 서버가 아직 준비되지 않았습니다. 기존 검토용 제작을 이용할 수 있습니다.':
+      'Fast production is not ready. Existing review production remains available.',
+  '제작 후 비공개 업로드까지 진행한다는 승인이 필요합니다.':
+      'Approve private upload after production to continue.',
   "영상 주소로 원고 자동 준비": "Automatically prepare a script from a video URL",
   "음식 이름과 기준 유튜브 주소만 입력하세요. 원문 정보가 부족하면 같은 음식의 한국어 영상 최대 5개를 확인하고, 레시피가 공개된 한 영상으로 기준을 변경합니다. 적합한 영상이 없으면 멈춥니다.":
       "Enter the dish and source YouTube URL. If source information is missing, check up to five Korean videos of the same dish and select one with a published recipe. Stop if none qualifies.",

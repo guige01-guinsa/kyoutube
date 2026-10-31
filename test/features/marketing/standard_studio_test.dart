@@ -6,6 +6,20 @@ import 'package:k_youtube/features/marketing/data/standard_studio_repository.dar
 import 'package:k_youtube/features/marketing/presentation/standard_studio_page.dart';
 import 'package:k_youtube/features/marketing/presentation/source_recipe_dialog.dart';
 import 'package:k_youtube/features/marketing/presentation/standard_studio_summary.dart';
+import 'package:k_youtube/core/localization/app_localizations.dart';
+
+class PollingStudioRepository extends StandardStudioRepository {
+  int calls = 0;
+  @override
+  Future<StandardRow> command(String action, StandardRow values) async {
+    calls++;
+    return {
+      'projects': [
+        {'status': calls == 1 ? 'rendering' : 'uploaded'}
+      ]
+    };
+  }
+}
 
 StandardRow overview(
         {String status = 'sample_approved', bool capture = false}) =>
@@ -35,6 +49,88 @@ StandardRow overview(
     };
 
 void main() {
+  testWidgets('active work refreshes automatically and stops after completion',
+      (tester) async {
+    final repository = PollingStudioRepository();
+    final container = ProviderContainer(overrides: [
+      marketingAdminProvider.overrideWith((ref) async => true),
+      standardStudioRepositoryProvider.overrideWithValue(repository),
+    ]);
+    final subscription = container.listen(standardStudioProvider, (_, __) {});
+    addTearDown(() {
+      subscription.close();
+      container.dispose();
+    });
+    await tester.pump();
+    await container.read(standardStudioProvider.future);
+    expect(repository.calls, 1);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    await container.read(standardStudioProvider.future);
+    expect(repository.calls, 2);
+    await tester.pump(const Duration(seconds: 10));
+    expect(repository.calls, 2);
+  });
+  test(
+      'only confirmed private upload can display the queue-inclusive target as met',
+      () {
+    expect(standardPipelineTiming({'production_ms': 1000, 'target_met': true}),
+        isNot(contains('목표 달성')));
+    final uploaded = {
+      'end_to_end_ms': 150000,
+      'target_ms': 180000,
+      'target_met': true,
+      'privacy': 'private',
+      'youtube_id': 'abcdefghijk'
+    };
+    expect(standardPipelineTiming(uploaded), contains('150초 · 3분 목표 달성'));
+    expect(standardPipelineTiming({...uploaded, 'end_to_end_ms': 181000}),
+        contains('목표 초과'));
+    final en = const AppLocalizations(Locale('en'))
+        .translate(standardPipelineTiming(uploaded));
+    final es = const AppLocalizations(Locale('es'))
+        .translate(standardPipelineTiming(uploaded));
+    expect(en, contains('150 seconds'));
+    expect(es, contains('150 segundos'));
+  });
+  testWidgets(
+      'fast button requires both source and voice consent and states private auto upload',
+      (tester) async {
+    final data = overview(status: 'draft', capture: true);
+    (data['config'] as Map)['fast_recipe_enabled'] = true;
+    final project = (data['projects'] as List).first as Map;
+    project['plan'] = {
+      'profile': 'ko-180-source-v1',
+      'title': '검토 원고',
+      'recipe': {'url': 'https://www.youtube.com/watch?v=abcdefghijk'},
+      'scenes': [],
+      'sources': []
+    };
+    await tester.pumpWidget(ProviderScope(overrides: [
+      marketingAdminProvider.overrideWith((ref) async => true),
+      standardStudioProvider.overrideWith((ref) async => data),
+    ], child: const MaterialApp(home: StandardStudioPage())));
+    await tester.pumpAndSettle();
+    final fast = find.widgetWithText(FilledButton, '제작·비공개 업로드 (180초 목표)');
+    expect(tester.widget<FilledButton>(fast).onPressed, isNull);
+    for (final tile in find
+        .byType(CheckboxListTile)
+        .evaluate()
+        .map((e) => e.widget as CheckboxListTile)
+        .toList()) {
+      tile.onChanged?.call(true);
+    }
+    await tester.pump();
+    await tester.ensureVisible(fast);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(fast).onPressed, isNotNull);
+    await tester.tap(fast);
+    await tester.pumpAndSettle();
+    expect(find.text('제작·비공개 업로드 승인'), findsOneWidget);
+    expect(find.textContaining('추가 영상 확인 승인을 기다리지 않습니다.'), findsOneWidget);
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
+  });
   testWidgets(
       'alternative source is disclosed before recipe review and production',
       (tester) async {
@@ -147,8 +243,7 @@ void main() {
       standardStudioProvider.overrideWith((ref) async => overview()),
     ], child: const MaterialApp(home: StandardStudioPage())));
     await tester.pumpAndSettle();
-    expect(
-        find.text('한국어 · 원본 레시피 → 원고 확인 → 음성 → 3분 이내 영상 검토'), findsOneWidget);
+    expect(find.text('한국어 · 원본 레시피 → 원고 확인 → 제작·검사 → 비공개 업로드'), findsOneWidget);
     final button = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, '한국어 60초 영상 제작'));
     expect(button.onPressed, isNull);

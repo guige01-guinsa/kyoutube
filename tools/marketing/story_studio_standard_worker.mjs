@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {validate} from './story_studio_contract.mjs';
 import {researchRequest,decodeResearch} from './story_studio_research.mjs';
 import {validateStandardPlan,standardPlanHash,executeStandardStage,validateStandardAudio} from './story_studio_standard.mjs';
-import {RECIPE_PROFILE} from './story_studio_recipe.mjs';
+import {RECIPE_PROFILE,validateRecipeVisuals} from './story_studio_recipe.mjs';
 import {executeRecipeJob} from './story_studio_recipe_worker.mjs';
 import {sourceLocatorRequest,planFromOriginal,planFromStructuredDescription,assertRecipeSourceReady} from './story_studio_recipe_source.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -63,8 +63,15 @@ export async function executeStandardJob(job,io) {
   }
   const plan=validateStandardPlan(project.plan),plan_hash=standardPlanHash(plan);
   if(stage==='upload') {
-    if(job.request.preview_reviewed!==true || job.request.sha256!==project.preview?.sha256 || project.preview?.youtube_id)
+    const automatic=job.request.automatic_private_approval===true && job.request.private_upload_confirmed===true &&
+      /^[0-9a-f-]{36}$/.test(job.pipeline_parent_id??'') && job.pipeline_parent_id===job.request.pipeline_parent_id;
+    if((job.request.preview_reviewed!==true&&!automatic) || job.request.sha256!==project.preview?.sha256 || project.preview?.youtube_id)
       throw new Error('preview_approval_required');
+    if(automatic) {
+      if(plan.profile!==RECIPE_PROFILE||!(project.preview.seconds>0&&project.preview.seconds<180)||
+        project.preview.voice_profile!=='fictional-girl-8-ko-v1'||project.preview.recipe_preserved!==true) throw new Error('preview_approval_required');
+      validateRecipeVisuals(project.preview.visuals,plan.scenes.length);
+    }
     const bytes=await io.load(project.preview.path);
     if(digest(bytes)!==project.preview.sha256) throw new Error('preview_changed');
     await io.check();

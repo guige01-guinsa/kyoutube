@@ -14,6 +14,7 @@ import {cachedSpeech, SPEECH_CACHE_MAX_BYTES} from './story_studio_speech_cache.
 import {executeStandardJob} from './story_studio_standard_worker.mjs';
 import {fetchRecipeSource,recipeVideoId,findRecipeAlternative} from './story_studio_recipe_source.mjs';
 import {validateStandardAudio} from './story_studio_standard.mjs';
+import {runApprovedPipeline} from './story_studio_pipeline.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const REEDIT_MAX_PREVIEW_BYTES = 45000000;
@@ -78,7 +79,7 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
-  const standardCodes = ['recipe_source_external_required','recipe_source_translation_required','recipe_alternative_unavailable','recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','recipe_visual_review','standard_shorten_script','standard_audio_quality_review',
+  const standardCodes = ['pipeline_invalid_followup','pipeline_chain_limit','invalid_target_job','target_job_mismatch','recipe_source_external_required','recipe_source_translation_required','recipe_alternative_unavailable','recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','recipe_visual_review','standard_shorten_script','standard_audio_quality_review',
     'standard_sample_changed','standard_video_quality_review','standard_unknown_failure',
     'standard_demo_not_ready','standard_render_failed','standard_invalid_plan',
     'standard_sources_required','standard_invalid_source','standard_six_scenes_required',
@@ -214,6 +215,7 @@ export async function executeJob(job, io) {
 
 export async function runStudio(env = process.env, fetcher = fetch) {
   if (env.STORY_STUDIO_ENABLED !== 'true' || env.STORY_STUDIO_DRY_RUN !== 'false') return { disabled: true };
+  if(env.STORY_STUDIO_JOB_ID && !uuid.test(env.STORY_STUDIO_JOB_ID)) throw new Error('invalid_target_job');
   for (const key of ['SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','OPENAI_API_KEY','OPENAI_MARKETING_MODEL','OPENAI_STORY_IMAGE_MODEL',
     'YOUTUBE_CLIENT_ID','YOUTUBE_CLIENT_SECRET','YOUTUBE_REFRESH_TOKEN']) if (!env[key]) throw new Error('missing_studio_configuration');
   if (!env.YOUTUBE_CHANNEL_ID && !env.YOUTUBE_CHANNEL_HANDLE) throw new Error('missing_channel');
@@ -234,8 +236,9 @@ export async function runStudio(env = process.env, fetcher = fetch) {
   const standardCaptureReady=await standardDemo().then(()=>true,()=>false);
   await rpc('heartbeat', { text_model: env.OPENAI_MARKETING_MODEL, image_model: env.OPENAI_STORY_IMAGE_MODEL,
     standard_profile:'ko-60-v1',standard_capture_ready:standardCaptureReady });
-  const job = await rpc('claim');
+  const job = await rpc('claim',env.STORY_STUDIO_JOB_ID?{job_id:env.STORY_STUDIO_JOB_ID}:{});
   if (!job) return { idle: true };
+  if(env.STORY_STUDIO_JOB_ID && job.id!==env.STORY_STUDIO_JOB_ID) throw new Error('target_job_mismatch');
   const lease = { id: job.id, token: job.lease_token };
   let directory;
   try {
@@ -400,8 +403,12 @@ export async function runStudio(env = process.env, fetcher = fetch) {
       },
       upload: (video, snapshot) => privateUpload(video, snapshot, env, fetcher),
     });
-    await rpc('complete', {...lease,result});
-    return { completed: job.id, kind: job.kind };
+    const completed=await rpc('complete', {...lease,result});
+    const next=completed?.next_job_id;
+    const automatic=job.snapshot?.project?.plan?.profile==='ko-180-source-v1' &&
+      job.request.auto_private_upload===true && job.request.private_upload_confirmed===true;
+    if(next && (!automatic||job.snapshot.standard_stage!=='render'||!uuid.test(next))) throw new Error('pipeline_invalid_followup');
+    return { completed: job.id, kind: job.kind,...(next?{next_job_id:next,auto_private_upload:true}:{}) };
   } catch (error) {
     // Even a lost completion response must never cause a second paid call/upload.
     await rpc('fail', lease).catch(() => {});
@@ -451,7 +458,8 @@ export async function privateUpload(video, snapshot, env, fetcher = fetch) {
   return uploaded.id;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const run = process.env.STORY_STUDIO_PREFLIGHT === 'true' ? probeStudio : runStudio;
+  const run = process.env.STORY_STUDIO_PREFLIGHT === 'true' ? probeStudio :
+    (env=process.env)=>runApprovedPipeline(env,scoped=>runStudio(scoped));
   run().then(result => console.log(JSON.stringify(result))).catch(error => {
     console.error(`Story studio stopped safely: ${safeFailure(error)}. Review before retry.`); process.exitCode = 1;
   });

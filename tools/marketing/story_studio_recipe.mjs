@@ -3,7 +3,7 @@
 import {createHash} from 'node:crypto';
 import {speechRequest,RECIPE_VOICE_PROFILE} from './story_studio_narration.mjs';
 export const RECIPE_PROFILE='ko-180-source-v1';
-export const RECIPE_VISUAL_PROFILE='recipe-sketch-v1';
+export const RECIPE_VISUAL_PROFILE='recipe-sketch-v2';
 export function validateRecipeVisuals(v,count) {
  if(!Number.isInteger(count)||count<4||count>20||v?.profile!==RECIPE_VISUAL_PROFILE || v.scene_count!==count || v.verified_frames!==count ||
   !Number.isFinite(v.min_ink_fraction)||v.min_ink_fraction<.003||v.min_ink_fraction>.4)

@@ -65,6 +65,20 @@ class AppLocalizations {
 
     final patterns = _dynamicTranslationCache ??= <_DynamicTranslation>[
       (
+        RegExp(r'^요청 접수 → 비공개 업로드 (\d+)초 · (.+)$'),
+        (m) =>
+            'Request accepted → private upload ${m[1]} seconds · ${_translateToEnglish(m[2]!)}'
+      ),
+      (
+        RegExp(r'^요청 접수 후 (\d+)초 · (.+)$'),
+        (m) => '${m[1]} seconds since request · ${_translateToEnglish(m[2]!)}'
+      ),
+      (
+        RegExp(r'^영상 처리 (\d+)초 · 비공개 업로드 전체 시간은 별도 확인$'),
+        (m) =>
+            'Video processing ${m[1]} seconds · total upload time not yet measured'
+      ),
+      (
         RegExp(r'^(\d+)번째 장면 · (\d+)~(\d+)초$'),
         (m) => 'Scene ${m[1]} · ${m[2]}–${m[3]} seconds'
       ),
@@ -183,7 +197,8 @@ class AppLocalizations {
       (RegExp(r'^(.+) 구매 상태 변경$'), (m) => 'Change purchase status for ${m[1]}'),
       (
         RegExp(r'^(\d+)개의 쿠팡 제휴 상품이 있습니다\. 판매 규격을 비교해 선택해 주세요\.$'),
-        (m) => '${m[1]} Coupang affiliate products are available. Compare package sizes and choose one.'
+        (m) =>
+            '${m[1]} Coupang affiliate products are available. Compare package sizes and choose one.'
       ),
       (RegExp(r'^상품 (\d+)개 중 선택$'), (m) => 'Choose from ${m[1]} products'),
       (

@@ -1,5 +1,46 @@
 // Interface translations only; the production profile remains Korean-only.
 const standardStudioSpanish = <String, String>{
+  'Immediate execution requested. Progress updates automatically.':
+      'Se solicitó la ejecución inmediata. El progreso se actualiza automáticamente.',
+  'Approve production and private upload':
+      'Aprobar producción y subida privada',
+  'Produce and upload privately (180-second target)':
+      'Producir y subir en privado (meta de 180 segundos)',
+  'Use the configured Korean girl-character AI voice without a new listening review.':
+      'Usar la voz de IA configurada del personaje de niña en coreano sin una nueva revisión de audio.',
+  'Korean · source recipe → script review → production and checks → private upload':
+      'Coreano · receta original → revisar guion → producir y verificar → subir en privado',
+  'Preserve source ingredients and cooking order. Fast production targets 180 seconds from accepted request to confirmed private upload, including queue and external delays. Show actual elapsed time. No automatic public publishing or paid retries.':
+      'Se conservan los ingredientes y el orden original. La producción rápida tiene una meta de 180 segundos desde la solicitud aceptada hasta confirmar la subida privada, incluidas las esperas. Se muestra el tiempo real. Sin publicación pública ni reintentos de pago automáticos.',
+  'Produce the reviewed script using the configured AI voice, then upload privately in the same run after picture, audio and duration checks. Do not wait for a separate video review. Target 180 seconds from acceptance to upload confirmation, including external waiting. Ask before uploading videos lasting three minutes or more.':
+      'Producir el guion revisado con la voz de IA configurada y subirlo en privado en la misma ejecución tras verificar imagen, audio y duración. No se espera otra revisión del video. La meta es de 180 segundos con esperas incluidas. Se pide confirmación si el video dura tres minutos o más.',
+  'Produce ingredient cards and cooking sketches without paid image generation. After script review, fast production targets 180 seconds through private upload and reports actual time including external waiting.':
+      'Crear fichas de ingredientes y bocetos de cocina sin generar imágenes de pago. Tras revisar el guion, la meta es de 180 segundos hasta subir en privado, con el tiempo real y las esperas incluidos.',
+  'Three-minute target met': 'Meta de tres minutos cumplida',
+  'Three-minute target exceeded': 'Se superó la meta de tres minutos',
+  'Target not confirmed': 'Meta sin confirmar',
+  'Including waiting time': 'Incluye el tiempo de espera',
+  'This video lasts three minutes or more. Confirm whether to continue uploading.':
+      'El video dura tres minutos o más. Confirma si deseas continuar con la subida.',
+  'Video ready · total elapsed time is confirmed after private upload.':
+      'Video listo · el tiempo total se confirma después de subirlo en privado.',
+  'Total elapsed time not yet confirmed': 'Tiempo total aún sin confirmar',
+  'Fast production is not ready. Existing review production remains available.':
+      'La producción rápida aún no está lista. La producción con revisión sigue disponible.',
+  'Approve private upload after production to continue.':
+      'Aprueba la subida privada después de producir para continuar.',
+  'Request accepted → private upload {0} seconds · Three-minute target met':
+      'Solicitud aceptada → subida privada: {0} segundos · meta de tres minutos cumplida',
+  'Request accepted → private upload {0} seconds · Three-minute target exceeded':
+      'Solicitud aceptada → subida privada: {0} segundos · se superó la meta de tres minutos',
+  'Request accepted → private upload {0} seconds · Target not confirmed':
+      'Solicitud aceptada → subida privada: {0} segundos · meta sin confirmar',
+  '{0} seconds since request · Including waiting time':
+      '{0} segundos desde la solicitud · incluye la espera',
+  '{0} seconds since request · Three-minute target exceeded':
+      '{0} segundos desde la solicitud · se superó la meta de tres minutos',
+  'Video processing {0} seconds · total upload time not yet measured':
+      'Procesamiento del video: {0} segundos · el tiempo total de subida aún no se ha medido',
   "Automatically prepare a script from a video URL":
       "Preparar un guion automáticamente desde una URL de video",
   "Enter the dish and source YouTube URL. If source information is missing, check up to five Korean videos of the same dish and select one with a published recipe. Stop if none qualifies.":

@@ -10,6 +10,11 @@ on:
         description: 'Manual small text API access test only; no queue, images or uploads'
         type: boolean
         default: false
+      job_id:
+        description: 'Process only this approved job; never claim an unrelated job'
+        type: string
+        required: false
+        default: ''
   schedule:
     - cron: '7,17,27,37,47,57 * * * *'
 permissions:
@@ -17,6 +22,7 @@ permissions:
 concurrency:
   group: recipe-scout-story-studio
   cancel-in-progress: false
+  queue: max
 jobs:
   api-preflight:
     if: github.event_name == 'workflow_dispatch' && inputs.preflight && !inputs.dry_run
@@ -45,7 +51,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate studio agents without credentials
-        run: node --test tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs
+        run: node --test tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs tools/marketing/story_studio_pipeline.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -63,6 +69,7 @@ jobs:
           STORY_STUDIO_ENABLED: 'true'
           STORY_STUDIO_DRY_RUN: 'false'
           SUPABASE_URL: ${{ secrets.MARKETING_SUPABASE_URL }}
+          STORY_STUDIO_JOB_ID: ${{ inputs.job_id }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.MARKETING_SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.STORY_STUDIO_OPENAI_API_KEY }}
           OPENAI_MARKETING_MODEL: ${{ vars.OPENAI_MARKETING_MODEL }}
