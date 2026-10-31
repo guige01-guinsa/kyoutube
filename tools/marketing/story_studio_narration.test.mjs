@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {reeditSpec,narrationChunks,narrationPlan,verifyReeditSource,prepareNarration,speechAudio} from './story_studio_narration.mjs';
+import {reeditSpec,narrationChunks,narrationPlan,verifyReeditSource,prepareNarration,speechAudio,speechRequest,RECIPE_VOICE_PROFILE} from './story_studio_narration.mjs';
 import {executeJob,reeditFailureCode,safeFailure,previewStoreFailure,REEDIT_MAX_PREVIEW_BYTES} from './story_studio_worker.mjs';
 import {draft} from './story_studio_fixture.mjs';
 const id='11111111-1111-4111-8111-111111111111';
@@ -84,6 +84,16 @@ test('all sources are checked before any paid calls; only speech is called',asyn
   assert.equal(spoken,0);
   assert.deepEqual(Object.keys(narrationPlan(snapshot)),['ko']);
 });
+test('Korean recipe character keeps exact units and is distinct from archived documentary speech',()=>{
+ const text='신김치 1컵(150g), 물 600ml를 넣어요.';
+ const request=speechRequest(text,'ko',RECIPE_VOICE_PROFILE);
+ assert.equal(request.input,text);assert.equal(request.voice,'shimmer');assert.equal(request.speed,1);
+ assert.match(request.instructions,/fictional eight-year-old girl/);
+ assert.equal(speechRequest(text,'ko').voice,'coral');
+ assert.throws(()=>speechRequest(text,'en',RECIPE_VOICE_PROFILE),/invalid_speech_profile/);
+ assert.throws(()=>speechRequest(text,'ko','arbitrary-voice'),/invalid_speech_profile/);
+});
+
 test('speech permission failure is safe and never retried',async()=>{
   let calls=0;
   await assert.rejects(speechAudio('Hello','en','sk-test',async(url,options)=>{

@@ -3,9 +3,9 @@ import {speechRequest} from './story_studio_narration.mjs';
 
 export const SPEECH_CACHE_MAX_BYTES=12000000;
 export const speechDigest=bytes=>createHash('sha256').update(bytes).digest('hex');
-export function speechCacheKey(text,language) {
+export function speechCacheKey(text,language,profile='documentary-v1') {
   // Only a digest leaves the worker; exact text AND every voice setting participate.
-  return speechDigest(JSON.stringify({version:1,language,request:speechRequest(text,language)}));
+  return speechDigest(JSON.stringify({version:1,language,request:speechRequest(text,language,profile)}));
 }
 export function validateCachedSpeech(bytes) {
   const bad=()=>{throw new Error('speech_cache_invalid_audio');};
@@ -37,8 +37,8 @@ export function validateCachedSpeech(bytes) {
 }
 
 // No automatic paid retries. A later separately approved job can resume a reservation.
-export async function cachedSpeech(text,language,io) {
-  const key=speechCacheKey(text,language);
+export async function cachedSpeech(text,language,io,profile='documentary-v1') {
+  const key=speechCacheKey(text,language,profile);
   await io.check();
   const entry=await io.reserve(key);
   if(!entry || !['pending','ready'].includes(entry.status) ||
@@ -48,7 +48,7 @@ export async function cachedSpeech(text,language,io) {
   if(audio===null) {
     if(entry.status==='ready' || entry.can_generate!==true) throw new Error('speech_cache_missing');
     await io.check();
-    audio=await io.generate(text,language);
+    audio=await io.generate(text,language,profile);
     validateCachedSpeech(audio);
     await io.check();
     await io.write(entry.path,audio); // Immutable, no upsert. Persist before next paid chunk.

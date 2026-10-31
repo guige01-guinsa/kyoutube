@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {cachedSpeech,speechCacheKey,validateCachedSpeech} from './story_studio_speech_cache.mjs';
+import {RECIPE_VOICE_PROFILE} from './story_studio_narration.mjs';
 
 function wav() {
   const b=Buffer.alloc(48044); b.write('RIFF');b.writeUInt32LE(b.length-8,4);b.write('WAVEfmt ',8);
@@ -35,6 +36,17 @@ test('exact text, language and voice request identity; no raw text in storage ke
   assert.match(speechCacheKey('비빔밥','ko'),/^[a-f0-9]{64}$/);
   assert.notEqual(speechCacheKey('비빔밥','ko'),speechCacheKey('비빔밥!','ko'));
   assert.notEqual(speechCacheKey('Recipe','ko'),speechCacheKey('Recipe','en'));
+  assert.notEqual(speechCacheKey('비빔밥','ko'),speechCacheKey('비빔밥','ko',RECIPE_VOICE_PROFILE));
+});
+
+test('character profile reaches paid generation and only reuses the same character cache',async()=>{
+ const f=fixture(),profiles=[];
+ f.io.generate=async(text,language,profile)=>{profiles.push(profile);return wav();};
+ await cachedSpeech('안녕','ko',f.io);
+ await cachedSpeech('안녕','ko',f.io,RECIPE_VOICE_PROFILE);
+ await cachedSpeech('안녕','ko',f.io,RECIPE_VOICE_PROFILE);
+ assert.deepEqual(profiles,['documentary-v1',RECIPE_VOICE_PROFILE]);
+ assert.equal(f.entries.size,2);
 });
 test('lost commit/upload acknowledgement recovers persisted audio without generation',async()=>{
   const f=fixture(),commit=f.io.commit;

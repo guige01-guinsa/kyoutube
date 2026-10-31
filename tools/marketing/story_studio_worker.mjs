@@ -9,6 +9,7 @@ import { resolveChannel } from './worker.mjs';
 import { researchRequest, decodeResearch } from './story_studio_research.mjs';
 import { demoAssets } from './story_studio_demo.mjs';
 import {reeditSpec, prepareNarration, speechAudio} from './story_studio_narration.mjs';
+import {validateRecipeVisuals} from './story_studio_recipe.mjs';
 import {cachedSpeech, SPEECH_CACHE_MAX_BYTES} from './story_studio_speech_cache.mjs';
 import {executeStandardJob} from './story_studio_standard_worker.mjs';
 import {fetchRecipeSource,recipeVideoId,findRecipeAlternative} from './story_studio_recipe_source.mjs';
@@ -77,7 +78,7 @@ export function reeditFailureCode(result) {
   return match && reeditCodes.has(match[1]) ? match[1] : 'unknown';
 }
 export function safeFailure(error) {
-  const standardCodes = ['recipe_source_external_required','recipe_source_translation_required','recipe_alternative_unavailable','recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','standard_shorten_script','standard_audio_quality_review',
+  const standardCodes = ['recipe_source_external_required','recipe_source_translation_required','recipe_alternative_unavailable','recipe_source_access','recipe_source_incomplete','recipe_source_cache','recipe_source_required','recipe_duration_review','recipe_visual_review','standard_shorten_script','standard_audio_quality_review',
     'standard_sample_changed','standard_video_quality_review','standard_unknown_failure',
     'standard_demo_not_ready','standard_render_failed','standard_invalid_plan',
     'standard_sources_required','standard_invalid_source','standard_six_scenes_required',
@@ -141,6 +142,7 @@ export function validateStandardRenderedVideo(plan,video,quality) {
  if(q?.sha256!==sha256(video)||q?.audio!==true||!Array.isArray(q?.size)||q.size.join(',')!=='720,1280'||
   !Number.isFinite(q.seconds)||(recipe?q.seconds<=0||q.seconds>180||q.frames!==Math.round(q.seconds*24):
   q.frames!==1440||q.seconds<59.9||q.seconds>60)) throw new Error('standard_render_failed');
+ if(recipe) validateRecipeVisuals(quality.visuals,plan.scenes?.length);
  return q;
 }
 async function json(response, limit = 200000) {
@@ -259,9 +261,9 @@ export async function runStudio(env = process.env, fetcher = fetch) {
     const speechIO={
       check:()=>rpc('check',lease),reserve:key=>checkpoint('reserve',key),
       commit:(key,metadata)=>checkpoint('commit',key,metadata),
-      generate:async(text,language)=>{
+      generate:async(text,language,profile)=>{
         if(job.request.cached_only===true) throw new Error('speech_cache_missing');
-        const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher);
+        const audio=await speechAudio(text,language,env.OPENAI_API_KEY,fetcher,profile);
         if(standard) validateStandardAudio(audio,job.snapshot.project?.plan?.profile==='ko-180-source-v1'?30:9.5);
         return audio;
       },
@@ -305,7 +307,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
         if(!saved.ok) throw new Error('recipe_source_cache');return source;
       },
       recipeAlternative:(url,food,reason)=>findRecipeAlternative(url,food,reason,env,fetcher),
-      standardSpeech:(text,language)=>cachedSpeech(text,language,speechIO),
+      standardSpeech:(text,language,profile)=>cachedSpeech(text,language,speechIO,profile),
       standardDemo,
       standardStoreSample:async(path,audio)=>{
         if(path!==`${job.id}/sample.wav` || audio.length>2000000) throw new Error('invalid_speech_audio');
@@ -326,7 +328,7 @@ export async function runStudio(env = process.env, fetcher = fetch) {
         const video=await readFile(join(directory,'ko.mp4'));
         const quality=JSON.parse(await readFile(join(directory,'quality.json'),'utf8'));
         validateStandardRenderedVideo(plan,video,quality);
-        return {video,quality:quality.video};
+        return {video,quality:{...quality.video,...(quality.visuals?{visuals:quality.visuals}:{})}};
       },
       chat: body => api('chat/completions', body, 200000, 180000),
       research:body=>api('responses',body,250000,180000),
