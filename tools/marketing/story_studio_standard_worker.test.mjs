@@ -8,7 +8,7 @@ const digest=b=>createHash('sha256').update(b).digest('hex');
 test('actual renderer adapter accepts concise recipes and rejects overlong, empty or corrupt files',()=>{
  const video=Buffer.from('validated fixture'),plan={profile:'ko-180-source-v1',scenes:Array(4).fill({})};
  const q={sha256:digest(video),audio:true,size:[720,1280],seconds:24,frames:576};
- const visuals={profile:'recipe-sketch-v1',scene_count:4,verified_frames:4,min_ink_fraction:.02};
+ const visuals={profile:'recipe-sketch-v2',scene_count:4,verified_frames:4,min_ink_fraction:.02};
  assert.equal(validateStandardRenderedVideo(plan,video,{video:q,visuals}),q);
  for(const change of [{seconds:0,frames:0},{seconds:181,frames:4344},{sha256:'0'.repeat(64)},{audio:false},{frames:575}])
   assert.throws(()=>validateStandardRenderedVideo(plan,video,{video:{...q,...change}}),/standard_render_failed/);

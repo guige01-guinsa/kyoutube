@@ -165,4 +165,63 @@ assert.equal(fx.status,'draft');assert.equal(fx.source_video_url,source.recipe.u
 assert.equal(fx.plan.recipe.url,selectedUrl);assert.deepEqual(fx.source_receipt,receipt);
 assert.equal(fx.sample_approved_by,null);assert.equal(fx.preview,null);
 console.log('Alternative source DB: selected recipe and original request retained, human review required, no voice or upload approval.');
+// Opt-in render and private upload share a runner while retaining old contracts.
+await db.exec('reset role');
+await db.exec(await readFile(new URL('../../supabase/migrations/20261031120000_fast_private_story_studio.sql',import.meta.url),'utf8'));
+await db.exec("update story_jobs set created_at=now()-interval '2 days'; update story_studio_config set daily_usd=50,daily_jobs=20");
+const pipelineProject=async()=>{
+ await role('authenticated');const id=randomUUID();await call('import_recipe',{...source,id});
+ return (await call('overview')).projects.find(x=>x.id===id);
+};
+const pipelineRequest=x=>({...req('render'),project_id:x.id,revision:x.revision,private_upload_confirmed:true,voice_use_confirmed:true,sources_reviewed:true});
+const inspectPipeline=async(sql,args=[])=>{await db.exec('reset role');try{return await db.query(sql,args);}finally{await role('service_role');}};
+let px=await pipelineProject(),pr=pipelineRequest(px);
+await assert.rejects(call('fast_recipe',pr),/STORY_FAST_NOT_READY/);
+await db.exec('reset role; update story_studio_config set fast_recipe_enabled=true');await role('authenticated');
+await assert.rejects(call('fast_recipe',{...pr,private_upload_confirmed:false}),/STORY_PRIVATE_UPLOAD_CONFIRMATION_REQUIRED/);
+await role('authenticated',ordinary);await assert.rejects(call('fast_recipe',pr),/marketing_admin_required/);
+await role('authenticated',admin,'aal1');await assert.rejects(call('fast_recipe',pr),/ADMIN_MFA_REQUIRED/);
+await role('authenticated');
+const unrelated=await pipelineProject(),unrelatedRequest={...req('sample'),project_id:unrelated.id,revision:unrelated.revision};
+await call('sample',unrelatedRequest);
+await call('fast_recipe',pr);await call('fast_recipe',pr);
+await role('service_role');assert.equal(await work('claim',{job_id:randomUUID()}),null);
+let pj=await work('claim',{job_id:pr.id});assert.equal(pj.id,pr.id);
+await db.exec('reset role; update story_studio_config set fast_recipe_enabled=false');await role('service_role');
+await assert.rejects(work('check',{id:pj.id,token:pj.lease_token}),/STORY_FAST_NOT_READY/);
+await db.exec('reset role; update story_studio_config set fast_recipe_enabled=true');await role('service_role');
+const pictureResult=j=>({path:`${j.id}/ko.mp4`,sha256:'f'.repeat(64),seconds:90,language:'ko',recipe_preserved:true,
+ voice_profile:'fictional-girl-8-ko-v1',visuals:{profile:'recipe-sketch-v2',scene_count:j.snapshot.project.plan.scenes.length,
+ verified_frames:j.snapshot.project.plan.scenes.length,min_ink_fraction:.02}});
+const finished=await work('complete',{id:pj.id,token:pj.lease_token,result:pictureResult(pj)});
+assert.match(finished.next_job_id,/^[a-f0-9-]{36}$/);
+let child=(await inspectPipeline('select * from story_jobs where pipeline_parent_id=$1',[pj.id])).rows[0];
+assert.equal(child.reserved_usd,'0.0000');assert.equal(child.request.preview_reviewed,undefined);
+assert.equal(child.request.private_upload_confirmed,true);assert.equal(child.pipeline_parent_id,pj.id);
+assert.equal((await inspectPipeline('select status from story_jobs where id=$1',[unrelatedRequest.id])).rows[0].status,'queued');
+const cj=await work('claim',{job_id:child.id});assert.equal(cj.id,child.id);
+await assert.rejects(work('complete',{id:cj.id,token:cj.lease_token,result:{youtube_id:'abcdefghijk',privacy:'public'}}),/STORY_INVALID/);
+await work('complete',{id:cj.id,token:cj.lease_token,result:{youtube_id:'abcdefghijk',privacy:'private'}});
+await role('authenticated');px=(await call('overview')).projects.find(x=>x.id===px.id);
+assert.equal(px.status,'uploaded');assert.equal(px.preview.target_ms,180000);assert.equal(px.preview.target_met,true);
+assert.equal(px.preview.timing_scope,'approved_request_to_private_upload');assert.ok(px.preview.end_to_end_ms>=0);
+await role('service_role');await assert.rejects(work('complete',{id:cj.id,token:cj.lease_token,result:{youtube_id:'abcdefghijk',privacy:'private'}}),/STORY_LEASE_LOST/);
+assert.equal((await inspectPipeline('select count(*) n from story_jobs where pipeline_parent_id=$1',[pj.id])).rows[0].n,1);
+const old=await work('claim',{job_id:unrelatedRequest.id});await work('fail',{id:old.id,token:old.lease_token});
+// Queue/start delay is included; a fast renderer cannot turn a missed SLA green.
+px=await pipelineProject();pr=pipelineRequest(px);await call('fast_recipe',pr);
+await db.exec('reset role');await db.query("update story_jobs set created_at=now()-interval '181 seconds' where id=$1",[pr.id]);
+await role('service_role');pj=await work('claim',{job_id:pr.id});
+const next=await work('complete',{id:pj.id,token:pj.lease_token,result:pictureResult(pj)});
+child=await work('claim',{job_id:next.next_job_id});await work('complete',{id:child.id,token:child.lease_token,result:{youtube_id:'klmnopqrstu',privacy:'private'}});
+await role('authenticated');px=(await call('overview')).projects.find(x=>x.id===px.id);
+assert.equal(px.preview.target_met,false);assert.ok(px.preview.end_to_end_ms>=181000);
+// At or above three minutes requires a human decision, never automatic upload.
+px=await pipelineProject();pr=pipelineRequest(px);await call('fast_recipe',pr);
+await role('service_role');pj=await work('claim',{job_id:pr.id});
+const held=await work('complete',{id:pj.id,token:pj.lease_token,result:{...pictureResult(pj),seconds:180}});
+assert.equal(held.next_job_id,undefined);assert.equal(held.pipeline_state,'duration_review_required');
+assert.equal((await inspectPipeline('select count(*) n from story_jobs where pipeline_parent_id=$1',[pj.id])).rows[0].n,0);
+await role('authenticated');await assert.rejects(rpc('story_studio_work_before_fast','heartbeat',{}),/permission denied/);
+console.log('Fast pipeline DB: explicit MFA consent, target-only leases, private-only followup, no duplicate upload, queue-inclusive 180s timing and duration review passed.');
 await db.close();

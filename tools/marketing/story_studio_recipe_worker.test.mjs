@@ -19,7 +19,7 @@ function setup(stage='render') {
  const job={id:randomUUID(),created_at:new Date(Date.now()-1000).toISOString(),request:{sources_reviewed:true},snapshot:{standard_profile:'ko-60-v1',standard_stage:stage,standard_project_id:project.id,project}};
  const calls=[];const io={check:async()=>{},standardDemo:async()=>Buffer.from('demo'),standardSpeech:async(s,language,profile)=>{assert.equal(profile,RECIPE_VOICE_PROFILE);calls.push(s);return wav(calls.length===1?6:10);},
   standardStoreSample:async()=>calls.push('sample'),
-  standardRender:async(p,panels,audio)=>{assert.equal(audio.length,p.scenes.length);const video=Buffer.from('video');return {video,quality:{seconds:162.667,sha256:digest(video),visuals:{profile:'recipe-sketch-v1',scene_count:p.scenes.length,verified_frames:p.scenes.length,min_ink_fraction:.03}}};},
+  standardRender:async(p,panels,audio)=>{assert.equal(audio.length,p.scenes.length);const video=Buffer.from('video');return {video,quality:{seconds:162.667,sha256:digest(video),visuals:{profile:'recipe-sketch-v2',scene_count:p.scenes.length,verified_frames:p.scenes.length,min_ink_fraction:.03}}};},
   store:async()=>calls.push('store'),image:async()=>{throw new Error('no image generation');}};
  return {job,io,calls};
 }
@@ -30,19 +30,41 @@ test('source render preserves exact script with offline sketches and isolated ch
  assert.equal(r.voice_profile,RECIPE_VOICE_PROFILE);assert.equal(r.visuals.verified_frames,job.snapshot.project.plan.scenes.length);
  assert.equal(r.offline_sketches,job.snapshot.project.plan.scenes.length);
 });
+test('fast render cannot report the end-to-end target met before private upload completes',async()=>{
+ const {job,io}=setup();job.request.auto_private_upload=true;
+ const result=await executeStandardJob(job,io);
+ assert.equal(result.target_ms,180000);assert.equal(result.target_met,null);
+ assert.equal(result.timing_scope,'approved_request_to_private_upload');
+});
+
 test('source sample still costs only one voice and requires no images',async()=>{
  const {job,io,calls}=setup('sample');const r=await executeStandardJob(job,io);
  assert.equal(calls.length,2);assert.equal(r.seconds,6);assert.equal(calls[1],'sample');
 });
+
+test('automatic upload requires a server-linked parent, exact preview and all-picture proof',async()=>{
+ const {job,io}=setup('upload'),project=job.snapshot.project,video=Buffer.from('checked new preview');
+ const parent=randomUUID();job.pipeline_parent_id=parent;
+ project.preview={path:'preview/ko.mp4',sha256:digest(video),seconds:90,recipe_preserved:true,voice_profile:RECIPE_VOICE_PROFILE,
+  visuals:{profile:'recipe-sketch-v2',scene_count:project.plan.scenes.length,verified_frames:project.plan.scenes.length,min_ink_fraction:.02}};
+ job.request={automatic_private_approval:true,private_upload_confirmed:true,pipeline_parent_id:parent,sha256:digest(video)};
+ let uploads=0;io.load=async()=>video;io.upload=async()=>{uploads++;return 'abcdefghijk';};
+ assert.deepEqual(await executeStandardJob(job,io),{youtube_id:'abcdefghijk',privacy:'private'});
+ job.pipeline_parent_id=null;await assert.rejects(executeStandardJob(job,io),/preview_approval_required/);
+ job.pipeline_parent_id=parent;project.preview.seconds=180;await assert.rejects(executeStandardJob(job,io),/preview_approval_required/);
+ project.preview.seconds=90;project.preview.visuals.verified_frames=0;await assert.rejects(executeStandardJob(job,io),/recipe_visual_review/);
+ assert.equal(uploads,1);
+});
+
 test('a concise recipe below 150 seconds completes without padding or altered speech',async()=>{
  const {job,io}=setup();io.standardSpeech=async()=>wav(1);
  job.snapshot.project.sample.sha256=digest(wav(1));
- io.standardRender=async()=>{const video=Buffer.from('short');return {video,quality:{seconds:24,sha256:digest(video),visuals:{profile:'recipe-sketch-v1',scene_count:job.snapshot.project.plan.scenes.length,verified_frames:job.snapshot.project.plan.scenes.length,min_ink_fraction:.02}}};};
+ io.standardRender=async()=>{const video=Buffer.from('short');return {video,quality:{seconds:24,sha256:digest(video),visuals:{profile:'recipe-sketch-v2',scene_count:job.snapshot.project.plan.scenes.length,verified_frames:job.snapshot.project.plan.scenes.length,min_ink_fraction:.02}}};};
  assert.equal((await executeStandardJob(job,io)).seconds,24);
 });
 
 test('missing or partial encoded-picture proof stops before private preview storage',async()=>{
- for(const proof of [undefined,{profile:'recipe-sketch-v1',scene_count:14,verified_frames:1,min_ink_fraction:.02}]) {
+ for(const proof of [undefined,{profile:'recipe-sketch-v2',scene_count:14,verified_frames:1,min_ink_fraction:.02}]) {
   const {job,io,calls}=setup();
   io.standardRender=async()=>{const video=Buffer.from('no picture');return {video,quality:{seconds:96,sha256:digest(video),visuals:proof}};};
   await assert.rejects(executeStandardJob(job,io),/recipe_visual_review/);

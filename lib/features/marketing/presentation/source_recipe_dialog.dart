@@ -175,7 +175,7 @@ Future<Map<String, dynamic>?> showSourceRecipeDialog(BuildContext context,
                                       title: const Text(
                                           '원본 영상과 재료·분량·단위·선택 사항·조리 순서가 같은지 대조했습니다.')),
                                   const Text(
-                                      '새 그림 생성 없이 재료표·조리 안내 중심으로 제작합니다. 원고 확인 후 처리 목표 5분이며, 외부 서비스와 대기 시간에 따라 더 걸릴 수 있습니다.'),
+                                      '추가 유료 이미지 생성 없이 재료표와 조리 스케치를 제작합니다. 원고 확인 후 빠른 제작을 선택하면 비공개 업로드까지 180초를 목표로 진행하며 외부 대기를 포함한 실제 시간을 표시합니다.'),
                                 ])))),
                 actions: [
                   TextButton(

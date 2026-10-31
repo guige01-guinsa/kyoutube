@@ -87,13 +87,19 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
       await repository.command(action, values);
       _pending = null;
       ref.invalidate(standardStudioProvider);
-      if (['draft', 'sample', 'render', 'render_recipe', 'upload']
-              .contains(action) &&
+      if ([
+            'draft',
+            'sample',
+            'render',
+            'render_recipe',
+            'fast_recipe',
+            'upload'
+          ].contains(action) &&
           values['id'] is String) {
         final started = await repository.requestStart(values['id'] as String);
         if (mounted) {
           setState(() => _dispatchNote = started
-              ? '즉시 실행 요청을 전달했습니다. 진행 상태는 새로고침으로 확인하세요.'
+              ? '즉시 실행 요청을 전달했습니다. 진행 상태는 자동으로 갱신됩니다.'
               : '작업은 저장됐지만 즉시 실행 연결은 확인되지 않았습니다. 정기 실행을 기다릴 수 있으므로 새 제작 요청을 반복하지 마세요.');
         }
       }
@@ -188,9 +194,10 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
 
   Future<void> _queue(
       String stage, StandardRow project, StandardRow config) async {
+    final fast = stage == 'fast_recipe';
     final cost = stage == 'upload'
         ? 0
-        : config['${stage == 'render_recipe' ? 'render' : stage}_usd'];
+        : config['${stage == 'render_recipe' || fast ? 'render' : stage}_usd'];
     final renderDescription =
         (project['plan'] as Map?)?['profile'] == 'ko-180-source-v1'
             ? '원본 레시피로 한국어 3분 이내 영상 한 편을 제작합니다.'
@@ -199,10 +206,14 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
     final accepted = await showDialog<bool>(
         context: context,
         builder: (dialog) => AlertDialog(
-              title: Text(stage == 'upload' ? '비공개 업로드 확인' : '작업 비용 확인'),
+              title: Text(fast
+                  ? '제작·비공개 업로드 승인'
+                  : stage == 'upload'
+                      ? '비공개 업로드 확인'
+                      : '작업 비용 확인'),
               content: Text(
                   '예상 예약액: USD $cost\n실제 청구 상한이 아닙니다. 실패 작업도 예약액을 보존하며 자동 재시도하지 않습니다.\n\n'
-                  '${stage == 'sample' ? '첫 장면의 짧은 시험 음성만 생성합니다.' : stage == 'render' || stage == 'render_recipe' ? renderDescription : stage == 'upload' ? '확인한 영상만 비공개로 업로드합니다.' : '출처를 조사하고 한국어 원고를 작성합니다.'}'),
+                  '${fast ? '확인한 원고와 설정된 AI 목소리로 제작하고, 화면·음성·길이 검사를 통과하면 같은 실행에서 유튜브에 비공개 업로드합니다. 추가 영상 확인 승인을 기다리지 않습니다. 요청 접수부터 업로드 확인까지 180초가 목표이며 외부 대기 시간도 포함해 실제 시간을 표시합니다. 영상 길이가 3분 이상이면 업로드 전에 선택을 요청합니다.' : stage == 'sample' ? '첫 장면의 짧은 시험 음성만 생성합니다.' : stage == 'render' || stage == 'render_recipe' ? renderDescription : stage == 'upload' ? '확인한 영상만 비공개로 업로드합니다.' : '출처를 조사하고 한국어 원고를 작성합니다.'}'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(dialog, false),
@@ -219,9 +230,13 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
       'revision': project['revision'],
       'quote_revision': config['revision'],
       'cost_confirmed': true,
-      if (stage == 'sample' || stage == 'render' || stage == 'render_recipe')
+      if (stage == 'sample' ||
+          stage == 'render' ||
+          stage == 'render_recipe' ||
+          fast)
         'sources_reviewed': true,
-      if (stage == 'render_recipe') 'voice_use_confirmed': true,
+      if (stage == 'render_recipe' || fast) 'voice_use_confirmed': true,
+      if (fast) 'private_upload_confirmed': true,
       if (stage == 'upload') ...{
         'preview_reviewed': true,
         'sha256': (project['preview'] as Map)['sha256']
@@ -363,10 +378,10 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
     final produce = editable && ready;
     final series = standardRows(data, 'series');
     return ListView(padding: const EdgeInsets.all(20), children: [
-      const Text('한국어 · 원본 레시피 → 원고 확인 → 음성 → 3분 이내 영상 검토'),
+      const Text('한국어 · 원본 레시피 → 원고 확인 → 제작·검사 → 비공개 업로드'),
       Text(ready ? '제작 서버 연결됨' : '운영 연결 대기 · 새 유료 작업은 잠겨 있습니다.'),
       const Text(
-          '재료와 조리 순서는 원본 그대로 사용합니다. 제작 처리 목표 5분 · 대기·외부 서비스 지연은 별도 확인합니다. 공개 게시와 유료 재시도는 자동 실행하지 않습니다.'),
+          '재료와 조리 순서는 원본 그대로 사용합니다. 빠른 제작은 요청 접수부터 비공개 업로드 확인까지 180초가 목표이며, 대기·외부 서비스 지연을 포함한 실제 시간을 표시합니다. 공개 게시와 유료 재시도는 자동 실행하지 않습니다.'),
       if (_error != null)
         Text(_error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -415,6 +430,7 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
     final sample = project['sample'] as Map?;
     final preview = project['preview'] as Map?;
     final sourceRecipe = plan?['profile'] == 'ko-180-source-v1';
+    final progress = standardPipelineProgress(project, DateTime.now());
     final selection = (project['source_receipt'] as Map?)?['selection'] as Map?;
     final referenceChanged = sourceRecipe &&
         selection?['requires_review'] == true &&
@@ -425,6 +441,7 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
             padding: const EdgeInsets.all(16),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (progress != null) Text(progress),
               Text('${project['food']} · ${standardStatus(status)}',
                   style: Theme.of(context).textTheme.titleMedium),
               if (referenceChanged) ...[
@@ -479,7 +496,7 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
                 if (sourceRecipe)
                   CheckboxListTile(
                       title: const Text(
-                          '기존 한국어 여성 목소리로 제작합니다. 새 시험 음성 청취는 생략합니다.'),
+                          '설정된 한국어 소녀 캐릭터 AI 목소리로 제작합니다. 새 시험 음성 청취는 생략합니다.'),
                       value: _voiceUse.contains(identity),
                       onChanged: editable
                           ? (v) => setState(() {
@@ -499,6 +516,15 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
                         : null,
                     child: Text(
                         sourceRecipe ? '확인한 원고로 자동 제작' : '첫 장면 시험 음성 만들기')),
+                if (sourceRecipe && config['fast_recipe_enabled'] == true)
+                  FilledButton.icon(
+                      onPressed: produce &&
+                              _sources.contains(identity) &&
+                              _voiceUse.contains(identity)
+                          ? () => _queue('fast_recipe', project, config)
+                          : null,
+                      icon: const Icon(Icons.bolt),
+                      label: const Text('제작·비공개 업로드 (180초 목표)')),
               ],
               if (sample != null &&
                   ['sample_review', 'sample_approved'].contains(status)) ...[
@@ -546,10 +572,8 @@ class _StandardStudioPageState extends ConsumerState<StandardStudioPage> {
               if (preview != null &&
                   ['preview', 'uploaded'].contains(status)) ...[
                 if (sourceRecipe && preview['production_ms'] is num)
-                  Text(
-                      '제작 처리 ${((preview['production_ms'] as num) / 1000).ceil()}초 · '
-                      '${preview['queue_wait_ms'] is num ? '서버 대기 ${((preview['queue_wait_ms'] as num) / 1000).ceil()}초' : '대기 시간 확인 필요'} · '
-                      '${preview['target_met'] == true ? '5분 목표 달성' : '5분 목표 달성 미확인'}'),
+                  Text(standardPipelineTiming(
+                      Map<String, dynamic>.from(preview))),
                 OutlinedButton(
                     onPressed: editable
                         ? () => _open(Map<String, dynamic>.from(preview), false)

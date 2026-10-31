@@ -46,7 +46,7 @@ jobs:
           deno check supabase/functions/youtube_search/index.ts
           deno test supabase/functions/_shared/recipe_source_eligibility_test.ts supabase/functions/youtube_search/youtube_client_test.ts supabase/functions/youtube_search/index_test.ts
       - name: Worker tests
-        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs
+        run: node --test tools/marketing/worker.test.mjs tools/marketing/story_studio.test.mjs tools/marketing/story_studio_narration.test.mjs tools/marketing/story_studio_speech_cache.test.mjs tools/marketing/story_studio_standard.test.mjs tools/marketing/story_studio_standard_worker.test.mjs tools/marketing/story_studio_recipe.test.mjs tools/marketing/story_studio_recipe_worker.test.mjs tools/marketing/story_studio_recipe_source.test.mjs tools/marketing/story_studio_pipeline.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

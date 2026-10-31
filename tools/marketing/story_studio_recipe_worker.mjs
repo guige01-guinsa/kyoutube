@@ -43,11 +43,12 @@ export async function executeRecipeJob(job,io) {
  const created=Date.parse(job.created_at ?? '');
  const queue_wait_ms=Number.isFinite(created)?Math.max(0,started-created):null;
  const draft_ms=project.source_video_url ? project.source_receipt?.automation_ms : 0;
+ const automatic=job.request.auto_private_upload===true;
  const total_elapsed_ms=queue_wait_ms!==null&&Number.isFinite(draft_ms)&&draft_ms>=0 ? draft_ms+queue_wait_ms+production_ms : null;
  return {...output,plan_hash,profile:RECIPE_PROFILE,production_ms,speech_ms,
   queue_wait_ms,draft_ms: draft_ms ?? null,total_elapsed_ms,
-  timing_scope:'draft_and_render_including_queues_excluding_human_review',
-  target_ms:300000,target_met:total_elapsed_ms===null?null:total_elapsed_ms<=300000,new_illustrations:0,
+  timing_scope:automatic?'approved_request_to_private_upload':'draft_and_render_including_queues_excluding_human_review',
+  target_ms:automatic?180000:300000,target_met:automatic?null:total_elapsed_ms===null?null:total_elapsed_ms<=300000,new_illustrations:0,
   offline_sketches:stage==='render'?plan.scenes.length:0,
   recipe_preserved:true,voice_metrics:audio.map((a,index)=>({index,...a.info}))};
 }
